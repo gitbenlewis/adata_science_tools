@@ -1,8 +1,11 @@
 
-def diff_test(adata, layer=None, groupby_key=None, groupby_key_target_values=[None], groupby_key_ref_values=[None],comparison_col_tag='_target_ref',
+def diff_test(adata, layer=None, use_raw=False,groupby_key=None, groupby_key_target_values=[None], groupby_key_ref_values=[None],comparison_col_tag='_target_ref',
                       nested_groupby_key_target_values=[(None,None)], nested_groupby_key_ref_values= [(None,None)],   nested_comparison_col_tag='_target_con_ref_con',
-                       sortby=None,tests=['ttest_ind', 'ttest_rel','mannwhitneyu', 'WilcoxonSigned','ttest_rel_nested','WilcoxonSigned_nested'],pair_by_key=None ,add_values2results= True):
+                       sortby=None,tests=['ttest_ind', 'ttest_rel','mannwhitneyu', 'WilcoxonSigned','ttest_rel_nested','WilcoxonSigned_nested'],pair_by_key=None ,add_values2results= False):
     """
+    #### ## updated 2025-05-29 sort by hypothesis stats
+    #### ## updated 2025-05-28 added the hypothesis stats to the results DataFrame
+    ## updated 2025-05-28 added option to use raw data from adata.raw if available
     ## updated 2025-03-12 fix WilcoxonSigned to paired not ranksums
     Perform various statistical comparisons (independent, paired, and nested paired tests) 
     between groups or conditions in an AnnData object. This function can handle optional 
@@ -181,7 +184,18 @@ def diff_test(adata, layer=None, groupby_key=None, groupby_key_target_values=[No
 
     ### extract the data matrix from the adata object and clean it
     # Select the data matrix
-    X = adata.layers[layer] if layer else adata.X
+    #X = adata.layers[layer] if layer else adata.X
+    if use_raw and adata.raw is not None:
+        X = adata.raw.X if layer is None else adata.raw.layers[layer]
+        print(f'Using raw data from adata.raw.{layer}.' if layer else 'Using raw data from adata.raw.X.')
+    else:
+        # Use the specified layer or the main data matrix
+        if layer is not None and layer in adata.layers:
+            X = adata.layers[layer]
+            print(f'Using data from adata.layers.{layer}.')
+        else:
+            X = adata.X
+            print('Using data from adata.X.')
     if hasattr(X, "toarray"):  # Convert sparse matrix to dense if necessary
         X = X.toarray()
     # Remove genes (columns) with zero expression across all cells
@@ -361,6 +375,7 @@ def diff_test(adata, layer=None, groupby_key=None, groupby_key_target_values=[No
         t_test_pvals_corrected_full = np.full_like(t_test_pvals, np.nan, dtype=float)
         t_test_pvals_corrected_full[np.isfinite(t_test_pvals)] = t_test_pvals_corrected
         # Add p-values to the results DataFrame
+        results[f'ttest_ind_stat{comparison_col_tag}']=t_stat
         results[f'ttest_ind_pvals{comparison_col_tag}'] = t_test_pvals
         results[f'ttest_ind_pvals_corrected{comparison_col_tag}'] = t_test_pvals_corrected_full
     if 'mannwhitneyu' in tests:
@@ -375,6 +390,7 @@ def diff_test(adata, layer=None, groupby_key=None, groupby_key_target_values=[No
         u_test_pvals_corrected_full = np.full_like(u_test_pvals, np.nan, dtype=float)
         u_test_pvals_corrected_full[np.isfinite(u_test_pvals)] = u_test_pvals_corrected
         # Add p-values to the results DataFrame
+        results[f'mannwhitneyu_stat{comparison_col_tag}'] = u_statistic
         results[f'mannwhitneyu_pvals{comparison_col_tag}'] = u_test_pvals
         results[f'mannwhitneyu_pvals_corrected{comparison_col_tag}'] = u_test_pvals_corrected_full
 
@@ -429,6 +445,7 @@ def diff_test(adata, layer=None, groupby_key=None, groupby_key_target_values=[No
         # calculate mean log2 fold change for the paired data
         mean_log2_fc_rel = np.mean(np.log2((data1_rel + 1e-9) / (data2_rel + 1e-9)), axis=0)
         # Add p-values to the results DataFrame
+        results[f'ttest_rel_stat{comparison_col_tag}'] = t_rel_stat
         results[f'ttest_rel_pvals{comparison_col_tag}'] = t_rel_test_pvals
         results[f'ttest_rel_pvals_corrected{comparison_col_tag}'] = t_rel_test_pvals_corrected_full
         results[f'ttest_rel_mean_paired_fc{comparison_col_tag}'] =mean_fc_rel
@@ -453,6 +470,7 @@ def diff_test(adata, layer=None, groupby_key=None, groupby_key_target_values=[No
         # calculate mean log2 fold change for the paired data
         mean_log2_fc_rel = np.mean(np.log2((data1_rel + 1e-9) / (data2_rel + 1e-9)), axis=0)
         # Add p-values to the results DataFrame
+        results[f'WilcoxonSigned_stat{comparison_col_tag}'] = w_stat
         results[f'WilcoxonSigned_pvals{comparison_col_tag}'] = w_test_pvals
         results[f'WilcoxonSigned_pvals_corrected{comparison_col_tag}'] = w_test_pvals_corrected_full
         results[f'WilcoxonSigned_mean_paired_l2fc{comparison_col_tag}'] =mean_fc_rel
@@ -516,6 +534,7 @@ def diff_test(adata, layer=None, groupby_key=None, groupby_key_target_values=[No
             ((data_target_rel + 1e-9) / (data_targetControl_rel + 1e-9))/((data_ref_rel + 1e-9) / (data_refControl_rel + 1e-9)))
             ), axis=0)
         # Add p-values to the results DataFrame
+        results[f'ttest_rel_nested_stat{nested_comparison_col_tag}'] = t_rel_nested_stat
         results[f'ttest_rel_nested_pvals{nested_comparison_col_tag}'] = t_rel_nested_test_pvals
         results[f'ttest_rel_nested_pvals_corrected{nested_comparison_col_tag}'] = t_rel_nested_test_pvals_corrected_full
         results[f'ttest_rel_nested_mean_paired_fcfc{nested_comparison_col_tag}'] =mean_fc_rel_nested
@@ -562,6 +581,7 @@ def diff_test(adata, layer=None, groupby_key=None, groupby_key_target_values=[No
             ((data_target_rel + 1e-9) / (data_targetControl_rel + 1e-9))/((data_ref_rel + 1e-9) / (data_refControl_rel + 1e-9)))
             ), axis=0)
         # Add p-values to the results DataFrame
+        results[f'WilcoxonSigned_nested_stat{nested_comparison_col_tag}'] = w_nested_stat
         results[f'WilcoxonSigned_nested_pvals{nested_comparison_col_tag}'] = w_nested_test_pvals
         results[f'WilcoxonSigned_nested_pvals_corrected{nested_comparison_col_tag}'] = w_nested_test_pvals_full_corrected
         results[f'WilcoxonSigned_nested_mean_paired_fcfc{nested_comparison_col_tag}'] =mean_fc_rel_nested
@@ -589,19 +609,19 @@ def diff_test(adata, layer=None, groupby_key=None, groupby_key_target_values=[No
     ### Sort the results dataframe sortby
     # assign a column to sortby if not provided
     if sortby is None:
-        if f'ttest_rel_nested_pvals{nested_comparison_col_tag}' in results.columns:
-            sortby = f'ttest_rel_nested_pvals{nested_comparison_col_tag}'
-        elif f'WilcoxonSigned_nested_pvals{nested_comparison_col_tag}' in results.columns:
-            sortby = f'wilcox_nested_pvals{nested_comparison_col_tag}'
-        elif f'ttest_rel_pvals{comparison_col_tag}' in results.columns:
-            sortby = f'ttest_rel_pvals{comparison_col_tag}'
-        elif f'ttest_ind_pvals{comparison_col_tag}' in results.columns:
-            sortby = f'ttest_ind_pvals{comparison_col_tag}'
-        elif f'mannwhitneyu_pvals{comparison_col_tag}' in results.columns:
-            sortby = f'mannwhitneyu_pvals{comparison_col_tag}'
+        if f'ttest_rel_nested_stat{nested_comparison_col_tag}' in results.columns:
+            sortby = f'ttest_rel_nested_stat{nested_comparison_col_tag}'
+        elif f'WilcoxonSigned_nested_stat{nested_comparison_col_tag}' in results.columns:
+            sortby = f'wilcox_nested_stat{nested_comparison_col_tag}'
+        elif f'ttest_rel_stat{comparison_col_tag}' in results.columns:
+            sortby = f'ttest_rel_stat{comparison_col_tag}'
+        elif f'ttest_ind_stat{comparison_col_tag}' in results.columns:
+            sortby = f'ttest_ind_stat{comparison_col_tag}'
+        elif f'mannwhitneyu_stat{comparison_col_tag}' in results.columns:
+            sortby = f'mannwhitneyu_stat{comparison_col_tag}'
 
-    # Sort the results by corrected p-value
-    if sortby in results.columns:
-        results = results.sort_values(sortby)
+    # Sort the results by absolute value of the selected hypothesis test statistic
+    if sortby is not None and sortby in results.columns:
+        results.sort_values(sortby, ascending=False, inplace=True, key=lambda x: x.abs(), na_position='last')
 
     return results
