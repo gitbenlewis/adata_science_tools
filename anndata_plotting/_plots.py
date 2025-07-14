@@ -52,7 +52,7 @@ def show_tol_colors(colors=None):
     plt.show()
 
 # updated to used the hue_column to set the hue values on 2025.02.28
-def volcano_plot_sns_sinlge_comparison_generic(df, l2fc_col='log2FoldChange',set_xlabel='log2fc model',xlimit=None,
+def volcano_plot_sns_sinlge_comparison_generic(_df, l2fc_col='log2FoldChange',set_xlabel='log2fc model',xlimit=None,
                                                 padj_col='padj', set_ylabel='-log10(padj)',ylimit=None,
                     title_text='volcano_plot',comparison_label=' Comparison',
                      hue_column=None,
@@ -150,6 +150,8 @@ def volcano_plot_sns_sinlge_comparison_generic(df, l2fc_col='log2FoldChange',set
     #custom_palette = [tab10_palette[7]] + tab10_palette[:7] + tab10_palette[8:]
     significance_custom_palette = [tab10_palette[7]] + tab10_palette[:3] #+ tab10_palette[8:]
     hue_platte_custom_palette = [tab10_palette[7]] + tab10_palette[:6] + tab10_palette[8:]
+
+    df = _df.copy()
 
     print(df.shape)
 
