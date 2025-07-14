@@ -82,7 +82,7 @@ adata
 '''
 
 ############ AnnData object version ############
-def make_df_obs_adataX(adata,layer=None,index=None,varcolumns=None,include_obs=True):
+def make_df_obs_adataX_soma(adata,layer=None,index=None,varcolumns=None,include_obs=True):
     """
     Parameters
 
