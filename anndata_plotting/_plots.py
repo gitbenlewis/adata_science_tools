@@ -52,14 +52,16 @@ def show_tol_colors(colors=None):
     plt.show()
 
 # updated to used the hue_column to set the hue values on 2025.02.28
-def volcano_plot_sns_sinlge_comparison_generic(_df, l2fc_col='log2FoldChange',set_xlabel='log2fc model',xlimit=None,
+def volcano_plot_sns_single_comparison_generic(_df, l2fc_col='log2FoldChange',set_xlabel='log2fc model',xlimit=None,
                                                 padj_col='padj', set_ylabel='-log10(padj)',ylimit=None,
                     title_text='volcano_plot',comparison_label=' Comparison',
                      hue_column=None,
                      log2FoldChange_threshold=.1,
                      figsize=(15, 10),legend_bbox_to_anchor=(1.15, 1),
                      label_top_features=False,feature_label_col='gene_names',n_top_features=50,
-                     dot_size_shrink_factor=300
+                     dot_size_shrink_factor=300,
+                     savefig=False,
+                     file_name='volcano_plot.png',
                      ):
 
     """
@@ -334,7 +336,10 @@ def volcano_plot_sns_sinlge_comparison_generic(_df, l2fc_col='log2FoldChange',se
         plt.legend(bbox_to_anchor=legend_bbox_to_anchor, 
             loc=1, 
             borderaxespad=0.05)
-
+    # Save the figure if requested
+    if savefig:
+        plt.savefig(file_name, dpi=600, bbox_inches="tight" )
+        print(f"Saved plot to {file_name}")
     return p
 
 
