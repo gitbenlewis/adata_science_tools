@@ -51,6 +51,9 @@ def show_tol_colors(colors=None):
     plt.tight_layout()
     plt.show()
 
+
+#######  START  ############. Volcano plots ###################.###################.###################.###################.
+
 # updated to used the hue_column to set the hue values on 2025.02.28
 def volcano_plot_sns_single_comparison_generic(_df, l2fc_col='log2FoldChange',set_xlabel='log2fc model',xlimit=None,
                                                 padj_col='padj', set_ylabel='-log10(padj)',ylimit=None,
@@ -341,8 +344,9 @@ def volcano_plot_sns_single_comparison_generic(_df, l2fc_col='log2FoldChange',se
         plt.savefig(file_name, dpi=600, bbox_inches="tight" )
         print(f"Saved plot to {file_name}")
     return p
+#######  END ############. Volcano plots ###################.###################.###################.###################.
 
-
+####### START ############. datapoint plots ###################.###################.###################.###################.
 
 def plot_paired_point_anndata(
     adata,
@@ -631,21 +635,155 @@ def plot_paired_point_anndata(
 
 
 
-def l2fc_pvalue_dotplot(
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+import anndata  # or use the quoted type hint instead
+from matplotlib.patches import Patch
+
+def plot_column_of_bar_h_2groups_GEX_adata(
+        adata: "anndata.AnnData",
+        feature_list=None,
+        layer: str | None = 'salmon_effective_TPM',
+        comparison_col: str | None = None,
+        comparison_order: list[str] | None = None,
+        figure_plot_title: str | None = None,
+        subplot_xlabel: str | None = 'Expression (TPM)',
+        sharex: bool = False,
+        legend: bool = True,
+        legend_fontsize: int = 20,
+        remove_yticklabels: bool = True,
+        ylabel_x: float = -0.02,
+        figsize: tuple[int, int] = (10, 30)):
+    
+    from .. import anndata_io as adio
+
+
+    # Your helper that returns a tidy df with obs + expression columns
+    df_cat_gex = adio.make_df_obs_adataX(adata, layer=layer, include_obs=True)
+
+    # Determine category order
+    if comparison_order is None:
+        # keep observed order
+        categories = list(pd.Series(df_cat_gex[comparison_col]).astype('category').cat.categories) \
+                     or list(df_cat_gex[comparison_col].unique())
+    else:
+        categories = list(comparison_order)
+
+    # Build a fixed palette used for every subplot
+    palette = sns.color_palette('tab10', n_colors=len(categories))
+    color_map = dict(zip(categories, palette))
+
+    gene_list_len = len(feature_list)
+    fig, axes = plt.subplots(
+        gene_list_len, 1,
+        sharex=sharex, 
+        figsize=figsize, layout="constrained"
+    )
+    if gene_list_len == 1:
+        axes = [axes]  # make iterable
+
+    if figure_plot_title is not None:
+        fig.suptitle(figure_plot_title, fontsize=legend_fontsize)
+    else:
+        fig.suptitle(f"{subplot_xlabel} grouped by {comparison_col}\n", fontsize=legend_fontsize)
+
+    for plot_num, gene in enumerate(feature_list):
+        ax = axes[plot_num]
+
+        # Horizontal bars (aggregated by category)
+        g0 = sns.barplot(
+            x=gene, y=comparison_col,
+            data=df_cat_gex,
+            order=categories,
+            ax=ax,
+            palette=[color_map[c] for c in categories]
+        )
+
+        if remove_yticklabels:
+            g0.set_yticklabels([])
+
+        # Overlay points (each sample), same order as bars
+        sns.stripplot(
+            x=gene, y=comparison_col,
+            data=df_cat_gex,
+            order=categories,
+            ax=ax,
+            color='black',
+            legend=False
+        )
+
+        g0.set_xlabel(subplot_xlabel)
+        g0.set_ylabel(gene, rotation=0, fontsize=20, ha='right', va='center')
+        g0.yaxis.set_label_coords(ylabel_x, 0.5)
+
+    # Figure-level legend at bottom with the same bar colors
+    if legend:
+        handles = [Patch(facecolor=color_map[c], edgecolor='none', label=str(c)) for c in categories]
+        fig.legend(
+            handles=handles,
+            labels=[str(c) for c in categories],
+            loc='lower center',
+            ncol=min(len(categories), 6),
+            title=comparison_col,
+            bbox_to_anchor=(0.5, -0.02),
+            fontsize=legend_fontsize,
+            title_fontsize=legend_fontsize,
+        )
+        # Leave space for the bottom legend
+        plt.tight_layout(rect=[0, 0.05, 1, 1])
+        #plt.tight_layout()
+    else:
+        plt.tight_layout()
+
+    plt.show()
+    return fig, axes
+
+'''
+# example usage
+### input parameters
+adata_layer='salmon_effective_TPM' # layer to use for the expression data
+sharex=False
+figsize=(10,30)
+comparison_col='Treatment' 
+comparison_order=None # use default order
+figure_plot_title=f'Top 10 Upregulated Genes \nGrouped by {comparison_col}' # title for the figure
+subplot_xlabel='Expression (TPM)' # label for the feature plot
+figsize=(8,16)
+
+print(top_up_genes)
+
+
+adtl.plot_column_of_bar_h_2groups_GEX_adata(adata, feature_list=top_up_genes, layer=adata_layer, comparison_col=comparison_col,
+                                         figure_plot_title=figure_plot_title, subplot_xlabel=subplot_xlabel,
+                                        legend=True, legend_fontsize=20, remove_yticklabels=True,
+                                        sharex=sharex, figsize=figsize)
+'''
+
+####### END ############. datapoint plots ###################.###################.###################.###################.
+
+
+####### START ############. l2fc_pvalue plots ###################.###################.###################.###################.
+
+def l2fc_pvalue_dotplot_protein_metabolite(
     diff_tests,
-    metab_list,
-    index_column='CHEM_ID',
-    analyte_label='Metabolite',
-    Timepoint_comparison='Drug_vs_Vehicle_30hr',
-    pval_col='ttest_rel_nested_pvals_corrected_nested_predose_baseline_drug_vehicle',
-    l2fc_col='ttest_rel_nested_mean_paired_l2fcfc_nested_predose_baseline_drug_vehicle',
+    feature_idx_list,
+    index_column='EntrezGeneSymbol',
+    analyte_label_column='TargetFullName',
+    analyte_label='Protein',
+    comparison_column='Timepoint',
+    comparison='Target_vs_Reference',
+    pval_col='ttest_rel_pvals_corrected_Target_vs_Reference',
+    l2fc_col='ttest_rel_mean_paired_l2fcfc_Target_vs_Reference',
     pval_label='p-value',
-    x_axis_label='log2fc ((target/con)/(ref/con))',
+    x_axis_label='log2fc ((target)/(ref))',
     sort_x_axis=False,
     pvalue_cutoff=0.2,
     sizes=(20, 2000),
     figsize=(6,10),
-    plot_title='Drug_vs_Vehicle_30hr l2fc ((target/con)/(ref/con))',
+    bbox_to_anchor=(0.5, -0.25),
+    plot_title='Target_vs_Reference l2fc ((target)/(ref))',
     savefig=False,
     file_name='test_plot.png'
 ):
@@ -656,31 +794,33 @@ def l2fc_pvalue_dotplot(
     ----------
     diff_tests : pd.DataFrame
         DataFrame containing the differential test results. Must have columns:
-        ['Timepoint', 'CHEM_ID', 'CHEMICAL_NAME', <pval_col>, <l2fc_col>, etc.]
-    metab_list : list
-        List of CHEM_ID values to include in the plot.
+        [index_column, analyte_label_column, analyte_label, pval_col, l2fc_col]
+    feature_idx_list : list
+        List of feature_idx_list values to include in the plot.
     index_column : str
-        Column name for CHEM_ID (default 'CHEM_ID').
+        Column name for features (default 'var_names').
+    analyte_label_column: str
     analyte_label : str
         Column name to use for labeling the y-axis (default 'Metabolite').
-    Timepoint_comparison : str
-        Value in 'Timepoint' to select for plotting (default 'Drug_vs_Vehicle_30hr').
+    comparison_column : str
+        Value in 'comparison_column' to select for plotting (default 'Target_vs_Reference').
     pval_col : str
-        Column containing the p-values (default 'ttest_rel_nested_pvals_corrected_nested_predose_baseline_drug_vehicle').
+        Column containing the p-values (default 'ttest_rel_pvals_corrected_Target_vs_Reference').
     l2fc_col : str
-        Column containing the log2 fold change (default 'ttest_rel_nested_mean_paired_l2fcfc_nested_predose_baseline_drug_vehicle').
+        Column containing the log2 fold change (default 'ttest_rel_mean_paired_l2fcfc_Target_vs_Reference').
     pval_label : str
         Label to use in the plot for p-value axis (default 'p-value').
     x_axis_label : str
-        X-axis label (default 'log2fc ((target/con)/(ref/con))').
+        X-axis label (default 'log2fc ((target)/(ref))').
     sort_x_axis : bool
         Whether to sort the x-axis by the x_axis_label (default False).
     pvalue_cutoff : float
         Numeric cutoff for ring overlay (default 0.2).
+    bbox_to_anchor: legend postion default bbox_to_anchor=(0.5, -0.25),,
     figsize : tuple
         Figure size (default (6,10)).
     plot_title : str
-        Title string (default 'Drug_vs_Vehicle_30hr l2fc ((target/con)/(ref/con))').
+        Title string (default 'Target_vs_Reference l2fc ((target)/(ref))').
     savefig : bool
         Whether to save the figure (default False).
     file_name : str
@@ -696,17 +836,21 @@ def l2fc_pvalue_dotplot(
     import pandas as pd
 
     # Default columns to keep if not provided
-    columns2keep = ['Timepoint', 'CHEM_ID', 'CHEMICAL_NAME', analyte_label, pval_col, l2fc_col]
-    columns2keep_labels = ['Timepoint', 'CHEM_ID', 'CHEMICAL_NAME', analyte_label, pval_label, x_axis_label]
+    columns2keep = [comparison_column, index_column, analyte_label_column, analyte_label, pval_col, l2fc_col]
+    columns2keep_labels = [comparison_column, index_column, analyte_label_column, analyte_label, pval_label, x_axis_label]
+    if comparison_column is None:
+        columns2keep = [index_column, analyte_label_column, analyte_label, pval_col, l2fc_col]
+        columns2keep_labels = [index_column, analyte_label_column, analyte_label, pval_label, x_axis_label]
 
     # 1) Copy and prepare DataFrame
     df = diff_tests.copy()
     df[index_column] = df[index_column].astype(str)
     # Make truncated metabolite name (40 chars)
-    df[analyte_label] = df['CHEMICAL_NAME'].astype(str).str[:40]
+    df[analyte_label] = df[analyte_label_column].astype(str).str[:40]
 
-    # 2) Filter by timepoint
-    df = df[df['Timepoint'] == Timepoint_comparison].copy()
+    # 2) Filter by comparison_column if not None
+    if comparison_column:
+        df = df[df[comparison_column] == comparison].copy()
 
     # 3) Select columns & rename
     df = df[columns2keep].copy()
@@ -724,10 +868,10 @@ def l2fc_pvalue_dotplot(
     ring_col = 'ring_cutoff'
     df[ring_col] = (-np.log10(pvalue_cutoff)).round(2)
 
-    # 5) Filter for desired metabolite list
-    df = df[df[index_column].isin(metab_list)].copy()
+    # 5) Filter for desired feature_idx_list list
+    df = df[df[index_column].isin(feature_idx_list)].copy()
     # re order by index_list
-    df[index_column] = pd.Categorical(df[index_column], categories=metab_list, ordered=True)
+    df[index_column] = pd.Categorical(df[index_column], categories=feature_idx_list, ordered=True)
     df = df.sort_values(index_column)
 
     # 6) Sort by x_axis_label
@@ -778,19 +922,23 @@ def l2fc_pvalue_dotplot(
 
     # Title & labels
     plt.title(f'{plot_title}\n', fontsize=16)
-    ax.set_xlabel(x_axis_label, fontsize=12)
-    ax.set_ylabel(analyte_label, fontsize=12)
+    ax.set_xlabel(x_axis_label, fontsize=16)
+    ax.set_ylabel(analyte_label, fontsize=16)
 
     # Legend adjustments
     ax.legend(
-        loc="center left",
-        bbox_to_anchor=(1.0, 0.5),
+        #loc="center left",
+        bbox_to_anchor=bbox_to_anchor,
         title=f"-log10 {pval_label}",
         markerscale=0.4,    # shrink markers in legend
         labelspacing=1.2,
-        borderpad=1.2
+        borderpad=1.2,
+        # make columns
+        loc='lower center',
+        ncol=10,
+        
     )
-    plt.tight_layout()
+    #plt.tight_layout()
 
     if savefig:
         plt.savefig(file_name, dpi=300, bbox_inches="tight")
@@ -807,22 +955,238 @@ diff_tests_res_df = diff_tests.copy()  # or your real data
 
 analyte_list=['CHEM_ID1', 'CHEM_ID2', 'CHEM_ID3', 'CHEM_ID4', 'CHEM_ID5']
     
-
-l2fc_pvalue_dotplot(
-    diff_tests=diff_tests_res_df,
-    metab_list=metab_list,
-    index_column='CHEM_ID',
-    analyte_label='Metabolite',
-    Timepoint_comparison='Drug_vs_Vehicle_',
-    pval_col='ttest_rel_nested_pvals_corrected_nested_predose_baseline_drug_vehicle',
-    l2fc_col='ttest_rel_nested_mean_paired_l2fcfc_nested_predose_baseline_drug_vehicle',
+l2fc_pvalue_dotplot_protein_metabolite(
+    diff_tests,
+    feature_idx_list,
+    index_column='EntrezGeneSymbol',
+    analyte_label_column='TargetFullName',
+    analyte_label='Protein',
+    comparison_column='Timepoint',
+    comparison='Target_vs_Reference',
+    pval_col='ttest_rel_pvals_corrected_Target_vs_Reference',
+    l2fc_col='ttest_rel_mean_paired_l2fcfc_Target_vs_Reference',
     pval_label='p-value',
-    x_axis_label='log2fc ((target/con)/(ref/con))',
+    x_axis_label='log2fc ((target)/(ref))',
     sort_x_axis=False,
     pvalue_cutoff=0.2,
-    figsize=(6, 10),
-    plot_title='Drug_vs_Vehicle l2fc ((target/con)/(ref/con))',
+    sizes=(20, 2000),
+    figsize=(6,10),
+    bbox_to_anchor=(0.5, -0.25),
+    plot_title='Target_vs_Reference l2fc ((target)/(ref))',
     savefig=False,
-    file_name='example_dotplot.png'
+    file_name='test_plot.png'
+)
+'''
+
+
+
+def l2fc_pvalue_dotplot_gex(
+    diff_tests,
+    feature_idx_list,
+    index_column='var_name',
+    analyte_label_column='analyte_label',
+    analyte_label='Gene_Expression',
+    comparison_column='Timepoint',
+    comparison='Target_vs_Reference',
+    pval_col='ttest_rel_pvals_corrected_Target_vs_Reference',
+    l2fc_col='ttest_rel_mean_paired_l2fcfc_Target_vs_Reference',
+    pval_label='p-value',
+    x_axis_label='log2fc ((target)/(ref))',
+    sort_x_axis=False,
+    pvalue_cutoff=0.2,
+    sizes=(20, 2000),
+    figsize=(6,10),
+    bbox_to_anchor=(0.5, -0.25),
+    plot_title='Target_vs_Reference l2fc ((target)/(ref))',
+    savefig=False,
+    file_name='test_plot.png'
+):
+    """
+    Create a ring-overlay dot plot of selected metabolites from 'diff_tests'.
+
+    Parameters
+    ----------
+    diff_tests : pd.DataFrame
+        DataFrame containing the differential test results. Must have columns:
+        [index_column, analyte_label_column, analyte_label, pval_col, l2fc_col]
+    feature_idx_list : list
+        List of feature_idx_list values to include in the plot.
+    index_column : str
+        Column name for features (default 'var_names').
+    analyte_label_column: str
+    analyte_label : str
+        Column name to use for labeling the y-axis (default 'Metabolite').
+    comparison_column : str
+        Value in 'comparison_column' to select for plotting (default 'Target_vs_Reference').
+    pval_col : str
+        Column containing the p-values (default 'ttest_rel_pvals_corrected_Target_vs_Reference').
+    l2fc_col : str
+        Column containing the log2 fold change (default 'ttest_rel_mean_paired_l2fcfc_Target_vs_Reference').
+    pval_label : str
+        Label to use in the plot for p-value axis (default 'p-value').
+    x_axis_label : str
+        X-axis label (default 'log2fc ((target)/(ref))').
+    sort_x_axis : bool
+        Whether to sort the x-axis by the x_axis_label (default False).
+    pvalue_cutoff : float
+        Numeric cutoff for ring overlay (default 0.2).
+    bbox_to_anchor: legend postion default bbox_to_anchor=(0.5, -0.25),,
+    figsize : tuple
+        Figure size (default (6,10)).
+    plot_title : str
+        Title string (default 'Target_vs_Reference l2fc ((target)/(ref))').
+    savefig : bool
+        Whether to save the figure (default False).
+    file_name : str
+        File name for saving (default 'test_plot.png').
+
+    Returns
+    -------
+    None (displays plot or saves figure).
+    """
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    import numpy as np
+    import pandas as pd
+
+    # Default columns to keep if not provided
+    columns2keep = [comparison_column, index_column, analyte_label_column, analyte_label, pval_col, l2fc_col]
+    columns2keep_labels = [comparison_column, index_column, analyte_label_column, analyte_label, pval_label, x_axis_label]
+    if comparison_column is None:
+        columns2keep = [index_column, analyte_label_column, analyte_label, pval_col, l2fc_col]
+        columns2keep_labels = [index_column, analyte_label_column, analyte_label, pval_label, x_axis_label]
+
+    # 1) Copy and prepare DataFrame
+    df = diff_tests.copy()
+    df[index_column] = df[index_column].astype(str)
+    # Make truncated metabolite name (40 chars)
+    df[analyte_label] = df[analyte_label_column].astype(str).str[:40]
+
+    # 2) Filter by comparison_column if not None
+    if comparison_column:
+        df = df[df[comparison_column] == comparison].copy()
+
+    # 3) Select columns & rename
+    df = df[columns2keep].copy()
+    df.columns = columns2keep_labels
+
+    # 4) Compute -log10 p-value
+    log10pval_label = f'-log10{pval_label}'
+    df[log10pval_label] = -np.log10(df[pval_label])
+
+    #size_min =0.01 #df[log10pval_label].min()
+    size_min= -np.log10(.9)
+    size_max = df[log10pval_label].max()
+
+    # Also store a column for the ring overlay cutoff, truncated to 2 decimals
+    ring_col = 'ring_cutoff'
+    df[ring_col] = (-np.log10(pvalue_cutoff)).round(2)
+
+    # 5) Filter for desired feature_idx_list list
+    df = df[df[index_column].isin(feature_idx_list)].copy()
+    # re order by index_list
+    df[index_column] = pd.Categorical(df[index_column], categories=feature_idx_list, ordered=True)
+    df = df.sort_values(index_column)
+
+    # 6) Sort by x_axis_label
+    if sort_x_axis:
+        df = df.sort_values(by=x_axis_label, ascending=True)
+
+    # Create the figure
+    plt.figure(figsize=figsize)
+
+    # Define size scale from actual -log10 p-values
+    #size_min =0.01 #df[log10pval_label].min()
+    #size_max = df[log10pval_label].max()
+    
+    #df.loc['test'] = [Timepoint_comparison,'test','test','test',pvalue_cutoff,0.1, -np.log10(pvalue_cutoff).round(2),-np.log10(pvalue_cutoff).round(2)]
+
+    # A) Plot the ring (facecolors="none") using the ring_col
+    ax = sns.scatterplot(
+        data=df,
+        x=x_axis_label,
+        y=analyte_label,
+        size=ring_col,            # ring size is the ring_cutoff column
+        size_norm=(size_min, size_max),
+        sizes=sizes,
+        facecolors="none",
+        edgecolors="red",
+        linewidths=1,
+        zorder=3,
+    )
+
+    # B) Plot the main points, colored & sized by actual -log10 p-value
+    ax = sns.scatterplot(
+        data=df,
+        x=x_axis_label,
+        y=analyte_label,
+        size=log10pval_label,
+        size_norm=(size_min, size_max),
+        sizes=sizes,
+        hue=log10pval_label,
+        palette="viridis_r",
+        edgecolors="black",
+        linewidths=.5,
+        legend="brief",
+        ax=ax,
+    )
+
+    # Vertical line at x=0
+    ax.axvline(x=0, color="red", linestyle="--")
+
+    # Title & labels
+    plt.title(f'{plot_title}\n', fontsize=16)
+    ax.set_xlabel(x_axis_label, fontsize=16)
+    ax.set_ylabel(analyte_label, fontsize=16)
+
+    # Legend adjustments
+    ax.legend(
+        #loc="center left",
+        bbox_to_anchor=bbox_to_anchor,
+        title=f"-log10 {pval_label}",
+        markerscale=0.4,    # shrink markers in legend
+        labelspacing=1.2,
+        borderpad=1.2,
+        # make columns
+        loc='lower center',
+        ncol=10,
+        
+    )
+    #plt.tight_layout()
+
+    if savefig:
+        plt.savefig(file_name, dpi=300, bbox_inches="tight")
+        print(f"Figure saved to {file_name}")
+    else:
+        plt.show()
+
+'''
+### **Example Usage**
+
+
+# Suppose diff_tests is your main DataFrame of results
+diff_tests_res_df = diff_tests.copy()  # or your real data
+
+    
+l2fc_pvalue_dotplot_gex(
+    diff_tests,
+    feature_idx_list,
+    index_column='var_name',
+    analyte_label_column='analyte_label',
+    analyte_label='Gene_Expression',
+    comparison_column='Timepoint',
+    comparison='Target_vs_Reference',
+    pval_col='ttest_rel_pvals_corrected_Target_vs_Reference',
+    l2fc_col='ttest_rel_mean_paired_l2fcfc_Target_vs_Reference',
+    pval_label='p-value',
+    x_axis_label='log2fc ((target)/(ref))',
+    sort_x_axis=False,
+    pvalue_cutoff=0.2,
+    sizes=(20, 2000),
+    figsize=(6,10),
+    bbox_to_anchor=(0.5, -0.25),
+    plot_title='Target_vs_Reference l2fc ((target)/(ref))',
+    savefig=False,
+    file_name='test_plot.png'
 )
 '''
