@@ -3,7 +3,7 @@
 from . import anndata_io as adio
 from . import anndata_preprocessing as adpp
 from . import anndata_plotting as adpl
-from . import anndata_tools as adtl
+from . import anndata_tools as adtools
 
 from .anndata_io import *
 from .anndata_preprocessing import *
