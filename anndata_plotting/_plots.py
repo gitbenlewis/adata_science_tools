@@ -641,33 +641,82 @@ import seaborn as sns
 import pandas as pd
 import anndata  # or use the quoted type hint instead
 from matplotlib.patches import Patch
+import anndata 
+import numpy as np
+from matplotlib.ticker import StrMethodFormatter
 
 def plot_column_of_bar_h_2groups_GEX_adata(
-        adata: "anndata.AnnData",
-        feature_list=None,
+        adata: anndata.AnnData | None = None,
         layer: str | None = 'salmon_effective_TPM',
-        comparison_col: str | None = None,
+        x_df: pd.DataFrame | None = None,       
+        var_df: pd.DataFrame | None = None,
+        obs_df: pd.DataFrame | None = None,
+        feature_list=None,
+        feature_label_x: float = -0.02,
+        figsize: tuple[int, int] = (10, 30),
+        fig_title: str | None = None,
+        fig_title_y: float | None = .99,
+        fig_title_fontsize: int | None = 30,
+        feature_label_fontsize: int | None= 24,
+        tick_label_fontsize: int | None= 20,
+        legend_fontsize: int | None= 24,
+        tight_layout_rect_arg=[0, .05, 1, .99],
+        comparison_col: str | None = 'Treatment',
+        remove_yticklabels: bool = True,
         comparison_order: list[str] | None = None,
-        figure_plot_title: str | None = None,
         subplot_xlabel: str | None = 'Expression (TPM)',
         sharex: bool = False,
         legend: bool = True,
-        legend_fontsize: int = 20,
-        remove_yticklabels: bool = True,
-        ylabel_x: float = -0.02,
-        figsize: tuple[int, int] = (10, 30)):
+        barh_legend_bbox_to_anchor: tuple[int, int] | None = (0.5, -.05),
+        savefig: bool = False,
+        file_name: str = 'test_plot.png'):
     
-    from .. import anndata_io as adio
+    ############ prep input tables / parse adata ############
+    if feature_list is None:
+        raise ValueError("feature_list must be provided.") 
+    if adata is not None:
+        print(f"AnnData object provideed with shape {adata.shape} and {len(adata.var_names)} features.")
+        # if adata is provided, use it to get the data
+        if layer not in adata.layers:
+            raise ValueError(f"Layer '{layer}' not found in adata.layers.")
+        if comparison_col not in adata.obs.columns:
+            raise ValueError(f"Column '{comparison_col}' not found in adata.obs.")
+    if x_df is not None:
+        print(f"Using provided x_df with shape {_x_df.shape}")
+        _x_df = _x_df.copy()
+    elif layer is None:
+        print("No layer provided, using adata.X with shape {adata.X.shape}")
+        _x_df = adata.X.copy()  # use the raw data if no layer
+    elif adata is not None and layer in adata.layers:
+        print(f"No x_df provided, using adata.layers['{layer}'] with shape {adata.layers[layer].shape}")
+        _x_df = adata.layers[layer].copy()
 
+    if var_df is not None:
+        print(f"Using provided var_df with shape {var_df.shape}")
+        _var_df = var_df.copy()
+    else:
+        print(f"No var_df provided, using adata.var with shape {adata.var.shape}")
+        _var_df = adata.var.copy()
 
-    # Your helper that returns a tidy df with obs + expression columns
-    df_cat_gex = adio.make_df_obs_adataX(adata, layer=layer, include_obs=True)
+    if obs_df is not None:
+        print(f"Using provided obs_df with shape {obs_df.shape}")
+        _obs_df = obs_df.copy()
+    else:
+        print(f"No obs_df provided, using adata.obs with shape {adata.obs.shape}")
+        _obs_df = adata.obs.copy()
+
+    # #) make df_obs_x, which is a tidy df with obs + expression columns
+    if hasattr(_x_df, "toarray"):  # Convert sparse matrix to dense if necessary
+        _x_df = _x_df.toarray()
+    df_obs_x = pd.DataFrame(_x_df, columns=_var_df.index, index=_obs_df.index)
+    df_obs_x = pd.concat([_obs_df, df_obs_x], axis=1)
+
 
     # Determine category order
     if comparison_order is None:
         # keep observed order
-        categories = list(pd.Series(df_cat_gex[comparison_col]).astype('category').cat.categories) \
-                     or list(df_cat_gex[comparison_col].unique())
+        categories = list(pd.Series(df_obs_x[comparison_col]).astype('category').cat.categories) \
+                     or list(df_obs_x[comparison_col].unique())
     else:
         categories = list(comparison_order)
 
@@ -679,44 +728,50 @@ def plot_column_of_bar_h_2groups_GEX_adata(
     fig, axes = plt.subplots(
         gene_list_len, 1,
         sharex=sharex, 
-        figsize=figsize, layout="constrained"
+        figsize=figsize, 
     )
     if gene_list_len == 1:
         axes = [axes]  # make iterable
 
-    if figure_plot_title is not None:
-        fig.suptitle(figure_plot_title, fontsize=legend_fontsize)
+    if fig_title is not None:
+        fig.suptitle(fig_title, fontsize=fig_title_fontsize, y=fig_title_y )
     else:
-        fig.suptitle(f"{subplot_xlabel} grouped by {comparison_col}\n", fontsize=legend_fontsize)
+        fig.suptitle(f"{subplot_xlabel} grouped by {comparison_col}\n", fontsize=fig_title_fontsize, y=fig_title_y)
 
     for plot_num, gene in enumerate(feature_list):
         ax = axes[plot_num]
 
         # Horizontal bars (aggregated by category)
-        g0 = sns.barplot(
+        sns.barplot(
             x=gene, y=comparison_col,
-            data=df_cat_gex,
+            data=df_obs_x,
             order=categories,
             ax=ax,
             palette=[color_map[c] for c in categories]
         )
 
         if remove_yticklabels:
-            g0.set_yticklabels([])
+            ax.set_yticklabels([])
 
         # Overlay points (each sample), same order as bars
         sns.stripplot(
             x=gene, y=comparison_col,
-            data=df_cat_gex,
+            data=df_obs_x,
             order=categories,
             ax=ax,
             color='black',
             legend=False
         )
-
-        g0.set_xlabel(subplot_xlabel)
-        g0.set_ylabel(gene, rotation=0, fontsize=20, ha='right', va='center')
-        g0.yaxis.set_label_coords(ylabel_x, 0.5)
+        # set x-axis tic fontsize
+        ax.tick_params(axis='x', labelsize=tick_label_fontsize)
+        ax.xaxis.set_major_formatter(StrMethodFormatter('{x:g}'))
+        # remove xlabel for all but the last subplot
+        ax.set_xlabel('')
+        # set ylabel for each subplot
+        ax.set_ylabel(gene, rotation=0, fontsize=feature_label_fontsize, ha='right', va='center')
+        ax.yaxis.set_label_coords(feature_label_x, 0.5)
+    # outside of the loop, set the xlabel for the last subplot
+    ax.set_xlabel(subplot_xlabel, fontsize=legend_fontsize)
 
     # Figure-level legend at bottom with the same bar colors
     if legend:
@@ -727,16 +782,18 @@ def plot_column_of_bar_h_2groups_GEX_adata(
             loc='lower center',
             ncol=min(len(categories), 6),
             title=comparison_col,
-            bbox_to_anchor=(0.5, -0.02),
+            bbox_to_anchor=barh_legend_bbox_to_anchor,
             fontsize=legend_fontsize,
             title_fontsize=legend_fontsize,
         )
         # Leave space for the bottom legend
-        plt.tight_layout(rect=[0, 0.05, 1, 1])
-        #plt.tight_layout()
+        rect_used = (np.array(tight_layout_rect_arg) + np.array([0, 0.01, 0, 0])).tolist()
+        plt.tight_layout(rect=rect_used)
     else:
-        plt.tight_layout()
-
+        plt.tight_layout(rect=tight_layout_rect_arg)
+    if savefig:
+        plt.savefig(file_name, dpi=300, bbox_inches="tight" )
+        print(f"Saved plot to {file_name}")
     plt.show()
     return fig, axes
 
@@ -762,6 +819,344 @@ adtl.plot_column_of_bar_h_2groups_GEX_adata(adata, feature_list=top_up_genes, la
 '''
 
 ####### END ############. datapoint plots ###################.###################.###################.###################.
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+import anndata  # or use the quoted type hint instead
+from matplotlib.patches import Patch
+import numpy as np
+from matplotlib.ticker import FormatStrFormatter
+from matplotlib.ticker import StrMethodFormatter
+
+import anndata 
+def plot_column_of_bar_h_2groups_with_l2fc_dotplot_GEX_adata(
+        # shared parameters
+        adata: anndata.AnnData | None = None,
+        layer: str | None = 'salmon_effective_TPM',
+        x_df: pd.DataFrame | None = None,       
+        var_df: pd.DataFrame | None = None,
+        obs_df: pd.DataFrame | None = None,
+        feature_list: list[str] | None = None,
+        feature_label_x: float = -0.02,
+        figsize: tuple[int, int]| None = (10, 15),
+        fig_title: str | None = None,
+        fig_title_y: float = 1.03,
+        subfig_title_y: float = 99,
+        fig_title_fontsize: int | None = 30,
+        subfig_title_fontsize: int | None = 24,
+        feature_label_fontsize: int | None= 24,
+        tick_label_fontsize: int | None= 20,
+        legend_fontsize: int | None= 24,
+        bar2dotplot_width_ratios: list[float] | None = [1.5, 1.],
+        tight_layout_rect_arg: list[float] | None = [0, 0, 1, 1],
+        savefig: bool = False,
+        file_name: str = 'test_plot.png',
+        # barh specific parameters
+        comparison_col: str | None = 'Treatment',
+        barh_remove_yticklabels: bool = True,
+        comparison_order: list[str] | None = None,
+        barh_figure_plot_title: str | None = f'Expression (TPM)',
+        barh_subplot_xlabel: str | None = 'Expression (TPM)',
+        barh_sharex: bool = False,
+        barh_legend: bool = True,
+        barh_legend_bbox_to_anchor: tuple[int, int] | None = (0.5, -.05),
+        # dotplot specific parameters
+        dotplot_figure_plot_title: str | None = 'log2fc',
+        dotplot_pval_vars_col_label: str | None = 'pvalue',
+        dotplot_l2fc_vars_col_label: str | None ='log2FoldChange',
+        dotplot_subplot_xlabel: str | None = 'log2fc ((target)/(ref))',
+        pval_label: str = 'p-value',
+        l2fc_label: str = 'log2FoldChange',
+        pvalue_cutoff_ring: float = 0.1,
+        sizes: tuple[int, int] | None = (20, 2000),
+        dotplot_sharex: bool = False,
+        dotplot_legend: bool = True,
+        dotplot_legend_bins: int | None = 4,
+        dotplot_legend_bbox_to_anchor: tuple[int, int] | None = (0.5, -.05),
+        # 
+        ):
+    
+    from .. import anndata_io as adio
+
+    ############ prep input tables / parse adata ############
+    if feature_list is None:
+        raise ValueError("feature_list must be provided.") 
+    if adata is not None:
+        print(f"AnnData object provideed with shape {adata.shape} and {len(adata.var_names)} features.")
+        # if adata is provided, use it to get the data
+        if layer not in adata.layers:
+            raise ValueError(f"Layer '{layer}' not found in adata.layers.")
+        if comparison_col not in adata.obs.columns:
+            raise ValueError(f"Column '{comparison_col}' not found in adata.obs.")
+    if x_df is not None:
+        print(f"Using provided x_df with shape {_x_df.shape}")
+        _x_df = _x_df.copy()
+    elif layer is None:
+        print("No layer provided, using adata.X with shape {adata.X.shape}")
+        _x_df = adata.X.copy()  # use the raw data if no layer
+    elif adata is not None and layer in adata.layers:
+        print(f"No x_df provided, using adata.layers['{layer}'] with shape {adata.layers[layer].shape}")
+        _x_df = adata.layers[layer].copy()
+
+    if var_df is not None:
+        print(f"Using provided var_df with shape {var_df.shape}")
+        _var_df = var_df.copy()
+    else:
+        print(f"No var_df provided, using adata.var with shape {adata.var.shape}")
+        _var_df = adata.var.copy()
+
+    if obs_df is not None:
+        print(f"Using provided obs_df with shape {obs_df.shape}")
+        _obs_df = obs_df.copy()
+    else:
+        print(f"No obs_df provided, using adata.obs with shape {adata.obs.shape}")
+        _obs_df = adata.obs.copy()
+
+    # #) make df_obs_x, which is a tidy df with obs + expression columns
+    if hasattr(_x_df, "toarray"):  # Convert sparse matrix to dense if necessary
+        _x_df = _x_df.toarray()
+    df_obs_x = pd.DataFrame(_x_df, columns=_var_df.index, index=_obs_df.index)
+    df_obs_x = pd.concat([_obs_df, df_obs_x], axis=1)
+
+
+    # Determine category order
+    if comparison_order is None:
+        # keep observed order
+        categories = list(pd.Series(df_obs_x[comparison_col]).astype('category').cat.categories) \
+                     or list(df_obs_x[comparison_col].unique())
+    else:
+        categories = list(comparison_order)
+
+    # Build a fixed palette used for every subplot
+    palette = sns.color_palette('tab10', n_colors=len(categories))
+    color_map = dict(zip(categories, palette))
+
+
+    ############ prep dotplots ############
+    # #) get the p-value and l2fc columns from the adata.var
+    #adata_var_df = adata.var.copy()  # make a copy of the var metadata
+    # #) Compute -log10 p-value and as well as max and min for dotplot size normalization
+    log10pval_label = f'-log10({pval_label})'
+    _var_df[log10pval_label] = -np.log10(_var_df[dotplot_pval_vars_col_label])
+    size_min= -np.log10(.9)
+    size_max = _var_df[log10pval_label].max()
+    # #) compute l2fc abs().max()   for axis limits
+    l2fc_x_limit = _var_df.loc[feature_list][dotplot_l2fc_vars_col_label].abs().max()
+    # Also store a column for the ring overlay cutoff, truncated to 2 decimals
+    ring_col = 'ring_cutoff'
+    _var_df[ring_col] = (-np.log10(pvalue_cutoff_ring)).round(2)
+    # #) make a new column for the dotplot y-axis, which is the gene name
+    _var_df['dotplot_feature_name'] = _var_df.index  # use the index
+
+    ############ ############ ############ ############
+    # #) set up the figure and subfigures
+    gene_list_len = len(feature_list)
+    fig = plt.figure(figsize=figsize)
+    subfigs = fig.subfigures(1, 2, wspace=0.07, width_ratios=bar2dotplot_width_ratios)
+    # Optional overall title for the whole figure
+    if fig_title is not None:
+        ft_size = fig_title_fontsize or subfig_title_fontsize or (legend_fontsize + 2)
+        fig.suptitle(fig_title, fontsize=ft_size, y=fig_title_y)
+
+    ###### Create subplots for subfigs[0] - horizontal bar plots
+    axes0 = subfigs[0].subplots(gene_list_len, 1, sharex=barh_sharex, )
+    # set subfig[0] title
+    if barh_figure_plot_title is not None:
+        subfigs[0].suptitle(barh_figure_plot_title, fontsize=(subfig_title_fontsize or legend_fontsize), y=subfig_title_y)
+    else:
+        subfigs[0].suptitle(f"{barh_subplot_xlabel} grouped by {comparison_col}\n", fontsize=(subfig_title_fontsize or legend_fontsize), y=subfig_title_y)
+
+    ####### Create subplots subfigs[1] - for dot plots
+    axes1 = subfigs[1].subplots(gene_list_len, 1, sharex=dotplot_sharex)
+    # set subfig[1] title
+    if dotplot_figure_plot_title is not None:
+        subfigs[1].suptitle(dotplot_figure_plot_title, fontsize=(subfig_title_fontsize or legend_fontsize), y=subfig_title_y)
+    else:
+        subfigs[1].suptitle(f"{dotplot_subplot_xlabel} grouped by {comparison_col}\n", fontsize=(subfig_title_fontsize or legend_fontsize), y=subfig_title_y)
+
+    ################## loop through features and create subplots ##################
+    for plot_num, gene in enumerate(feature_list):
+        if gene_list_len == 1:
+            ax0 = axes0
+            ax1 = axes1
+        else:
+            ax0 = axes0[plot_num]
+            ax1 = axes1[plot_num]
+        ############ barh plots ############
+        # Horizontal bars (aggregated by category)
+        sns.barplot(
+            x=gene, y=comparison_col,
+            data=df_obs_x,
+            order=categories,
+            ax=ax0,
+            palette=[color_map[c] for c in categories]
+        )
+        if barh_remove_yticklabels:
+            ax0.set_yticklabels([])
+        # Overlay points (each sample), same order as bars
+        sns.stripplot(
+            x=gene, y=comparison_col,
+            data=df_obs_x,
+            order=categories,
+            ax=ax0,
+            color='black',
+            legend=False
+        )
+        # set x-axis tic fontsize
+        ax0.tick_params(axis='x', labelsize=tick_label_fontsize)
+        ax0.xaxis.set_major_formatter(StrMethodFormatter('{x:g}'))
+        # remove xlabel for all but the last subplot
+        ax0.set_xlabel('')
+        # set ylabel for each subplot
+        ax0.set_ylabel(gene, rotation=0, fontsize=feature_label_fontsize, ha='right', va='center')
+        ax0.yaxis.set_label_coords(feature_label_x, 0.5)
+
+        ############ dot plots ############
+        # A) Plot the ring (facecolors="none") using the ring_col
+        sns.scatterplot(
+            data=_var_df.loc[[gene]],
+            x=dotplot_l2fc_vars_col_label,
+            y='dotplot_feature_name',
+            size=ring_col,            # ring size is the ring_cutoff column
+            size_norm=(size_min, size_max),
+            sizes=sizes,
+            facecolors="none",
+            edgecolors="red",
+            linewidths=1,
+            zorder=3,
+            legend=False,
+            ax=ax1,
+        )
+        # B) Plot the main points, colored & sized by actual -log10 p-value
+        sns.scatterplot(
+            data=_var_df.loc[[gene]],
+            x=dotplot_l2fc_vars_col_label,
+            y='dotplot_feature_name',
+            size=log10pval_label,
+            size_norm=(size_min, size_max),
+            sizes=sizes,
+            hue=log10pval_label,
+            hue_norm=(size_min, size_max),
+            palette="viridis_r",
+            edgecolors="black",
+            linewidths=.5,
+            #legend="brief",
+            legend=False,
+            ax=ax1,
+        )
+        # set x-axis limits
+        l2fc_xaxis_pad=1.05
+        ax1.set_xlim((-l2fc_x_limit*l2fc_xaxis_pad), (l2fc_x_limit* l2fc_xaxis_pad))  # add a bit of padding
+        # set x-axis tic fontsize
+        ax1.tick_params(axis='x', labelsize=tick_label_fontsize)
+        ax1.xaxis.set_major_formatter(StrMethodFormatter('{x:g}'))
+        # Vertical line at x=0
+        ax1.axvline(x=0, color="red", linestyle="--")
+        # remove xlabel for all but the last subplot
+        ax1.set_xlabel('')
+        # remove ylabel for all subplots
+        ax1.set_ylabel('')
+        ax1.set_yticklabels([])
+        if dotplot_sharex and plot_num < gene_list_len - 1:
+            ax1.set_xlabel('')
+
+
+    # outside of the loop, set the xlabel for the last subplot
+    ax0.set_xlabel(barh_subplot_xlabel, fontsize=legend_fontsize)
+    ax1.set_xlabel(dotplot_subplot_xlabel, fontsize=legend_fontsize)
+
+    # subfigs[0] Figure-level legend at bottom with the same bar colors
+    if barh_legend:
+        handles = [Patch(facecolor=color_map[c], edgecolor='none', label=str(c)) for c in categories]
+        subfigs[0].legend(
+            handles=handles,
+            labels=[str(c) for c in categories],
+            loc='lower center',
+            ncol=min(len(categories), 6),
+            title=comparison_col,
+            bbox_to_anchor=barh_legend_bbox_to_anchor,
+            fontsize=legend_fontsize,
+            title_fontsize=legend_fontsize,
+        )
+
+    # subfigs[1] figure-level legend styled like the example (4 interval dots + ring)
+    if dotplot_legend:
+        from matplotlib.lines import Line2D
+        cmap_min= float(-np.log10(pvalue_cutoff_ring))
+        cmap = plt.get_cmap('viridis_r')
+        norm = plt.Normalize(cmap_min, size_max)
+
+        # Build 4 equal-width intervals in the displayed range
+        n_bins = dotplot_legend_bins
+        edges = np.linspace(size_min, size_max, n_bins + 1)
+        # Use the UPPER bounds of each interval for color/size and labels
+        uppers = edges[1:]
+        labels = [f"{u:.1f}" for u in uppers]
+
+        # Helper to map value -> scatter area -> legend marker size (points)
+        def _area_for(v):
+            return float(np.interp(v, [size_min, size_max], sizes))
+        def _ms_for(v):
+            return max(4.0, np.sqrt(_area_for(v)))
+
+        handles = []
+        # Compute legend marker size for the ring using the same sizing mapping
+        v_ring = float(-np.log10(pvalue_cutoff_ring))
+        ms_ring = _ms_for(v_ring)
+        # Ring handle first
+        ring_handle = Line2D(
+            [0], [0], marker='o', linestyle='',
+            markerfacecolor='none', markeredgecolor='red', markeredgewidth=1.5,
+            markersize=ms_ring,
+            label=f"{pvalue_cutoff_ring} p-value ring",
+        )
+        
+        # One colored dot per interval, using the UPPER bound for color and size
+        for u, lab in zip(uppers, labels):
+            handles.append(
+                Line2D([0], [0], marker='o', linestyle='',
+                       markerfacecolor=cmap(norm(u)), markeredgecolor='black',
+                       markersize=_ms_for(u), label=lab
+                       )
+            )
+
+        # and the ring handle first
+        handles.insert(0, ring_handle)  # insert at the beginning so ring is first
+
+        # --- Two-row legend layout: ring (row 1) then four dots (row 2) ---
+
+        # Second legend: the four upper-bound dots (row 2)
+        dot_handles = handles[0:]  # skip ring (index 0)
+        leg1 = subfigs[1].legend(
+            handles=dot_handles,
+            loc='lower center',
+            ncol=1,
+            bbox_to_anchor=dotplot_legend_bbox_to_anchor,
+            title=f"{log10pval_label}",
+            fontsize=legend_fontsize,
+            title_fontsize=legend_fontsize,
+            frameon=True,
+            markerfirst=True,           # place marker to the LEFT of the label
+            #markerscale=0.7,            # scale markers down inside the legend to avoid overlap
+            handletextpad=1.5,          # extra space between marker and text
+            #labelspacing=0.8,           # vertical spacing between entries
+            #borderpad=0.6,              # padding inside the legend frame
+        )
+
+    # Leave space for the bottom legend
+    if dotplot_legend or barh_legend:
+        rect_used = (np.array(tight_layout_rect_arg) + np.array([0, 0.12, 0, 0])).tolist()
+    else:
+        rect_used = tight_layout_rect_arg
+    plt.tight_layout(rect=rect_used)
+
+
+    if savefig:
+        plt.savefig(file_name, dpi=300, bbox_inches="tight" )
+        print(f"Saved plot to {file_name}")
+    plt.show()
+    return fig, subfigs
 
 
 ####### START ############. l2fc_pvalue plots ###################.###################.###################.###################.
