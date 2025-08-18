@@ -344,6 +344,161 @@ def volcano_plot_sns_single_comparison_generic(_df, l2fc_col='log2FoldChange',se
         plt.savefig(file_name, dpi=600, bbox_inches="tight" )
         print(f"Saved plot to {file_name}")
     return p
+
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import warnings
+try:
+    import anndata as ad  # optional
+except Exception:
+    ad = None
+
+def qqplot_pvalues(
+    data,
+    pvalue_column: str | None = None,
+    *,
+    source: str = "auto",      # "auto" | "var" | "obs" (for AnnData) | "df"
+    title: str | None = None,
+    pvalue_column_plot_label: str | None = None,
+    ax: plt.Axes | None = None,
+    figsize: tuple = (5, 5),
+    show: bool = True,
+    return_points: bool = False,
+    annotate_lambda: bool = True,
+    savefig: bool = False,
+    filename: str = "qqplot_pvalues.png",
+    plotting_position: str = "Blom"  # "Blom" or "Weibull"
+):
+    """
+    QQ plot for p-values (observed vs expected -log10 p).
+    for expected p-values uses  (i - 0.5)/n rule, sometimes called “Blom's plotting position”.
+
+    Parameters
+    ----------
+    data : array-like | pandas.DataFrame | anndata.AnnData
+        If array-like: raw p-values.
+        If DataFrame: provide `pvalue_column`.
+        If AnnData: use `source` ("var" or "obs") + `pvalue_column`.
+    pvalue_column : str, optional
+        Column name containing p-values when data is a DataFrame or AnnData.
+    source : str
+        How to read from AnnData ("var" or "obs") or force DataFrame ("df"). "auto" will infer.
+    label : str, optional
+        Label for axes; defaults to `pvalue_column` or "p-value".
+    return_points : bool
+        If True, returns (expected, observed) arrays in the output dict.
+    annotate_lambda : bool
+        If True, computes and annotates genomic inflation factor λ_GC.
+    """
+
+    # ---- Extract p-values ----
+    if isinstance(data, (list, tuple, np.ndarray, pd.Series)):
+        p = np.asarray(data, dtype=float)
+        src = "array"
+    elif isinstance(data, pd.DataFrame):
+        if pvalue_column is None:
+            raise ValueError("Provide `pvalue_column` when data is a DataFrame.")
+        p = pd.to_numeric(data[pvalue_column], errors="coerce").values
+        src = "dataframe"
+    else:
+        # Possibly AnnData
+        if anndata is not None and isinstance(data, anndata.AnnData):
+            if pvalue_column is None:
+                raise ValueError("Provide `column` when data is an AnnData.")
+            # decide source
+            if source == "auto":
+                source = "var" if pvalue_column in data.var.columns else "obs"
+            if source == "var":
+                if pvalue_column not in data.var.columns:
+                    raise ValueError(f"Column '{pvalue_column}' not found in adata.var.")
+                p = pd.to_numeric(data.var[pvalue_column], errors="coerce").values
+                src = "adata.var"
+            elif source == "obs":
+                if pvalue_column not in data.obs.columns:
+                    raise ValueError(f"Column '{pvalue_column}' not found in adata.obs.")
+                p = pd.to_numeric(data.obs[pvalue_column], errors="coerce").values
+                src = "adata.obs"
+            else:
+                raise ValueError("`source` must be 'var' or 'obs' for AnnData.")
+        else:
+            raise ValueError("Unsupported `data` type.")
+    # ---- Clean p-values ----
+    p = np.asarray(p, dtype=float)
+    p = p[np.isfinite(p)]
+    p = p[(p >= 0) & (p <= 1)]
+    if p.size == 0:
+        raise ValueError("No valid p-values in [0,1].")
+    # protect against zeros
+    eps = np.finfo(float).tiny
+    p = np.clip(p, eps, 1.0)
+    # ---- Sort + expected (plotting positions) ----
+    p = np.sort(p)
+    n = p.size
+    # plotting positions (i - 0.5) / n
+    if plotting_position == "Blom":
+        exp = (np.arange(1, n + 1) - 0.5) / n
+    elif plotting_position == "Weibull":
+        exp = np.linspace(1/(n+1), n/(n+1), n)
+    else:
+        raise ValueError("`plotting_position` must be 'Blom' or 'Weibull'.")
+    exp_log = -np.log10(exp)
+    obs_log = -np.log10(p)
+    # ---- Figure/Axes ----
+    created_fig = False
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+        created_fig = True
+    else:
+        fig = ax.figure
+    ax.scatter(exp_log, obs_log, edgecolor='k', s=12, alpha=0.7)
+    max_val = max(exp_log.max(), obs_log.max())
+    ax.plot([0, max_val], [0, max_val], linestyle="--", color="red", )
+    if title is None:
+        if pvalue_column_plot_label is not None:
+            title = f"QQ plot: {pvalue_column_plot_label}"
+        elif pvalue_column is not None:
+            title = f"QQ plot: {pvalue_column}"
+        else:
+            title = "QQ plot of p-values"
+    ax.set_title(title)
+    if pvalue_column_plot_label is None:
+        pvalue_column_plot_label =  "pvalue"
+    ax.set_xlabel(f"Expected -log10({pvalue_column_plot_label})")
+    ax.set_ylabel(f"Observed -log10({pvalue_column_plot_label})")
+    ax.set_xlim(0, max_val)
+    ax.set_ylim(0, max_val)
+    # ---- Optional λ_GC annotation ----
+    lam = None
+    if annotate_lambda:
+        # transform to chi-square with 1 df: chi2 = qchisq(1 - p, 1)
+        # Use scipy only if available; otherwise an approximation via inverse survival of chi2
+        try:
+            from scipy.stats import norm, chi2
+            chi_obs = chi2.isf(p, df=1)   # isf = inverse survival function = quantile of 1-p
+            lam = np.median(chi_obs) / 0.456  # median of chi2_1 ≈ 0.454936..., commonly rounded to 0.456
+            ax.text(0.02, 0.95, f"λ = {lam:.3f}", transform=ax.transAxes, ha="left", va="top")
+            #z = norm.isf(p / 2.0)
+            #lam_z = np.median(z**2) / 0.456
+            #ax.text(0.02, 0.95, f"λ = {lam:.3f} / λ_Z = {lam_z:.3f}", transform=ax.transAxes, ha="left", va="top")
+        except Exception as e:
+            warnings.warn(f"Could not compute λ: {e}")
+    # ---- Save / show ----
+    if savefig:
+        fig.savefig(filename, dpi=300, bbox_inches="tight")
+    if created_fig and show:
+        plt.tight_layout()
+        plt.show()
+    # ---- Return ----
+    out = {"fig": fig, "ax": ax, "source": src, "n": n}
+    if lam is not None:
+        out["lambda_gc"] = lam
+    if return_points:
+        out["expected"] = exp_log
+        out["observed"] = obs_log
+    return out
+
 #######  END ############. Volcano plots ###################.###################.###################.###################.
 
 ####### START ############. datapoint plots ###################.###################.###################.###################.
