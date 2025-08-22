@@ -1,11 +1,13 @@
 import matplotlib.pyplot as plt
 
-# Paul Tol’s 10-color set
+# Paul Tol’s 10-color set # https://sronpersonalpages.nl/~pault/
 tol_colors = [
     "#332288", "#88CCEE", "#44AA99", "#117733",
     "#999933", "#DDCC77", "#661100", "#CC6677",
     "#882255", "#AA4499"
 ]
+
+
 
 
 def show_tol_colors(colors=None):
@@ -54,297 +56,303 @@ def show_tol_colors(colors=None):
 
 #######  START  ############. Volcano plots ###################.###################.###################.###################.
 
-# updated to used the hue_column to set the hue values on 2025.02.28
-def volcano_plot_sns_single_comparison_generic(_df, l2fc_col='log2FoldChange',set_xlabel='log2fc model',xlimit=None,
-                                                padj_col='padj', set_ylabel='-log10(padj)',ylimit=None,
-                    title_text='volcano_plot',comparison_label=' Comparison',
-                     hue_column=None,
-                     log2FoldChange_threshold=.1,
-                     figsize=(15, 10),legend_bbox_to_anchor=(1.15, 1),
-                     label_top_features=False,feature_label_col='gene_names',n_top_features=50,
-                     dot_size_shrink_factor=300,
-                     savefig=False,
-                     file_name='volcano_plot.png',
+
+
+# Todo add accept adata or df input
+# 2025.08.22 updated to re org hue / label logic and add horizontal pvalue threshold to match updates elsewhere 
+# 2025.02.28 updated to used the hue_column to set the hue values 
+def volcano_plot_sns_single_comparison_generic(
+        _df, 
+        l2fc_col: str | None = 'log2FoldChange',
+        set_xlabel: str | None = 'log2fc model',
+        xlimit: str | None = None,
+        padj_col: str | None = 'padj',
+        set_ylabel: str | None = '-log10(padj)',
+        ylimit: str | None = None,
+        title_text: str | None = 'volcano_plot',
+        comparison_label: str | None = ' Comparison',
+        hue_column: str | None = None,
+        log2FoldChange_threshold: float | None = .1,
+        pvalue_threshold: float | None = None,
+        figsize: tuple | None = (15, 10),
+        legend_bbox_to_anchor: tuple | None = (1.15, 1),
+        label_top_features: bool | None = False,
+        only_label_hue_dots: bool | None = True,
+        feature_label_col: str | None = 'gene_names',
+        n_top_features: int | None = 50,
+        dot_size_shrink_factor: int | None = 300,
+        savefig: bool | None = False,
+        file_name: str | None = 'volcano_plot.png',
                      ):
 
     """
     Generate a volcano plot for a single differential expression comparison.
 
-    This function creates a volcano plot using Seaborn and Matplotlib based on differential 
-    expression data provided in a DataFrame. The x-axis displays log2 fold changes and the y-axis 
-    displays the negative log10 of the adjusted p-values (padj). The plot visualizes significance 
-    levels by categorizing data points (e.g., alpha=0.05, 0.1, 0.2) and optionally labels the top 
-    features based on specified criteria.
+    Creates a volcano plot using Seaborn/Matplotlib with log2 fold change on the x-axis 
+    and -log10 adjusted p-value (padj) on the y-axis. Data points are categorized by 
+    significance thresholds (alpha=0.05, 0.1, 0.2) and optionally labeled with top features.
 
-    The function performs the following preprocessing steps:
-      - Fills missing adjusted p-values with 1 and computes -log10(padj) to avoid log(0) issues.
-      - Adds binary columns for significance at alpha levels of 0.2, 0.1, and 0.05, using a minimum 
-        absolute log2 fold change threshold.
-      - Combines these significance levels into a single categorical "Significance" column.
-      - Adjusts out-of-range values for both axes (x: log2 fold change, y: -log10(padj)) based on 
-        computed limits if not provided.
-      - Optionally, labels the top features (genes) by plotting text labels for those with the lowest 
-        adjusted p-values and extreme fold changes.
+    Preprocessing includes:
+      - Replacing missing padj values with 1 and computing -log10(padj).
+      - Adding significance flags at alpha levels (0.2, 0.1, 0.05) with a log2FC cutoff.
+      - Combining flags into a categorical "Significance" column for consistent legend order.
+      - Clipping extreme values to calculated axis limits (x, y).
+      - Optionally labeling top features by significance or fold change extremes.
 
     Parameters
     ----------
     df : pandas.DataFrame
-        DataFrame containing differential expression results. Must include columns for log2 fold change 
-        (default 'log2FoldChange') and adjusted p-values (default 'padj'), among others.
+        Differential expression results with log2 fold change and adjusted p-values.
     l2fc_col : str, optional
-        Name of the column containing log2 fold change values. Default is 'log2FoldChange'.
-    set_xlabel : str, optional
-        Label for the x-axis. Default is 'log2fc model'.
-    xlimit : float, optional
-        Maximum absolute value for the x-axis. If None, it is computed from the data.
+        Column for log2 fold change (default 'log2FoldChange').
     padj_col : str, optional
-        Name of the column containing adjusted p-values. Default is 'padj'.
-    set_ylabel : str, optional
-        Label for the y-axis. Default is '-log10(padj)'.
-    ylimit : float, optional
-        Maximum value for the y-axis. If None, it is computed from the data.
-    title_text : str, optional
-        Main title text for the plot. Default is 'volcano_plot'.
-    comparison_label : str, optional
-        Additional label text to describe the comparison (e.g., dataset or test used). Default is 'DeSeq2 Comparison'.
+        Column for adjusted p-values (default 'padj').
+    set_xlabel, set_ylabel : str, optional
+        Axis labels (default 'log2fc model' and '-log10(padj)').
+    xlimit, ylimit : float, optional
+        Axis limits; computed automatically if None.
+    title_text, comparison_label : str, optional
+        Plot title and comparison label.
     hue_column : str, optional
-        Column name to use for coloring the data points. If None, the function uses a default significance column.
+        Column for coloring points; defaults to "Significance".
     log2FoldChange_threshold : float, optional
-        Minimum absolute log2 fold change for considering a feature significant when labeling. Default is 0.1.
+        Minimum absolute log2FC for significance (default 0.1).
+    pvalue_threshold : float, optional
+        Optional horizontal cutoff line (in p-value scale).
     figsize : tuple, optional
-        Figure size for the plot. Default is (15, 10).
+        Figure size (default (15, 10)).
     legend_bbox_to_anchor : tuple, optional
-        Bounding box coordinates to anchor the legend. Default is (1.15, 1).
+        Legend placement (default (1.15, 1)).
     label_top_features : bool, optional
-        Whether to label the top features (e.g., genes) on the plot based on significance. Default is False.
+        Whether to label top features (default False).
     feature_label_col : str, optional
-        Column name in `df` to use for feature labels if `label_top_features` is True. Default is 'gene_names'.
+        Column used for feature labels (default 'gene_names').
     n_top_features : int, optional
-        Number of top features to label on the plot. Default is 50.
+        Number of features to label (default 50).
     dot_size_shrink_factor : int, optional
-        Factor to shrink the dot size based on the number of data points. Default
-        is 300.
+        Factor to scale dot size by dataset size (default 300).
+    savefig : bool, optional
+        Save figure to file if True (default False).
+    file_name : str, optional
+        Output filename for saved plot.
 
     Returns
     -------
     matplotlib.axes._subplots.AxesSubplot
-        The matplotlib Axes object containing the volcano plot.
+        Matplotlib Axes object containing the plot.
 
     Notes
     -----
-    - The function computes additional columns such as '-log10(padj)', significance flags at various alpha levels,
-      and a 'Marker' column to distinguish data points that exceed defined axis limits.
-    - Vertical dashed lines are drawn at ±log2FoldChange_threshold to highlight the minimum fold change considered significant.
-    - The function handles two plotting cases: one where features are labeled without a hue column and one where a hue
-      column is provided. In the latter case, the top features are labeled based on a filtered and sorted subset of the data.
-    - Out-of-range values for '-log10(padj)' and log2 fold change are clipped to specified limits to improve plot clarity.
+    - Vertical dashed lines mark ±log2FoldChange_threshold.
+    - A 'Marker' column distinguishes in-range vs. out-of-range points.
+    - Two plotting modes: (1) hue by significance or (2) hue by custom column.
+    - Out-of-range values are clipped for visualization clarity.
     """
 
+    # -------------------------
+    # Imports
+    # -------------------------
     import seaborn as sns
     import numpy as np
     import pandas as pd
-    import seaborn as sns
-    import pandas as pd
-    import matplotlib.pyplot as plt
     import matplotlib.pyplot as plt
 
-        # Get the tab10 palette
-    tab10_palette = sns.color_palette("tab10")
+    # -------------------------
+    # Define custom color palettes
+    # -------------------------
+    # Paul Tol’s 10-color set + gray
+    tol_colors_w_grey = [
+        "#332288", "#88CCEE", "#44AA99", "#117733",
+        "#999933", "#DDCC77",
+        "#661100", "#CC6677", "#882255", "#AA4499",
+        "#8D8D8D"
+    ]
 
-    # Move gray to the first position
-    #custom_palette = [tab10_palette[7]] + tab10_palette[:7] + tab10_palette[8:]
-    significance_custom_palette = [tab10_palette[7]] + tab10_palette[:3] #+ tab10_palette[8:]
-    hue_platte_custom_palette = [tab10_palette[7]] + tab10_palette[:6] + tab10_palette[8:]
+    # Reorder palettes for significance and hue mapping
+    significance_custom_palette = [tol_colors_w_grey[10]] + [tol_colors_w_grey[7]] + [tol_colors_w_grey[0]] + [tol_colors_w_grey[3]]
+    hue_palette_custom_palette = [
+        tol_colors_w_grey[0], tol_colors_w_grey[3], tol_colors_w_grey[4],
+        tol_colors_w_grey[6], tol_colors_w_grey[1], tol_colors_w_grey[8],
+        tol_colors_w_grey[7], tol_colors_w_grey[2], tol_colors_w_grey[5],
+        tol_colors_w_grey[9]
+    ]
 
+    # -------------------------
+    # Input data checks and setup
+    # -------------------------
     df = _df.copy()
-
     print(df.shape)
 
-    # if hue_column is None set to 'Significance'
+    # If no custom hue column is given, default to "Significance"
     if hue_column is None:
-        hue_value='Significance'
+        hue_value = 'Significance'
     else:
-        hue_value=hue_column
+        hue_value = hue_column
 
-    required_columns = {l2fc_col, padj_col, }
+    # Ensure required columns exist
+    required_columns = {l2fc_col, padj_col}
     if not required_columns.issubset(df.columns):
         raise ValueError(f"DataFrame is missing one of the required columns: {required_columns}")
 
-    ###### Prepare df by adding coluomns for '-log10(padj)' and signifigcance level and adjusting out of range values
-    # Replace NaN values with a specified value, for example, 1
+    # -------------------------
+    # Preprocessing: p-value transformations and significance flags
+    # -------------------------
+    # Fill missing padj values with 1 (max nonsignificance)
     df[padj_col] = df[padj_col].fillna(1)
-    # Prepare data by adjusting p-values to avoid log(0) issues
+
+    # Add -log10(padj) column for y-axis
     df['-log10(padj)'] = -np.log10(df[padj_col].replace(0, np.nextafter(0, 1)))
-    # Assuming df[padj_col] contains the adjusted p-values
-    # Add column for alpha=0.2 significance level
-    df['alpha=0.2'] = ((df[padj_col] < 0.2) & (abs(df[l2fc_col])>=log2FoldChange_threshold))
-    # Add column for alpha=0.1 significance level
-    df['alpha=0.1'] = ((df[padj_col] < 0.1) & (abs(df[l2fc_col])>=log2FoldChange_threshold))
-    # Add column for alpha=0.05 significance level
-    df['alpha=0.05'] = ((df[padj_col] < 0.05) & (abs(df[l2fc_col])>=log2FoldChange_threshold))
 
-    # add column for signifigcance hue
-    # first combine the alpha columns into one column labeled Signifigcance
-    #df['Significance'] = 'alpha>0.2'
-    df['Significance'] = 'Not Significant'
-    df.loc[df['alpha=0.2'],'Significance'] = 'alpha=0.2'
-    df.loc[df['alpha=0.1'],'Significance'] = 'alpha=0.1'
-    df.loc[df['alpha=0.05'],'Significance'] = 'alpha=0.05'
-    df['Significance'] = df['Significance'].astype('category')
+    # Add boolean columns for multiple alpha thresholds (0.2, 0.1, 0.05)
+    df['alpha=0.2'] = ((df[padj_col] < 0.2) & (abs(df[l2fc_col]) >= log2FoldChange_threshold))
+    df['alpha=0.1'] = ((df[padj_col] < 0.1) & (abs(df[l2fc_col]) >= log2FoldChange_threshold))
+    df['alpha=0.05'] = ((df[padj_col] < 0.05) & (abs(df[l2fc_col]) >= log2FoldChange_threshold))
 
+    # -------------------------
+    # Combine significance levels into a single categorical column
+    # -------------------------
+    df['Significance'] = pd.Categorical(
+        ['Not Significant' for _ in range(df.shape[0])],
+        categories=['Not Significant', 'alpha=0.2', 'alpha=0.1', 'alpha=0.05'],
+        ordered=True
+    )
+    df.loc[df['alpha=0.2'], 'Significance'] = 'alpha=0.2'
+    df.loc[df['alpha=0.1'], 'Significance'] = 'alpha=0.1'
+    df.loc[df['alpha=0.05'], 'Significance'] = 'alpha=0.05'
 
+    # Convert pvalue_threshold to -log10 scale if provided
+    if pvalue_threshold is not None:
+        nlog10_pvalue_threshold = -np.log10(pvalue_threshold)
 
-    ######  adjusting out of range values and changing dot type if out of range
-
-
-    ##### #####  set limits 
-    # set ylimit if none to  to 99 percentile of ['-log10(padj)']
+    # -------------------------
+    # Axis limit calculations
+    # -------------------------
+    # Y-axis limit: 99th percentile of -log10(padj) among significant hits
     if not ylimit:
-        ylimit = df[(df[padj_col]<0.05)&(df[l2fc_col].abs()>log2FoldChange_threshold)]['-log10(padj)'].quantile(0.99)
+        ylimit = df[(df[padj_col] < 0.05) & (df[l2fc_col].abs() > log2FoldChange_threshold)]['-log10(padj)'].quantile(0.99)
         if np.isnan(ylimit):
-            ylimit=df['-log10(padj)'].quantile(0.99)
-    # set xlimit if none to 99 percentile of abs(x)
+            ylimit = df['-log10(padj)'].quantile(0.99)
+
+    # X-axis limit: 99th percentile of absolute log2FC among significant hits
     if not xlimit:
-        xlimit = df[(df[padj_col]<0.05)&(df[l2fc_col].abs()>log2FoldChange_threshold)][l2fc_col].abs().quantile(0.99)
-    # if xlimit is nan set to quantile(0.99)
+        xlimit = df[(df[padj_col] < 0.05) & (df[l2fc_col].abs() > log2FoldChange_threshold)][l2fc_col].abs().quantile(0.99)
         if np.isnan(xlimit):
-            xlimit=df[l2fc_col].abs().quantile(0.99)
+            xlimit = df[l2fc_col].abs().quantile(0.99)
 
+    # -------------------------
+    # Marker column: distinguish in-range vs out-of-range points
+    # -------------------------
+    df['Marker'] = pd.Categorical(['In_Range' for _ in range(df.shape[0])],
+                                  categories=['In_Range', 'Out_of_Range'], ordered=True)
+    df.loc[df['-log10(padj)'] >= ylimit, 'Marker'] = 'Out_of_Range'
+    df.loc[abs(df[l2fc_col]) >= xlimit, 'Marker'] = 'Out_of_Range'
 
-    # add 'Marker' column for out of range data points with '-log10(padj)' > ylimit or abs(l2fc_col) > xlimit value of 'In_Range' or 'Out_of_Range'
-    df['Marker'] = 'In_Range'
-    df.loc[df['-log10(padj)']>=ylimit,'Marker'] = 'Out_of_Range'
-    #  abs(l2fc_col) 
-    df.loc[abs(df[l2fc_col])>=xlimit,'Marker'] = 'Out_of_Range'
-
-    # order the categories
-    # Ensure the required categories are present
-    df['Marker'] = df['Marker'].astype('category')
-    required_range_cats = {'In_Range', 'Out_of_Range'}
-    if not required_range_cats.issubset(df['Marker'].cat.categories):
-        df['Marker'] = df['Marker'].cat.set_categories(['In_Range', 'Out_of_Range'])
-
-
-    # replace values in the -log10(padj) column that above the ylimit with the ylimit
+    # Clip values at limits to improve readability
     if ylimit:
-        df['-log10(padj)'] = df['-log10(padj)'].apply(lambda x: (ylimit*0.99) if x>=ylimit else x)
+        df['-log10(padj)'] = df['-log10(padj)'].apply(lambda x: (ylimit * 0.99) if x >= ylimit else x)
     else:
         ylimit = df['-log10(padj)'].max()
-    # replace values in the log2FoldChange column that above or below the xlimit with the xlimit
+
     if xlimit:
-        df[l2fc_col] = df[l2fc_col].apply(lambda x: (xlimit*0.99) if x>=xlimit else x)
-        df[l2fc_col] = df[l2fc_col].apply(lambda x: (-xlimit*0.99)  if x<=-xlimit else x)
+        df[l2fc_col] = df[l2fc_col].apply(lambda x: (xlimit * 0.99) if x >= xlimit else x)
+        df[l2fc_col] = df[l2fc_col].apply(lambda x: (-xlimit * 0.99) if x <= -xlimit else x)
     else:
         xlimit = max(abs(df[l2fc_col].min()), df[l2fc_col].max())
 
-    ### set the marker size relative to number of dots
-    rel_size=df.shape[0]/dot_size_shrink_factor
+    # -------------------------
+    # Marker size scaling based on dataset size
+    # -------------------------
+    rel_size = df.shape[0] / dot_size_shrink_factor
 
-
-    if label_top_features and hue_column is None:
+    # -------------------------
+    # Plotting logic: two modes (with vs. without hue_column)
+    # -------------------------
+    if hue_column is None:
+        # Case 1: hue = Significance
         fig, ax = plt.subplots(figsize=figsize)
-        p = sns.scatterplot(data=df, x=l2fc_col, y='-log10(padj)', hue=hue_value, style='Marker', 
-                            palette=significance_custom_palette,sizes=rel_size,  s=rel_size, 
-                            ax=ax)
+        p = sns.scatterplot(data=df, x=l2fc_col, y='-log10(padj)', hue=hue_value,
+                            style='Marker', palette=significance_custom_palette,
+                            sizes=rel_size, s=rel_size, ax=ax)
         p.set(xlim=(-xlimit, xlimit), ylim=(0, ylimit))
         p.set_title(f'{title_text}\n{comparison_label}\n\n')
-        p.axvline(x=log2FoldChange_threshold, color='gray', linestyle='--',label=f'log2fc>|{log2FoldChange_threshold}| ')
+
+        # Add significance threshold lines
+        if pvalue_threshold is not None:
+            p.axhline(y=nlog10_pvalue_threshold, color='red', linestyle='--', label=f'pvalue<{pvalue_threshold} ')
+        p.axvline(x=log2FoldChange_threshold, color='gray', linestyle='--', label=f'log2fc>|{log2FoldChange_threshold}| ')
         p.axvline(x=-log2FoldChange_threshold, color='gray', linestyle='--')
+
+        # Axis labels + legend
         p.set_xlabel(set_xlabel)
         p.set_ylabel(set_ylabel)
-        p.legend( 
-            bbox_to_anchor=legend_bbox_to_anchor, 
-            loc=1, 
-            borderaxespad=0.05)
-        #label top genes by padj
-        for line in range(0,n_top_features):
-            p.text(df.sort_values(by=padj_col)[l2fc_col].to_list()[line],df.sort_values(by=padj_col)['-log10(padj)'].to_list()[line],
+        p.legend(bbox_to_anchor=legend_bbox_to_anchor, loc=1, borderaxespad=0.05)
+
+    elif hue_column is not None:
+        # Case 2: custom hue column
+        fig, ax = plt.subplots(figsize=figsize)
+
+        # First plot: all dots in gray (background layer)
+        p = sns.scatterplot(data=df, x=l2fc_col, y='-log10(padj)', style='Marker',
+                            color='gray', s=rel_size/2, alpha=0.5, ax=ax)
+        p.set(xlim=(-xlimit, xlimit), ylim=(0, ylimit))
+        p.legend_.remove()  # Remove legend from background layer
+
+        # Second plot: overlay hue-colored points
+        p = sns.scatterplot(data=df, x=l2fc_col, y='-log10(padj)', hue=hue_value, style='Marker',
+                            palette=hue_palette_custom_palette[:], s=rel_size, ax=ax)
+        p.set(xlim=(-xlimit, xlimit), ylim=(0, ylimit))
+        p.set_title(f'{title_text}\n{comparison_label}\n\n')
+
+        # Add threshold lines
+        if pvalue_threshold is not None:
+            p.axhline(y=nlog10_pvalue_threshold, color='red', linestyle='--', label=f'pvalue<{pvalue_threshold} ')
+        p.axvline(x=log2FoldChange_threshold, color='gray', linestyle='--', label=f'log2fc>|{log2FoldChange_threshold}|')
+        p.axvline(x=-log2FoldChange_threshold, color='gray', linestyle='--')
+
+        # Axis labels + legend cleanup
+        p.set_xlabel(set_xlabel)
+        p.set_ylabel(set_ylabel)
+        handles = p.get_legend_handles_labels()[0][2:]  # Skip legends from gray layer
+        labels = p.get_legend_handles_labels()[1][2:]
+        p.legend(handles, labels, bbox_to_anchor=legend_bbox_to_anchor, loc=1, borderaxespad=0.05)
+
+    # -------------------------
+    # Optional: label top features
+    # -------------------------
+    if label_top_features:
+        if ((hue_column is not None) and (only_label_hue_dots == True)):
+            # Restrict labeling to rows with non-null hue values
+            df = df[df[hue_column].notna()].sort_values(by=padj_col)
+
+        # Label top genes by padj
+        for line in range(0, n_top_features):
+            p.text(df.sort_values(by=padj_col)[l2fc_col].to_list()[line],
+                   df.sort_values(by=padj_col)['-log10(padj)'].to_list()[line],
                    df.sort_values(by=padj_col)[feature_label_col].to_list()[line],
-                      horizontalalignment='left', size='small', color='black')
-        #label top genes by neg l2fc
-        for line in range(0,int(n_top_features/2)):
-            p.text(df.sort_values(by=l2fc_col)[l2fc_col].to_list()[line],df.sort_values(by=l2fc_col)['-log10(padj)'].to_list()[line],
+                   horizontalalignment='left', size='small', color='black')
+
+        # Label top genes by most negative log2FC
+        for line in range(0, int(n_top_features/2)):
+            p.text(df.sort_values(by=l2fc_col)[l2fc_col].to_list()[line],
+                   df.sort_values(by=l2fc_col)['-log10(padj)'].to_list()[line],
                    df.sort_values(by=l2fc_col)[feature_label_col].to_list()[line],
-                      horizontalalignment='left', size='small', color='black')
-        #label top genes by pos l2fc
-        for line in range(0,int(n_top_features/2)):
-            p.text(df.sort_values(by=l2fc_col,ascending=False)[l2fc_col].to_list()[line],df.sort_values(by=l2fc_col,ascending=False)['-log10(padj)'].to_list()[line],
-                   df.sort_values(by=l2fc_col,ascending=False)[feature_label_col].to_list()[line],
-                      horizontalalignment='left', size='small', color='black')
-    
-    elif label_top_features and hue_column is not None:
-        fig, ax = plt.subplots(figsize=figsize)
-        # plot once without hue to plot all the dots
-        p = sns.scatterplot(data=df, x=l2fc_col, y='-log10(padj)', #hue=hue_value,
-                             style='Marker', color='gray',s=rel_size/2, alpha=0.5,ax=ax)
-        p.set(xlim=(-xlimit, xlimit), ylim=(0, ylimit))
-        p.set_title(f'{title_text}\n{comparison_label}\n\n')
-        p.axvline(x=log2FoldChange_threshold, color='gray', linestyle='--',label=f'log2fc>|{log2FoldChange_threshold}| ')
-        p.axvline(x=-log2FoldChange_threshold, color='gray', linestyle='--')
-        p.set_xlabel(set_xlabel)
-        p.set_ylabel(set_ylabel)
-        p.legend( #title=facet_col,
-            bbox_to_anchor=legend_bbox_to_anchor, 
-            loc=1, 
-            borderaxespad=0.05)
-        # plot once without hue to plot the dots with values in the hue column
-        p = sns.scatterplot(data=df, x=l2fc_col, y='-log10(padj)', hue=hue_value, style='Marker', 
-                            palette=hue_platte_custom_palette[1:],sizes=(rel_size),  s=rel_size,  ax=ax)
-        p.set(xlim=(-xlimit, xlimit), ylim=(0, ylimit))
-        p.set_title(f'{title_text}\n{comparison_label}\n\n')
-        p.axvline(x=log2FoldChange_threshold, color='gray', linestyle='--',label=f'log2fc>|{log2FoldChange_threshold}| ')
-        p.axvline(x=-log2FoldChange_threshold, color='gray', linestyle='--')
-        p.set_xlabel(set_xlabel)
-        p.set_ylabel(set_ylabel)
-        p.legend( #title=facet_col,
-            bbox_to_anchor=legend_bbox_to_anchor, 
-            loc=1, 
-            borderaxespad=0.05)
-        if hue_column is not None:
-            # Filter the DataFrame to only rows where the hue_column is not missing
-            filtered_df = df[df[hue_column].notna()].sort_values(by=padj_col)
-            top_features = filtered_df.head(n_top_features)
+                   horizontalalignment='left', size='small', color='black')
 
-        ## only label top features if hue_column is not None
-        #label top genes by padj
-        n_top_features=min(n_top_features,filtered_df.shape[0])
-        for line in range(0,n_top_features):
-            p.text(filtered_df.sort_values(by=padj_col)[l2fc_col].to_list()[line],filtered_df.sort_values(by=padj_col)['-log10(padj)'].to_list()[line],
-                   filtered_df.sort_values(by=padj_col)[feature_label_col].to_list()[line],
-                      horizontalalignment='left', size='small', color='black')
-        #label top genes by neg l2fc
-        for line in range(0,int(n_top_features/2)):
-            p.text(filtered_df.sort_values(by=l2fc_col)[l2fc_col].to_list()[line],filtered_df.sort_values(by=l2fc_col)['-log10(padj)'].to_list()[line],
-                   filtered_df.sort_values(by=l2fc_col)[feature_label_col].to_list()[line],
-                      horizontalalignment='left', size='small', color='black')
-        #label top genes by pos l2fc
-        for line in range(0,int(n_top_features/2)):
-            p.text(filtered_df.sort_values(by=l2fc_col,ascending=False)[l2fc_col].to_list()[line],filtered_df.sort_values(by=l2fc_col,ascending=False)['-log10(padj)'].to_list()[line],
-                   filtered_df.sort_values(by=l2fc_col,ascending=False)[feature_label_col].to_list()[line],
-                      horizontalalignment='left', size='small', color='black')
+        # Label top genes by most positive log2FC
+        for line in range(0, int(n_top_features/2)):
+            p.text(df.sort_values(by=l2fc_col, ascending=False)[l2fc_col].to_list()[line],
+                   df.sort_values(by=l2fc_col, ascending=False)['-log10(padj)'].to_list()[line],
+                   df.sort_values(by=l2fc_col, ascending=False)[feature_label_col].to_list()[line],
+                   horizontalalignment='left', size='small', color='black')
 
-    else:
-        fig, ax = plt.subplots(figsize=figsize)
-        p = sns.scatterplot(data=df, x=l2fc_col, y='-log10(padj)',hue=hue_value, style='Marker', 
-                             palette=significance_custom_palette, s=rel_size,  
-                            ax=ax)
-        p.set(xlim=(-xlimit, xlimit), ylim=(0, ylimit))
-        p.set_title(f'{title_text}\n{comparison_label}\n\n')
-        p.axvline(x=log2FoldChange_threshold, color='gray', linestyle='--',label=f'log2fc>|{log2FoldChange_threshold}| ')
-        p.axvline(x=-log2FoldChange_threshold, color='gray', linestyle='--',)
-        p.set_xlabel(set_xlabel)
-        p.set_ylabel(set_ylabel)
-        p.legend( )
-        # move legend
-        plt.legend(bbox_to_anchor=legend_bbox_to_anchor, 
-            loc=1, 
-            borderaxespad=0.05)
-    # Save the figure if requested
+    # -------------------------
+    # Save figure if requested
+    # -------------------------
     if savefig:
-        plt.savefig(file_name, dpi=600, bbox_inches="tight" )
+        plt.savefig(file_name, dpi=600, bbox_inches="tight")
         print(f"Saved plot to {file_name}")
-    return p
 
+    return p
 
 import numpy as np
 import pandas as pd
@@ -1014,8 +1022,10 @@ def plot_column_of_bar_h_2groups_with_l2fc_dotplot_GEX_adata(
         barh_figure_plot_title: str | None = f'Expression (TPM)',
         barh_subplot_xlabel: str | None = 'Expression (TPM)',
         barh_sharex: bool = False,
+        barh_set_xaxis_lims: tuple[int, int]| None = None,
         barh_legend: bool = True,
         barh_legend_bbox_to_anchor: tuple[int, int] | None = (0.5, -.05),
+
         # dotplot specific parameters
         dotplot_figure_plot_title: str | None = 'log2fc',
         dotplot_pval_vars_col_label: str | None = 'pvalue',
@@ -1026,6 +1036,7 @@ def plot_column_of_bar_h_2groups_with_l2fc_dotplot_GEX_adata(
         pvalue_cutoff_ring: float = 0.1,
         sizes: tuple[int, int] | None = (20, 2000),
         dotplot_sharex: bool = False,
+        dotplot_set_xaxis_lims: tuple[int, int]| None = None,
         dotplot_legend: bool = True,
         dotplot_legend_bins: int | None = 4,
         dotplot_legend_bbox_to_anchor: tuple[int, int] | None = (0.5, -.05),
@@ -1158,6 +1169,9 @@ def plot_column_of_bar_h_2groups_with_l2fc_dotplot_GEX_adata(
             color='black',
             legend=False
         )
+        # set x-axis limits
+        if barh_set_xaxis_lims is not None:
+            ax0.set_xlim(barh_set_xaxis_lims)
         # set x-axis tic fontsize
         ax0.tick_params(axis='x', labelsize=tick_label_fontsize)
         ax0.xaxis.set_major_formatter(StrMethodFormatter('{x:g}'))
@@ -1201,8 +1215,11 @@ def plot_column_of_bar_h_2groups_with_l2fc_dotplot_GEX_adata(
             ax=ax1,
         )
         # set x-axis limits
-        l2fc_xaxis_pad=1.05
-        ax1.set_xlim((-l2fc_x_limit*l2fc_xaxis_pad), (l2fc_x_limit* l2fc_xaxis_pad))  # add a bit of padding
+        if dotplot_set_xaxis_lims is not None:
+            ax1.set_xlim(dotplot_set_xaxis_lims)
+        else:
+            l2fc_xaxis_pad=1.05
+            ax1.set_xlim((-l2fc_x_limit*l2fc_xaxis_pad), (l2fc_x_limit* l2fc_xaxis_pad))  # add a bit of padding
         # set x-axis tic fontsize
         ax1.tick_params(axis='x', labelsize=tick_label_fontsize)
         ax1.xaxis.set_major_formatter(StrMethodFormatter('{x:g}'))
