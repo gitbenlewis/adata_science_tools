@@ -910,6 +910,8 @@ def plot_column_of_bar_h_2groups_GEX_adata(
             data=df_obs_x,
             order=categories,
             ax=ax,
+            hue=comparison_col, # Passing `palette` without assigning `hue` is deprecated and will be removed in v0.14.0. Assign the `y` variable to `hue` and set `legend=False` for the same effect
+            legend=False,
             palette=[color_map[c] for c in categories]
         )
 
@@ -1000,7 +1002,8 @@ def plot_column_of_bar_h_2groups_with_l2fc_dotplot_GEX_adata(
         x_df: pd.DataFrame | None = None,       
         var_df: pd.DataFrame | None = None,
         obs_df: pd.DataFrame | None = None,
-        feature_list: list[str] | None = None,
+        feature_list: list[str] | None = None, # index of adata
+        feature_label_vars_col: str | None = None, # if None than adata index used to label
         feature_label_x: float = -0.02,
         figsize: tuple[int, int]| None = (10, 15),
         fig_title: str | None = None,
@@ -1043,7 +1046,7 @@ def plot_column_of_bar_h_2groups_with_l2fc_dotplot_GEX_adata(
         # 
         ):
     
-    from .. import anndata_io as adio
+    #from .. import anndata_io as adio not needed wrote new io code here
 
     ############ prep input tables / parse adata ############
     if feature_list is None:
@@ -1115,6 +1118,7 @@ def plot_column_of_bar_h_2groups_with_l2fc_dotplot_GEX_adata(
     # #) make a new column for the dotplot y-axis, which is the gene name
     _var_df['dotplot_feature_name'] = _var_df.index  # use the index
 
+
     ############ ############ ############ ############
     # #) set up the figure and subfigures
     gene_list_len = len(feature_list)
@@ -1156,6 +1160,8 @@ def plot_column_of_bar_h_2groups_with_l2fc_dotplot_GEX_adata(
             data=df_obs_x,
             order=categories,
             ax=ax0,
+            hue=comparison_col, # Passing `palette` without assigning `hue` is deprecated and will be removed in v0.14.0. Assign the `y` variable to `hue` and set `legend=False` for the same effect
+            legend=False,
             palette=[color_map[c] for c in categories]
         )
         if barh_remove_yticklabels:
