@@ -815,6 +815,8 @@ def plot_column_of_bar_h_2groups_GEX_adata(
         var_df: pd.DataFrame | None = None,
         obs_df: pd.DataFrame | None = None,
         feature_list=None,
+        feature_label_vars_col: str | None ='SeqIdEntrezGeneSymbol',
+        feature_label_char_limit: int | None= 25,
         feature_label_x: float = -0.02,
         figsize: tuple[int, int] = (10, 30),
         fig_title: str | None = None,
@@ -874,6 +876,21 @@ def plot_column_of_bar_h_2groups_GEX_adata(
     df_obs_x = pd.DataFrame(_x_df, columns=_var_df.index, index=_obs_df.index)
     df_obs_x = pd.concat([_obs_df, df_obs_x], axis=1)
 
+    # Build feature labels for subplot y-labels
+    if (feature_label_vars_col is not None) and (feature_label_vars_col in _var_df.columns):
+        _bar_feature_label_series = _var_df[feature_label_vars_col]
+        _bar_feature_label_series = _bar_feature_label_series.where(
+            _bar_feature_label_series.notna(), _var_df.index.to_series()
+        ).astype(str)
+    else:
+        if feature_label_vars_col is not None and feature_label_vars_col not in _var_df.columns:
+            print(f"Warning: feature_label_vars_col '{feature_label_vars_col}' not found in var_df; using index for labels.")
+        _bar_feature_label_series = _var_df.index.to_series().astype(str)
+
+    if (feature_label_char_limit is not None) and (feature_label_char_limit > 0):
+        _bar_feature_label_series = _bar_feature_label_series.str.slice(0, int(feature_label_char_limit))
+    _bar_feature_label_map = _bar_feature_label_series.to_dict()
+
 
     # Determine category order
     if comparison_order is None:
@@ -932,8 +949,9 @@ def plot_column_of_bar_h_2groups_GEX_adata(
         ax.xaxis.set_major_formatter(StrMethodFormatter('{x:g}'))
         # remove xlabel for all but the last subplot
         ax.set_xlabel('')
-        # set ylabel for each subplot
-        ax.set_ylabel(gene, rotation=0, fontsize=feature_label_fontsize, ha='right', va='center')
+        # set ylabel for each subplot using mapped feature label
+        _bar_feat_label = _bar_feature_label_map.get(gene, str(gene))
+        ax.set_ylabel(_bar_feat_label, rotation=0, fontsize=feature_label_fontsize, ha='right', va='center')
         ax.yaxis.set_label_coords(feature_label_x, 0.5)
     # outside of the loop, set the xlabel for the last subplot
     ax.set_xlabel(subplot_xlabel, fontsize=legend_fontsize)
@@ -1004,6 +1022,7 @@ def plot_column_of_bar_h_2groups_with_l2fc_dotplot_GEX_adata(
         obs_df: pd.DataFrame | None = None,
         feature_list: list[str] | None = None, # index of adata
         feature_label_vars_col: str | None = None, # if None than adata index used to label
+        feature_label_char_limit: int | None = 40,
         feature_label_x: float = -0.02,
         figsize: tuple[int, int]| None = (10, 15),
         fig_title: str | None = None,
@@ -1115,8 +1134,27 @@ def plot_column_of_bar_h_2groups_with_l2fc_dotplot_GEX_adata(
     # Also store a column for the ring overlay cutoff, truncated to 2 decimals
     ring_col = 'ring_cutoff'
     _var_df[ring_col] = (-np.log10(pvalue_cutoff_ring)).round(2)
-    # #) make a new column for the dotplot y-axis, which is the gene name
-    _var_df['dotplot_feature_name'] = _var_df.index  # use the index
+    # #) Build feature labels for dotplot and bar labels
+    # If feature_label_vars_col provided and present, use it; otherwise fallback to index
+    if (feature_label_vars_col is not None) and (feature_label_vars_col in _var_df.columns):
+        _feature_label_series = _var_df[feature_label_vars_col]
+        # Fill NaNs in provided label column with the index values
+        _feature_label_series = _feature_label_series.where(
+            _feature_label_series.notna(), _var_df.index.to_series()
+        ).astype(str)
+    else:
+        if feature_label_vars_col is not None and feature_label_vars_col not in _var_df.columns:
+            print(f"Warning: feature_label_vars_col '{feature_label_vars_col}' not found in var_df; using index for labels.")
+        _feature_label_series = _var_df.index.to_series().astype(str)
+
+    # Optionally truncate labels to a maximum character length
+    if (feature_label_char_limit is not None) and (feature_label_char_limit > 0):
+        _feature_label_series = _feature_label_series.str.slice(0, int(feature_label_char_limit))
+
+    # Set the dotplot y-axis label column
+    _var_df['dotplot_feature_name'] = _feature_label_series
+    # Map for bar subplot y-axis labels
+    _feature_label_map = _feature_label_series.astype(str).to_dict()
 
 
     ############ ############ ############ ############
@@ -1183,8 +1221,9 @@ def plot_column_of_bar_h_2groups_with_l2fc_dotplot_GEX_adata(
         ax0.xaxis.set_major_formatter(StrMethodFormatter('{x:g}'))
         # remove xlabel for all but the last subplot
         ax0.set_xlabel('')
-        # set ylabel for each subplot
-        ax0.set_ylabel(gene, rotation=0, fontsize=feature_label_fontsize, ha='right', va='center')
+        # set ylabel for each subplot using mapped feature label
+        _feat_label = _feature_label_map.get(gene, str(gene))
+        ax0.set_ylabel(_feat_label, rotation=0, fontsize=feature_label_fontsize, ha='right', va='center')
         ax0.yaxis.set_label_coords(feature_label_x, 0.5)
 
         ############ dot plots ############
