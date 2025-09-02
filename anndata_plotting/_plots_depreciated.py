@@ -363,7 +363,7 @@ try:
 except Exception:
     ad = None
 
-def qqplot(
+def qqplot_pvalues(
     data,
     pvalue_column: str | None = None,
     *,
@@ -511,7 +511,7 @@ def qqplot(
 
 ####### START ############. datapoint plots ###################.###################.###################.###################.
 
-def timeseries_paired_datapoints(
+def plot_paired_point_anndata(
     adata,
     feature_name,
     x_col='TimePoint',
@@ -808,7 +808,7 @@ import anndata
 import numpy as np
 from matplotlib.ticker import StrMethodFormatter
 
-def barh_column(
+def plot_column_of_bar_h_2groups_GEX_adata(
         adata: anndata.AnnData | None = None,
         layer: str | None = 'salmon_effective_TPM',
         x_df: pd.DataFrame | None = None,       
@@ -1015,7 +1015,7 @@ from matplotlib.ticker import FormatStrFormatter
 from matplotlib.ticker import StrMethodFormatter
 
 import anndata 
-def barh_l2fc_dotplot_column(
+def plot_column_of_bar_h_2groups_with_l2fc_dotplot_GEX_adata(
         # shared parameters
         adata: anndata.AnnData | None = None,
         layer: str | None = 'salmon_effective_TPM',
@@ -1438,4 +1438,427 @@ def barh_l2fc_dotplot_column(
 
 ####### START ############. l2fc_pvalue plots ###################.###################.###################.###################.
 
-## Todo make a generic dotplot plot funciton called l2fc_dotplot_column() that plots l2fc and pvalue color/sized dots in the same style of the barh_l2fc_dotplot_column() funciton but without the barh plots on the left
+def l2fc_pvalue_dotplot_protein_metabolite(
+    diff_tests,
+    feature_idx_list,
+    index_column='EntrezGeneSymbol',
+    analyte_label_column='TargetFullName',
+    analyte_label='Protein',
+    comparison_column='Timepoint',
+    comparison='Target_vs_Reference',
+    pval_col='ttest_rel_pvals_corrected_Target_vs_Reference',
+    l2fc_col='ttest_rel_mean_paired_l2fcfc_Target_vs_Reference',
+    pval_label='p-value',
+    x_axis_label='log2fc ((target)/(ref))',
+    sort_x_axis=False,
+    pvalue_cutoff=0.2,
+    sizes=(20, 2000),
+    figsize=(6,10),
+    bbox_to_anchor=(0.5, -0.25),
+    plot_title='Target_vs_Reference l2fc ((target)/(ref))',
+    savefig=False,
+    file_name='test_plot.png'
+):
+    """
+    Create a ring-overlay dot plot of selected metabolites from 'diff_tests'.
+
+    Parameters
+    ----------
+    diff_tests : pd.DataFrame
+        DataFrame containing the differential test results. Must have columns:
+        [index_column, analyte_label_column, analyte_label, pval_col, l2fc_col]
+    feature_idx_list : list
+        List of feature_idx_list values to include in the plot.
+    index_column : str
+        Column name for features (default 'var_names').
+    analyte_label_column: str
+    analyte_label : str
+        Column name to use for labeling the y-axis (default 'Metabolite').
+    comparison_column : str
+        Value in 'comparison_column' to select for plotting (default 'Target_vs_Reference').
+    pval_col : str
+        Column containing the p-values (default 'ttest_rel_pvals_corrected_Target_vs_Reference').
+    l2fc_col : str
+        Column containing the log2 fold change (default 'ttest_rel_mean_paired_l2fcfc_Target_vs_Reference').
+    pval_label : str
+        Label to use in the plot for p-value axis (default 'p-value').
+    x_axis_label : str
+        X-axis label (default 'log2fc ((target)/(ref))').
+    sort_x_axis : bool
+        Whether to sort the x-axis by the x_axis_label (default False).
+    pvalue_cutoff : float
+        Numeric cutoff for ring overlay (default 0.2).
+    bbox_to_anchor: legend postion default bbox_to_anchor=(0.5, -0.25),,
+    figsize : tuple
+        Figure size (default (6,10)).
+    plot_title : str
+        Title string (default 'Target_vs_Reference l2fc ((target)/(ref))').
+    savefig : bool
+        Whether to save the figure (default False).
+    file_name : str
+        File name for saving (default 'test_plot.png').
+
+    Returns
+    -------
+    None (displays plot or saves figure).
+    """
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    import numpy as np
+    import pandas as pd
+
+    # Default columns to keep if not provided
+    columns2keep = [comparison_column, index_column, analyte_label_column, analyte_label, pval_col, l2fc_col]
+    columns2keep_labels = [comparison_column, index_column, analyte_label_column, analyte_label, pval_label, x_axis_label]
+    if comparison_column is None:
+        columns2keep = [index_column, analyte_label_column, analyte_label, pval_col, l2fc_col]
+        columns2keep_labels = [index_column, analyte_label_column, analyte_label, pval_label, x_axis_label]
+
+    # 1) Copy and prepare DataFrame
+    df = diff_tests.copy()
+    df[index_column] = df[index_column].astype(str)
+    # Make truncated metabolite name (40 chars)
+    df[analyte_label] = df[analyte_label_column].astype(str).str[:40]
+
+    # 2) Filter by comparison_column if not None
+    if comparison_column:
+        df = df[df[comparison_column] == comparison].copy()
+
+    # 3) Select columns & rename
+    df = df[columns2keep].copy()
+    df.columns = columns2keep_labels
+
+    # 4) Compute -log10 p-value
+    log10pval_label = f'-log10{pval_label}'
+    df[log10pval_label] = -np.log10(df[pval_label])
+
+    #size_min =0.01 #df[log10pval_label].min()
+    size_min= -np.log10(.9)
+    size_max = df[log10pval_label].max()
+
+    # Also store a column for the ring overlay cutoff, truncated to 2 decimals
+    ring_col = 'ring_cutoff'
+    df[ring_col] = (-np.log10(pvalue_cutoff)).round(2)
+
+    # 5) Filter for desired feature_idx_list list
+    df = df[df[index_column].isin(feature_idx_list)].copy()
+    # re order by index_list
+    df[index_column] = pd.Categorical(df[index_column], categories=feature_idx_list, ordered=True)
+    df = df.sort_values(index_column)
+
+    # 6) Sort by x_axis_label
+    if sort_x_axis:
+        df = df.sort_values(by=x_axis_label, ascending=True)
+
+    # Create the figure
+    plt.figure(figsize=figsize)
+
+    # Define size scale from actual -log10 p-values
+    #size_min =0.01 #df[log10pval_label].min()
+    #size_max = df[log10pval_label].max()
+    
+    #df.loc['test'] = [Timepoint_comparison,'test','test','test',pvalue_cutoff,0.1, -np.log10(pvalue_cutoff).round(2),-np.log10(pvalue_cutoff).round(2)]
+
+    # A) Plot the ring (facecolors="none") using the ring_col
+    ax = sns.scatterplot(
+        data=df,
+        x=x_axis_label,
+        y=analyte_label,
+        size=ring_col,            # ring size is the ring_cutoff column
+        size_norm=(size_min, size_max),
+        sizes=sizes,
+        facecolors="none",
+        edgecolors="red",
+        linewidths=1,
+        zorder=3,
+    )
+
+    # B) Plot the main points, colored & sized by actual -log10 p-value
+    ax = sns.scatterplot(
+        data=df,
+        x=x_axis_label,
+        y=analyte_label,
+        size=log10pval_label,
+        size_norm=(size_min, size_max),
+        sizes=sizes,
+        hue=log10pval_label,
+        palette="viridis_r",
+        edgecolors="black",
+        linewidths=.5,
+        legend="brief",
+        ax=ax,
+    )
+
+    # Vertical line at x=0
+    ax.axvline(x=0, color="red", linestyle="--")
+
+    # Title & labels
+    plt.title(f'{plot_title}\n', fontsize=16)
+    ax.set_xlabel(x_axis_label, fontsize=16)
+    ax.set_ylabel(analyte_label, fontsize=16)
+
+    # Legend adjustments
+    ax.legend(
+        #loc="center left",
+        bbox_to_anchor=bbox_to_anchor,
+        title=f"-log10 {pval_label}",
+        markerscale=0.4,    # shrink markers in legend
+        labelspacing=1.2,
+        borderpad=1.2,
+        # make columns
+        loc='lower center',
+        ncol=10,
+        
+    )
+    #plt.tight_layout()
+
+    if savefig:
+        plt.savefig(file_name, dpi=300, bbox_inches="tight")
+        print(f"Figure saved to {file_name}")
+    else:
+        plt.show()
+
+'''
+### **Example Usage**
+
+
+# Suppose diff_tests is your main DataFrame of results
+diff_tests_res_df = diff_tests.copy()  # or your real data
+
+analyte_list=['CHEM_ID1', 'CHEM_ID2', 'CHEM_ID3', 'CHEM_ID4', 'CHEM_ID5']
+    
+l2fc_pvalue_dotplot_protein_metabolite(
+    diff_tests,
+    feature_idx_list,
+    index_column='EntrezGeneSymbol',
+    analyte_label_column='TargetFullName',
+    analyte_label='Protein',
+    comparison_column='Timepoint',
+    comparison='Target_vs_Reference',
+    pval_col='ttest_rel_pvals_corrected_Target_vs_Reference',
+    l2fc_col='ttest_rel_mean_paired_l2fcfc_Target_vs_Reference',
+    pval_label='p-value',
+    x_axis_label='log2fc ((target)/(ref))',
+    sort_x_axis=False,
+    pvalue_cutoff=0.2,
+    sizes=(20, 2000),
+    figsize=(6,10),
+    bbox_to_anchor=(0.5, -0.25),
+    plot_title='Target_vs_Reference l2fc ((target)/(ref))',
+    savefig=False,
+    file_name='test_plot.png'
+)
+'''
+
+
+
+def l2fc_pvalue_dotplot_gex(
+    diff_tests,
+    feature_idx_list,
+    index_column='var_name',
+    analyte_label_column='analyte_label',
+    analyte_label='Gene_Expression',
+    comparison_column='Timepoint',
+    comparison='Target_vs_Reference',
+    pval_col='ttest_rel_pvals_corrected_Target_vs_Reference',
+    l2fc_col='ttest_rel_mean_paired_l2fcfc_Target_vs_Reference',
+    pval_label='p-value',
+    x_axis_label='log2fc ((target)/(ref))',
+    sort_x_axis=False,
+    pvalue_cutoff=0.2,
+    sizes=(20, 2000),
+    figsize=(6,10),
+    bbox_to_anchor=(0.5, -0.25),
+    plot_title='Target_vs_Reference l2fc ((target)/(ref))',
+    savefig=False,
+    file_name='test_plot.png'
+):
+    """
+    Create a ring-overlay dot plot of selected metabolites from 'diff_tests'.
+
+    Parameters
+    ----------
+    diff_tests : pd.DataFrame
+        DataFrame containing the differential test results. Must have columns:
+        [index_column, analyte_label_column, analyte_label, pval_col, l2fc_col]
+    feature_idx_list : list
+        List of feature_idx_list values to include in the plot.
+    index_column : str
+        Column name for features (default 'var_names').
+    analyte_label_column: str
+    analyte_label : str
+        Column name to use for labeling the y-axis (default 'Metabolite').
+    comparison_column : str
+        Value in 'comparison_column' to select for plotting (default 'Target_vs_Reference').
+    pval_col : str
+        Column containing the p-values (default 'ttest_rel_pvals_corrected_Target_vs_Reference').
+    l2fc_col : str
+        Column containing the log2 fold change (default 'ttest_rel_mean_paired_l2fcfc_Target_vs_Reference').
+    pval_label : str
+        Label to use in the plot for p-value axis (default 'p-value').
+    x_axis_label : str
+        X-axis label (default 'log2fc ((target)/(ref))').
+    sort_x_axis : bool
+        Whether to sort the x-axis by the x_axis_label (default False).
+    pvalue_cutoff : float
+        Numeric cutoff for ring overlay (default 0.2).
+    bbox_to_anchor: legend postion default bbox_to_anchor=(0.5, -0.25),,
+    figsize : tuple
+        Figure size (default (6,10)).
+    plot_title : str
+        Title string (default 'Target_vs_Reference l2fc ((target)/(ref))').
+    savefig : bool
+        Whether to save the figure (default False).
+    file_name : str
+        File name for saving (default 'test_plot.png').
+
+    Returns
+    -------
+    None (displays plot or saves figure).
+    """
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    import numpy as np
+    import pandas as pd
+
+    # Default columns to keep if not provided
+    columns2keep = [comparison_column, index_column, analyte_label_column, analyte_label, pval_col, l2fc_col]
+    columns2keep_labels = [comparison_column, index_column, analyte_label_column, analyte_label, pval_label, x_axis_label]
+    if comparison_column is None:
+        columns2keep = [index_column, analyte_label_column, analyte_label, pval_col, l2fc_col]
+        columns2keep_labels = [index_column, analyte_label_column, analyte_label, pval_label, x_axis_label]
+
+    # 1) Copy and prepare DataFrame
+    df = diff_tests.copy()
+    df[index_column] = df[index_column].astype(str)
+    # Make truncated metabolite name (40 chars)
+    df[analyte_label] = df[analyte_label_column].astype(str).str[:40]
+
+    # 2) Filter by comparison_column if not None
+    if comparison_column:
+        df = df[df[comparison_column] == comparison].copy()
+
+    # 3) Select columns & rename
+    df = df[columns2keep].copy()
+    df.columns = columns2keep_labels
+
+    # 4) Compute -log10 p-value
+    log10pval_label = f'-log10{pval_label}'
+    df[log10pval_label] = -np.log10(df[pval_label])
+
+    #size_min =0.01 #df[log10pval_label].min()
+    size_min= -np.log10(.9)
+    size_max = df[log10pval_label].max()
+
+    # Also store a column for the ring overlay cutoff, truncated to 2 decimals
+    ring_col = 'ring_cutoff'
+    df[ring_col] = (-np.log10(pvalue_cutoff)).round(2)
+
+    # 5) Filter for desired feature_idx_list list
+    df = df[df[index_column].isin(feature_idx_list)].copy()
+    # re order by index_list
+    df[index_column] = pd.Categorical(df[index_column], categories=feature_idx_list, ordered=True)
+    df = df.sort_values(index_column)
+
+    # 6) Sort by x_axis_label
+    if sort_x_axis:
+        df = df.sort_values(by=x_axis_label, ascending=True)
+
+    # Create the figure
+    plt.figure(figsize=figsize)
+
+    # Define size scale from actual -log10 p-values
+    #size_min =0.01 #df[log10pval_label].min()
+    #size_max = df[log10pval_label].max()
+    
+    #df.loc['test'] = [Timepoint_comparison,'test','test','test',pvalue_cutoff,0.1, -np.log10(pvalue_cutoff).round(2),-np.log10(pvalue_cutoff).round(2)]
+
+    # A) Plot the ring (facecolors="none") using the ring_col
+    ax = sns.scatterplot(
+        data=df,
+        x=x_axis_label,
+        y=analyte_label,
+        size=ring_col,            # ring size is the ring_cutoff column
+        size_norm=(size_min, size_max),
+        sizes=sizes,
+        facecolors="none",
+        edgecolors="red",
+        linewidths=1,
+        zorder=3,
+    )
+
+    # B) Plot the main points, colored & sized by actual -log10 p-value
+    ax = sns.scatterplot(
+        data=df,
+        x=x_axis_label,
+        y=analyte_label,
+        size=log10pval_label,
+        size_norm=(size_min, size_max),
+        sizes=sizes,
+        hue=log10pval_label,
+        palette="viridis_r",
+        edgecolors="black",
+        linewidths=.5,
+        legend="brief",
+        ax=ax,
+    )
+
+    # Vertical line at x=0
+    ax.axvline(x=0, color="red", linestyle="--")
+
+    # Title & labels
+    plt.title(f'{plot_title}\n', fontsize=16)
+    ax.set_xlabel(x_axis_label, fontsize=16)
+    ax.set_ylabel(analyte_label, fontsize=16)
+
+    # Legend adjustments
+    ax.legend(
+        #loc="center left",
+        bbox_to_anchor=bbox_to_anchor,
+        title=f"-log10 {pval_label}",
+        markerscale=0.4,    # shrink markers in legend
+        labelspacing=1.2,
+        borderpad=1.2,
+        # make columns
+        loc='lower center',
+        ncol=10,
+        
+    )
+    #plt.tight_layout()
+
+    if savefig:
+        plt.savefig(file_name, dpi=300, bbox_inches="tight")
+        print(f"Figure saved to {file_name}")
+    else:
+        plt.show()
+
+'''
+### **Example Usage**
+
+
+# Suppose diff_tests is your main DataFrame of results
+diff_tests_res_df = diff_tests.copy()  # or your real data
+
+    
+l2fc_pvalue_dotplot_gex(
+    diff_tests,
+    feature_idx_list,
+    index_column='var_name',
+    analyte_label_column='analyte_label',
+    analyte_label='Gene_Expression',
+    comparison_column='Timepoint',
+    comparison='Target_vs_Reference',
+    pval_col='ttest_rel_pvals_corrected_Target_vs_Reference',
+    l2fc_col='ttest_rel_mean_paired_l2fcfc_Target_vs_Reference',
+    pval_label='p-value',
+    x_axis_label='log2fc ((target)/(ref))',
+    sort_x_axis=False,
+    pvalue_cutoff=0.2,
+    sizes=(20, 2000),
+    figsize=(6,10),
+    bbox_to_anchor=(0.5, -0.25),
+    plot_title='Target_vs_Reference l2fc ((target)/(ref))',
+    savefig=False,
+    file_name='test_plot.png'
+)
+'''
