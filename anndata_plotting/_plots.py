@@ -810,7 +810,7 @@ from matplotlib.ticker import StrMethodFormatter
 
 def barh_column(
         adata: anndata.AnnData | None = None,
-        layer: str | None = 'salmon_effective_TPM',
+        layer: str | None =None,
         x_df: pd.DataFrame | None = None,       
         var_df: pd.DataFrame | None = None,
         obs_df: pd.DataFrame | None = None,
@@ -827,12 +827,13 @@ def barh_column(
         legend_fontsize: int | None= 24,
         tight_layout_rect_arg=[0, .05, 1, .99],
         comparison_col: str | None = 'Treatment',
-        remove_yticklabels: bool = True,
+        barh_remove_yticklabels: bool = True,
         comparison_order: list[str] | None = None,
-        subplot_xlabel: str | None = 'Expression (TPM)',
-        sharex: bool = False,
-        legend: bool = True,
-        barh_legend_bbox_to_anchor: tuple[int, int] | None = (0.5, -.05),
+        barh_subplot_xlabel: str | None = 'Expression (TPM)',
+        barh_sharex: bool = False,
+        barh_set_xaxis_lims: tuple[int, int]| None = None,
+        barh_legend: bool = True,
+        barh_legend_bbox_to_anchor: tuple[float, float] | None = (0.5, -.05),
         savefig: bool = False,
         file_name: str = 'test_plot.png'):
     
@@ -842,7 +843,7 @@ def barh_column(
     if adata is not None:
         print(f"AnnData object provideed with shape {adata.shape} and {len(adata.var_names)} features.")
         # if adata is provided, use it to get the data
-        if layer not in adata.layers:
+        if layer is not None and layer not in adata.layers:
             raise ValueError(f"Layer '{layer}' not found in adata.layers.")
         if comparison_col not in adata.obs.columns:
             raise ValueError(f"Column '{comparison_col}' not found in adata.obs.")
@@ -907,7 +908,7 @@ def barh_column(
     gene_list_len = len(feature_list)
     fig, axes = plt.subplots(
         gene_list_len, 1,
-        sharex=sharex, 
+        sharex=barh_sharex, 
         figsize=figsize, 
     )
     if gene_list_len == 1:
@@ -916,7 +917,7 @@ def barh_column(
     if fig_title is not None:
         fig.suptitle(fig_title, fontsize=fig_title_fontsize, y=fig_title_y )
     else:
-        fig.suptitle(f"{subplot_xlabel} grouped by {comparison_col}\n", fontsize=fig_title_fontsize, y=fig_title_y)
+        fig.suptitle(f"{barh_subplot_xlabel} grouped by {comparison_col}\n", fontsize=fig_title_fontsize, y=fig_title_y)
 
     for plot_num, gene in enumerate(feature_list):
         ax = axes[plot_num]
@@ -932,8 +933,9 @@ def barh_column(
             palette=[color_map[c] for c in categories]
         )
 
-        if remove_yticklabels:
+        if barh_remove_yticklabels:
             ax.set_yticklabels([])
+        
 
         # Overlay points (each sample), same order as bars
         sns.stripplot(
@@ -944,6 +946,9 @@ def barh_column(
             color='black',
             legend=False
         )
+                # set x-axis limits
+        if barh_set_xaxis_lims is not None:
+            ax.set_xlim(barh_set_xaxis_lims)
         # set x-axis tic fontsize
         ax.tick_params(axis='x', labelsize=tick_label_fontsize)
         ax.xaxis.set_major_formatter(StrMethodFormatter('{x:g}'))
@@ -953,13 +958,14 @@ def barh_column(
         _bar_feat_label = _bar_feature_label_map.get(gene, str(gene))
         ax.set_ylabel(_bar_feat_label, rotation=0, fontsize=feature_label_fontsize, ha='right', va='center')
         ax.yaxis.set_label_coords(feature_label_x, 0.5)
+        ax.tick_params(axis='y', labelsize=tick_label_fontsize)
 
         
     # outside of the loop, set the xlabel for the last subplot
-    ax.set_xlabel(subplot_xlabel, fontsize=legend_fontsize)
+    ax.set_xlabel(barh_subplot_xlabel, fontsize=legend_fontsize)
 
     # Figure-level legend at bottom with the same bar colors
-    if legend:
+    if barh_legend:
         handles = [Patch(facecolor=color_map[c], edgecolor='none', label=str(c)) for c in categories]
         fig.legend(
             handles=handles,
