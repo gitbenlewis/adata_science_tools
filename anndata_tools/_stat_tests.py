@@ -473,10 +473,10 @@ def diff_test(adata, layer=None, use_raw=False,groupby_key=None, groupby_key_tar
         results[f'WilcoxonSigned_stat{comparison_col_tag}'] = w_stat
         results[f'WilcoxonSigned_pvals{comparison_col_tag}'] = w_test_pvals
         results[f'WilcoxonSigned_pvals_corrected{comparison_col_tag}'] = w_test_pvals_corrected_full
-        results[f'WilcoxonSigned_mean_paired_l2fc{comparison_col_tag}'] =mean_fc_rel
+        results[f'WilcoxonSigned_mean_paired_fc{comparison_col_tag}'] =mean_fc_rel
         results[f'WilcoxonSigned_mean_paired_l2fc{comparison_col_tag}'] =mean_log2_fc_rel
 
-    ### add a shapiro and ks test for normality of the differenve between the (target - ref) groups  for  within-subjects designs
+    ### add a shapiro and ks test for normality of the difference between the (target - ref) groups  for  within-subjects designs
     if 'ttest_rel' in tests  or 'WilcoxonSigned' in tests:
         #data1_rel_data2_rel_diff=data1_rel - data2_rel
         # data1_rel_data2_rel_diff shapiro test # ks test
