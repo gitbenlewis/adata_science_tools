@@ -1219,9 +1219,10 @@ def plot_column_of_bar_h_2groups_with_l2fc_dotplot_GEX_adata(
             data=df_obs_x,
             order=categories,
             ax=ax0,
-            hue=comparison_col, # Passing `palette` without assigning `hue` is deprecated and will be removed in v0.14.0. Assign the `y` variable to `hue` and set `legend=False` for the same effect
+            hue=comparison_col,
+            hue_order=categories,
             legend=False,
-            palette=[color_map[c] for c in categories]
+            palette=color_map,
         )
         if barh_remove_yticklabels:
             ax0.set_yticklabels([])
