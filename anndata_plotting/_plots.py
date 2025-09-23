@@ -1024,7 +1024,7 @@ import anndata
 def barh_l2fc_dotplot_column(
         # shared parameters
         adata: anndata.AnnData | None = None,
-        layer: str | None = 'salmon_effective_TPM',
+        layer: str | None = None,
         x_df: pd.DataFrame | None = None,       
         var_df: pd.DataFrame | None = None,
         obs_df: pd.DataFrame | None = None,
@@ -1085,7 +1085,7 @@ def barh_l2fc_dotplot_column(
     if adata is not None:
         print(f"AnnData object provideed with shape {adata.shape} and {len(adata.var_names)} features.")
         # if adata is provided, use it to get the data
-        if layer not in adata.layers:
+        if layer is not None and layer not in adata.layers:
             raise ValueError(f"Layer '{layer}' not found in adata.layers.")
         if comparison_col not in adata.obs.columns:
             raise ValueError(f"Column '{comparison_col}' not found in adata.obs.")
@@ -1225,9 +1225,10 @@ def barh_l2fc_dotplot_column(
             data=df_obs_x,
             order=categories,
             ax=ax0,
-            hue=comparison_col, # Passing `palette` without assigning `hue` is deprecated and will be removed in v0.14.0. Assign the `y` variable to `hue` and set `legend=False` for the same effect
+            hue=comparison_col,
+            hue_order=categories,
             legend=False,
-            palette=[color_map[c] for c in categories]
+            palette=color_map,
         )
         if barh_remove_yticklabels:
             ax0.set_yticklabels([])
