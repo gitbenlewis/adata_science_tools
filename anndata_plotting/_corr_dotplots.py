@@ -29,6 +29,7 @@ def corr_dotplot(
     ylabel: str | None = None,
     axes_lines: bool = True,
     palette: Sequence[Any] | str | None = palettes.godsnot_102,
+    nas2zeros: bool = False,
     dropna: bool = True,
     method: Literal["spearman", "pearson"] = "pearson",
     show: bool = True,
@@ -64,6 +65,8 @@ def corr_dotplot(
         Draw horizontal and vertical reference lines through the origin when ``True``.
     palette : Sequence | str | None
         Palette forwarded to ``seaborn.scatterplot``.
+    nas2zeros : bool
+        Replace missing x/y values with zeros when ``True``. occurs before / overrides ``dropna``.
     dropna : bool
         Remove observations with missing x/y values when ``True``.
     method : {"spearman", "pearson"}
@@ -94,9 +97,9 @@ def corr_dotplot(
         if not isinstance(_obs_df, pd.DataFrame):
             _obs_df = pd.DataFrame(_obs_df)
 
-        expr_df: pd.DataFrame | None
+        feature_df: pd.DataFrame | None
         if x_df is not None:
-            expr_df = x_df.copy()
+            feature_df = x_df.copy()
         elif adata is not None:
             if layer is not None:
                 if layer not in adata.layers:
@@ -108,23 +111,23 @@ def corr_dotplot(
             if hasattr(matrix, "toarray"):
                 matrix = matrix.toarray()
 
-            expr_df = pd.DataFrame(matrix, index=adata.obs_names, columns=adata.var_names)
+            feature_df = pd.DataFrame(matrix, index=adata.obs_names, columns=adata.var_names)
         else:
-            expr_df = None
+            feature_df = None
 
-        if expr_df is not None and not isinstance(expr_df, pd.DataFrame):
+        if feature_df is not None and not isinstance(feature_df, pd.DataFrame):
             if var_df is not None:
                 columns = var_df.index
             elif adata is not None:
                 columns = adata.var_names
             else:
-                raise ValueError("Provide 'var_df' so that expression columns can be named.")
-            expr_df = pd.DataFrame(expr_df, index=_obs_df.index, columns=columns)
+                raise ValueError("Provide 'var_df' so that feature columns can be named.")
+            feature_df = pd.DataFrame(feature_df, index=_obs_df.index, columns=columns)
 
-        if expr_df is not None:
-            if expr_df.index is None or not expr_df.index.equals(_obs_df.index):
-                expr_df = expr_df.reindex(_obs_df.index)
-            plot_df = pd.concat([_obs_df, expr_df], axis=1)
+        if feature_df is not None:
+            if feature_df.index is None or not feature_df.index.equals(_obs_df.index):
+                feature_df = feature_df.reindex(_obs_df.index)
+            plot_df = pd.concat([_obs_df, feature_df], axis=1)
         else:
             plot_df = _obs_df.copy()
 
@@ -135,6 +138,10 @@ def corr_dotplot(
         raise ValueError(f"Column(s) not found in the assembled DataFrame: {missing_str}.")
 
     working_df = plot_df[[column_key_x, column_key_y, hue]].copy()
+
+    if nas2zeros:
+        working_df[column_key_x].fillna(0, inplace=True)
+        working_df[column_key_y].fillna(0, inplace=True)
 
     if dropna:
         working_df = working_df.dropna(subset=[column_key_x, column_key_y])
