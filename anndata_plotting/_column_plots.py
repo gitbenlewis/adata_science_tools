@@ -15,12 +15,14 @@ from matplotlib.ticker import StrMethodFormatter
 
 def barh_column(
         adata: anndata.AnnData | None = None,
+        use_adata_raw: bool = False,
         layer: str | None =None,
         x_df: pd.DataFrame | None = None,       
         var_df: pd.DataFrame | None = None,
         obs_df: pd.DataFrame | None = None,
         feature_list=None,
-        feature_label_vars_col: str | None ='SeqIdEntrezGeneSymbol',
+        feature_label_vars_col: str | None = None,# if None then index is used
+        include_stripplot: bool = True,
         feature_label_char_limit: int | None= 25,
         feature_label_x: float = -0.02,
         figsize: tuple[int, int] = (10, 30),
@@ -50,6 +52,8 @@ def barh_column(
     #----------
     adata : anndata.AnnData | None, optional
         AnnData object consulted when `x_df` is not supplied; provides expression and metadata tables.
+    use_adata_raw : bool, optional
+        If `True`, use the raw counts stored in `adata.raw` for expression values instead of `adata.X`.
     layer : str | None, optional
         Name of an `adata.layers` matrix to use for expression values instead of `adata.X`.
     x_df : pandas.DataFrame | None, optional
@@ -62,6 +66,8 @@ def barh_column(
         Ordered feature identifiers to display; entries must exist in `var_df.index`.
     feature_label_vars_col : str | None, optional
         Column in `var_df` containing display labels for features; defaults to the feature index.
+    include_stripplot : bool, optional
+        If `True`, include a strip plot overlay on top of the bar plots.
     feature_label_char_limit : int | None, optional
         Maximum number of characters retained for feature labels; set `None` to disable truncation.
     feature_label_x : float, optional
@@ -141,6 +147,12 @@ def barh_column(
     if adata is not None:
         print(f"AnnData object provideed with shape {adata.shape} and {len(adata.var_names)} features.")
         # if adata is provided, use it to get the data
+        if use_adata_raw:
+            if adata.raw is None:
+                raise ValueError("adata.raw is None, cannot use raw data.")
+            else:
+                print(f"Using adata.raw with shape {adata.raw.shape}")
+                adata = adata.raw.to_adata()
         if layer is not None and layer not in adata.layers:
             raise ValueError(f"Layer '{layer}' not found in adata.layers.")
         if comparison_col not in adata.obs.columns:
@@ -186,7 +198,8 @@ def barh_column(
             print(f"Warning: feature_label_vars_col '{feature_label_vars_col}' not found in var_df; using index for labels.")
         _bar_feature_label_series = _var_df.index.to_series().astype(str)
 
-    if (feature_label_char_limit is not None) and (feature_label_char_limit > 0):
+    #if (feature_label_char_limit is not None) and (feature_label_char_limit > 0):
+    if (feature_label_char_limit is not None):
         _bar_feature_label_series = _bar_feature_label_series.str.slice(0, int(feature_label_char_limit))
     _bar_feature_label_map = _bar_feature_label_series.to_dict()
 
@@ -233,18 +246,18 @@ def barh_column(
 
         if barh_remove_yticklabels:
             ax.set_yticklabels([])
-        
 
-        # Overlay points (each sample), same order as bars
-        sns.stripplot(
-            x=gene, y=comparison_col,
-            data=df_obs_x,
-            order=categories,
+        if include_stripplot:
+            # Overlay points (each sample), same order as bars
+            sns.stripplot(
+                x=gene, y=comparison_col,
+                data=df_obs_x,
+                order=categories,
             ax=ax,
             color='black',
             legend=False
-        )
-                # set x-axis limits
+            )
+        # set x-axis limits
         if barh_set_xaxis_lims is not None:
             ax.set_xlim(barh_set_xaxis_lims)
         # set x-axis tic fontsize
@@ -489,8 +502,10 @@ def l2fc_dotplot_column(
         if feature_label_vars_col is not None and feature_label_vars_col not in _var_df.columns:
             print(f"Warning: feature_label_vars_col '{feature_label_vars_col}' not found in var_df; using index for labels.")
         _feature_label_series = _var_df.index.to_series().astype(str)
-    if (feature_label_char_limit is not None) and (feature_label_char_limit > 0):
+    #if (feature_label_char_limit is not None) and (feature_label_char_limit > 0):
+    if (feature_label_char_limit is not None):
         _feature_label_series = _feature_label_series.str.slice(0, int(feature_label_char_limit))
+
     _var_df['dotplot_feature_name'] = _feature_label_series
     _feature_label_map = _feature_label_series.astype(str).to_dict()
 
@@ -1002,7 +1017,8 @@ def barh_l2fc_dotplot_column(
         _feature_label_series = _var_df.index.to_series().astype(str)
 
     # Optionally truncate labels to a maximum character length
-    if (feature_label_char_limit is not None) and (feature_label_char_limit > 0):
+    #if (feature_label_char_limit is not None) and (feature_label_char_limit > 0):
+    if (feature_label_char_limit is not None):
         _feature_label_series = _feature_label_series.str.slice(0, int(feature_label_char_limit))
 
     # Set the dotplot y-axis label column
