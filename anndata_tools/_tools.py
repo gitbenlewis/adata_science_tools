@@ -84,18 +84,23 @@ def average_feature_expression(adata, groupby_key, layer=None, use_raw=False, lo
 
     return avg_expression_df
 
+# Example usage:  sctl.tl.average_feature_expression()
 '''
+Neuron_subtype_split_avg_expression_df = sctl.tl.average_feature_expression(adata, groupby_key, use_raw=True, log1p=False, zscore=False)
+df=Neuron_subtype_split_avg_expression_df[gene_list]
+df = df.reindex(columns=gene_list)
+display(df)
 
-gene_list=[  'GENE1' ,'GENE2','GENE3','GENE4',]
-
-groupby_key = 'subtype'
-subtype_split_avg_expression_df = average_feature_expression(adata, groupby_key, use_raw=True, log1p=False, zscore=False)
-df=subtype_split_avg_expression_df[gene_list]
 figsize=(7,10)
 fig1, axes = plt.subplots(nrows=1, ncols=1,figsize=figsize)
 #df.plot.barh(stacked=False,ax=axes).legend(loc='upper center', bbox_to_anchor=(0.5, -0.1), borderaxespad=0)
+
 df.plot.barh(stacked=False,ax=axes)
-axes.legend(loc='upper center', bbox_to_anchor=(0.5, -0.1), ncol=3, frameon=False)
+# Customize legend and axes
+handles, labels = axes.get_legend_handles_labels()
+legend_mapping = {label: handle for label, handle in zip(labels, handles)}
+axes.legend([legend_mapping[gene] for gene in gene_list], gene_list, loc='upper center', bbox_to_anchor=(0.5, -0.1), ncol=4, frameon=False)
+
 axes.invert_yaxis()
 # Add axis labels
 axes.set_xlabel('CP10K')
