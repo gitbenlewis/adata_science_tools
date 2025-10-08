@@ -30,7 +30,8 @@ def corr_dotplot(
     axes_lines: bool = True,
     palette: Sequence[Any] | str | None = palettes.godsnot_102,
     nas2zeros: bool = False,
-    dropna: bool = True,
+    dropna: bool = False,
+    dropzeros: bool = False,
     method: Literal["spearman", "pearson"] = "pearson",
     show: bool = True,
 ):
@@ -69,6 +70,8 @@ def corr_dotplot(
         Replace missing x/y values with zeros when ``True``. occurs before / overrides ``dropna``.
     dropna : bool
         Remove observations with missing x/y values when ``True``.
+    dropzeros : bool
+        Remove observations where either the x or y value equals zero (after numeric coercion).
     method : {"spearman", "pearson"}
         Correlation statistic to report and place in the title.
     show : bool
@@ -145,6 +148,16 @@ def corr_dotplot(
 
     if dropna:
         working_df = working_df.dropna(subset=[column_key_x, column_key_y])
+
+    if dropzeros:
+        x_numeric = pd.to_numeric(working_df[column_key_x], errors="coerce")
+        y_numeric = pd.to_numeric(working_df[column_key_y], errors="coerce")
+        non_numeric_mask = x_numeric.isna() | y_numeric.isna()
+        working_df = working_df.loc[~non_numeric_mask]
+        x_numeric = x_numeric.loc[working_df.index]
+        y_numeric = y_numeric.loc[working_df.index]
+        zero_mask = (x_numeric == 0) | (y_numeric == 0)
+        working_df = working_df.loc[~zero_mask]
 
     if working_df.empty:
         raise ValueError("No data available after filtering missing values.")
