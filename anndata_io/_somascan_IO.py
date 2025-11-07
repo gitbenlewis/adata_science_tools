@@ -81,6 +81,67 @@ print('adata.var_names are unique',adata.var_names.is_unique)
 adata
 '''
 
+
+
+
+def set_sampletype_obs_values(adata: AnnData,
+                              donor_obs_column: str = 'SampleType',
+                              donor_obs_col_values_to_paste: list[str] | None = None,
+                              obs_columns_toFix: list[str] | None = None,
+                              make_copy: bool = False
+                              ):
+    '''paste the value in the 'donor_obs_column' column to other obs columns 
+    where the donor_obs_column value is in donor_obs_col_values_to_paste list
+    Parameters
+    ----------
+    adata : AnnData object
+        The AnnData object to modify.
+    donor_obs_column : str, optional
+        The name of the obs column to use as the donor column, by default 'SampleType'
+    donor_obs_col_values_to_paste : list, optional
+        The list of values in the donor_obs_column to paste to other columns, by default ['QC', 'Buffer', 'Calibrator']
+    obs_columns_toFix : list, optional
+        The list of obs columns to paste the donor values to, by default ['obs_col_1', 'obs_col_2', 'obs_col_3']
+    make_copy : bool, optional
+        Whether to make a copy of the adata object before modifying it, by default False
+    Returns
+    -------
+    AnnData object
+        The modified AnnData object.
+    makes a copy if make_copy is True
+    '''
+# #) make copy if requested
+    if make_copy:
+        _adata = adata.copy()
+    else:
+        _adata = adata
+# #) keep only columns_toFix are present in adata.obs
+    filtered_obs_columns_toFix = [col for col in obs_columns_toFix if col in _adata.obs.columns]
+    if obs_columns_toFix != filtered_obs_columns_toFix:
+        print(f'Note: some obs columns to fix not present in adata.obs: {set(obs_columns_toFix) - set(filtered_obs_columns_toFix)}')
+
+# #) mask select rows and paste donor values to obs columns to fix
+    mask = _adata.obs[donor_obs_column].isin(donor_obs_col_values_to_paste).fillna(False)     # ; fillna(False) avoids NaN==True
+    # Assign donor value into each target column for masked rows
+    # Broadcasts the Series across the selected columns
+    _adata.obs.loc[mask, filtered_obs_columns_toFix] = _adata.obs.loc[mask, donor_obs_column].values[:, None]
+
+
+
+# example usage
+#adata=adata_from_adat_somafile.copy()
+#set_sampletype_obs_values(
+#    adata,
+#    donor_obs_column='SampleType',
+#    donor_obs_col_values_to_paste=['QC', 'Buffer', 'Calibrator'],
+#    obs_columns_toFix = ['AliquotingNotes', 'AssayNotes', 'TimePoint'],
+#    make_copy=False
+#)
+#display(adata.obs.tail(20))
+
+
+
+
 ############ AnnData object version ############
 def make_df_obs_adataX_soma(adata,layer=None,index=None,varcolumns=None,include_obs=True):
     """
@@ -123,3 +184,6 @@ def make_df_obs_adataX_soma(adata,layer=None,index=None,varcolumns=None,include_
         df_obs_adataX= pd.concat([df_obs,df_adataX], axis=1)
         return df_obs_adataX
     return df_adataX
+
+
+
