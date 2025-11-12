@@ -55,3 +55,51 @@ def show_tol_colors(colors=None):
     ax.set_title("Paul Tol's 10-Color Palette", fontsize=12)
     plt.tight_layout()
     plt.show()
+
+
+def show_colors(colors=None,
+                title_text=' Color Palette',
+                save_plot=False,
+                save_file_dir=None,
+                save_file_name='color_palette.png'):
+    """
+    Creates a bar plot where each bar has one of the given colors.
+    The x-axis is labeled with the hex color codes.
+    """
+    import matplotlib.pyplot as plt
+    n = len(colors)
+    x_vals = range(n)
+    y_vals = [1]*n  # All bars have the same height (1)
+
+    fig, ax = plt.subplots(figsize=(8, 2))
+    bars = ax.bar(x_vals, y_vals)
+
+    # Set each bar’s color and label
+    for i, bar in enumerate(bars):
+        bar.set_color(colors[i])
+        # Put the hex code as an x-axis tick label
+        ax.text(
+            i, 0.5, colors[i],
+            rotation=90, fontsize=9,
+            color='white', ha='center', va='center',
+            bbox=dict(facecolor='black', alpha=0.3, boxstyle='round')
+        )
+
+    # Remove extra chart details
+    ax.set_xticks(x_vals)
+    ax.set_xticklabels(['']*n)   # we place color codes in the bars, so x tick labels can be blank
+    ax.set_yticks([])
+
+    ax.set_xlim(-0.5, n - 0.5)
+    ax.set_ylim(0, 1)
+
+    ax.set_title(title_text, fontsize=12)
+    plt.tight_layout()
+    plt.show()
+    
+    if save_plot:
+        if save_file_dir is not None:
+            full_path = save_file_dir / save_file_name
+        else:
+            full_path = save_file_name
+        fig.savefig(full_path, dpi=300)
