@@ -10,7 +10,8 @@ import matplotlib.pyplot as plt
 
 # Todo add accept adata or df input
 # 2025.08.22 updated to re org hue / label logic and add horizontal pvalue threshold to match updates elsewhere 
-# 2025.02.28 updated to used the hue_column to set the hue values 
+# 2025.02.28 updated to used the hue_column to set the hue values
+# 2025.11.12 updated to add hue_palette_color_list parameter to accept custom color palettes for hue_column plotting mode
 def volcano_plot_generic(
         _df, 
         l2fc_col: str | None = 'log2FoldChange',
@@ -22,6 +23,7 @@ def volcano_plot_generic(
         title_text: str | None = 'volcano_plot',
         comparison_label: str | None = ' Comparison',
         hue_column: str | None = None,
+        hue_palette_color_list: list | None = None,
         log2FoldChange_threshold: float | None = .1,
         pvalue_threshold: float | None = None,
         figsize: tuple | None = (15, 10),
@@ -65,6 +67,9 @@ def volcano_plot_generic(
         Plot title and comparison label.
     hue_column : str, optional
         Column for coloring points; defaults to "Significance".
+    hue_palette_color_list : list, optional 
+        List of colors for the hue palette. 
+        default uses Paul Tol’s 10-color set + gray
     log2FoldChange_threshold : float, optional
         Minimum absolute log2FC for significance (default 0.1).
     pvalue_threshold : float, optional
@@ -120,12 +125,16 @@ def volcano_plot_generic(
 
     # Reorder palettes for significance and hue mapping
     significance_custom_palette = [tol_colors_w_grey[10]] + [tol_colors_w_grey[7]] + [tol_colors_w_grey[0]] + [tol_colors_w_grey[3]]
-    hue_palette_custom_palette = [
-        tol_colors_w_grey[0], tol_colors_w_grey[3], tol_colors_w_grey[4],
-        tol_colors_w_grey[6], tol_colors_w_grey[1], tol_colors_w_grey[8],
-        tol_colors_w_grey[7], tol_colors_w_grey[2], tol_colors_w_grey[5],
-        tol_colors_w_grey[9]
-    ]
+    
+    if hue_palette_color_list is not None:
+        hue_palette_custom_palette = hue_palette_color_list
+    else:
+        hue_palette_custom_palette = [
+            tol_colors_w_grey[0], tol_colors_w_grey[3], tol_colors_w_grey[4],
+            tol_colors_w_grey[6], tol_colors_w_grey[1], tol_colors_w_grey[8],
+            tol_colors_w_grey[7], tol_colors_w_grey[2], tol_colors_w_grey[5],
+            tol_colors_w_grey[9]]
+
 
     # -------------------------
     # Input data checks and setup
