@@ -195,7 +195,9 @@ def corr_dotplot(
     sns.scatterplot(**scatter_kwargs)
 
     if hue is not None:
-        axes.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.0)
+        axes.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.0).set_title(hue)
+        # add legend name
+        #axes.legend().set_title(hue)
 
     fit = linregress(x_vals, y_vals)
     if show_y_intercept:
