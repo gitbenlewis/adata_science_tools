@@ -6,9 +6,12 @@ this is the sub package for anndata_tools that contains tools that are not prepr
 
 from __future__ import annotations
 
+
 from . import _stat_tests
+from . import _model_fit
 from . import _tools
 
 from ._stat_tests import *
+from ._model_fit import *
 from ._tools import *
 
