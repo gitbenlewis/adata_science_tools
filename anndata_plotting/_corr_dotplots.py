@@ -28,6 +28,7 @@ def corr_dotplot(
     xlabel: str | None = None,
     ylabel: str | None = None,
     axes_lines: bool = True,
+    show_y_intercept: bool = True,
     palette: Sequence[Any] | str | None = palettes.godsnot_102,
     nas2zeros: bool = False,
     dropna: bool = False,
@@ -57,7 +58,8 @@ def corr_dotplot(
     column_key_x, column_key_y : str | None
         Keys selecting the x- and y-value columns used for the correlation.
     hue : str | None
-        Observation column used for colouring points in the scatter plot.
+        Observation column used for colouring points in the scatter plot. When ``None``,
+        points are plotted without grouping or a legend.
     figsize : tuple[float, float]
         Figure size passed to ``plt.subplots``.
     xlabel, ylabel : str | None
@@ -80,8 +82,6 @@ def corr_dotplot(
 
     if column_key_x is None or column_key_y is None:
         raise ValueError("Both 'column_key_x' and 'column_key_y' must be provided.")
-    if hue is None:
-        raise ValueError("'hue' must be provided.")
 
     method = method.lower()
     if method not in {"spearman", "pearson"}:
@@ -134,13 +134,18 @@ def corr_dotplot(
         else:
             plot_df = _obs_df.copy()
 
-    required_cols = {column_key_x, column_key_y, hue}
+    required_cols = {column_key_x, column_key_y}
+    if hue is not None:
+        required_cols.add(hue)
     missing = [col for col in required_cols if col not in plot_df.columns]
     if missing:
         missing_str = ", ".join(missing)
         raise ValueError(f"Column(s) not found in the assembled DataFrame: {missing_str}.")
 
-    working_df = plot_df[[column_key_x, column_key_y, hue]].copy()
+    selected_cols = [column_key_x, column_key_y]
+    if hue is not None:
+        selected_cols.append(hue)
+    working_df = plot_df[selected_cols].copy()
 
     if nas2zeros:
         working_df[column_key_x].fillna(0, inplace=True)
@@ -162,7 +167,7 @@ def corr_dotplot(
     if working_df.empty:
         raise ValueError("No data available after filtering missing values.")
 
-    if pd.api.types.is_categorical_dtype(working_df[hue]):
+    if hue is not None and pd.api.types.is_categorical_dtype(working_df[hue]):
         working_df[hue] = working_df[hue].cat.remove_unused_categories()
 
     x_vals = working_df[column_key_x]
@@ -176,21 +181,32 @@ def corr_dotplot(
         corr_value, corr_pvalue = stats.pearsonr(x_vals, y_vals)
 
     fig, axes = plt.subplots(1, 1, figsize=figsize)
-    sns.scatterplot(
-        data=working_df,
-        x=column_key_x,
-        y=column_key_y,
-        hue=hue,
-        legend="full",
-        s=200,
-        palette=palette,
-        ax=axes,
-    )
+    scatter_kwargs: dict[str, Any] = {
+        "data": working_df,
+        "x": column_key_x,
+        "y": column_key_y,
+        "s": 200,
+        "ax": axes,
+    }
+    if hue is not None:
+        scatter_kwargs["hue"] = hue
+        scatter_kwargs["legend"] = "full"
+        scatter_kwargs["palette"] = palette
+    sns.scatterplot(**scatter_kwargs)
 
-    axes.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.0)
+    if hue is not None:
+        axes.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.0)
 
     fit = linregress(x_vals, y_vals)
-    axes.axline(xy1=(0, fit.intercept), slope=fit.slope)
+    if show_y_intercept:
+        axes.axline(xy1=(0, fit.intercept), slope=fit.slope)
+    else:
+        x_min, x_max = x_vals.min(), x_vals.max()
+        axes.plot(
+            [x_min, x_max],
+            [fit.intercept + fit.slope * x_min, fit.intercept + fit.slope * x_max],
+            color="C0",
+        )
 
     if axes_lines:
         axes.axhline(0, color="black")
@@ -210,6 +226,7 @@ def corr_dotplot(
             f"y = {fit.intercept:.3f} + {fit.slope:.3f}x R^2: {fit.rvalue ** 2:.3f}"
         ),
         y=1.05,
+        fontsize=20
     )
 
     if show:

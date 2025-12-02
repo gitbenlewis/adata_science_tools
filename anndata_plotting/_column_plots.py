@@ -763,6 +763,7 @@ def barh_l2fc_dotplot_column(
         # Optional annotation on the dotplot with l2fc and p-value
         dotplot_annotate: bool = False,
         dotplot_annotate_xy: tuple[float, float] | None = (0.8, 1.2),
+        dotplot_annotate_labels: tuple[str, str] | None = ('l2fc: ', 'p:'),
         dotplot_annotate_fontsize: int | None = None,
         # 
         ):
@@ -1140,7 +1141,8 @@ def barh_l2fc_dotplot_column(
                 _l2fc_val = _var_df.loc[gene, dotplot_l2fc_vars_col_label]
                 _pval_val = _var_df.loc[gene, dotplot_pval_vars_col_label]
                 if np.isfinite(_l2fc_val) and np.isfinite(_pval_val):
-                    _ann_text = f"l2fc: {_l2fc_val:.2g} | p:{_pval_val:.2g}"
+                    #_ann_text = f"l2fc: {_l2fc_val:.2g} | p:{_pval_val:.2g}"
+                    _ann_text = f"{dotplot_annotate_labels[0]}{_l2fc_val:.2g} | {dotplot_annotate_labels[1]}{_pval_val:.2g}"
                     _ann_fs = dotplot_annotate_fontsize or max(8, int(tick_label_fontsize))
                     _xy = dotplot_annotate_xy or (0.8, 1.2)
                     ax1.text(
