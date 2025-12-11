@@ -234,7 +234,7 @@ def corr_dotplot(
     if show:
         plt.show()
 
-    return fig, axes
+    return fig, axes, fit, corr_value, corr_pvalue
 
 
 def spearman_cor_dotplot(*args, **kwargs):
