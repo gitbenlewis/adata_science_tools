@@ -1,8 +1,21 @@
 
-def diff_test(adata, layer=None, use_raw=False,groupby_key=None, groupby_key_target_values=[None], groupby_key_ref_values=[None],comparison_col_tag='_target_ref',
-                      nested_groupby_key_target_values=[(None,None)], nested_groupby_key_ref_values= [(None,None)],   nested_comparison_col_tag='_target_con_ref_con',
-                       sortby=None,tests=['ttest_ind', 'ttest_rel','mannwhitneyu', 'WilcoxonSigned','ttest_rel_nested','WilcoxonSigned_nested'],pair_by_key=None ,add_values2results= False):
+def diff_test(adata, layer=None, use_raw=False,
+            groupby_key=None, groupby_key_target_values=[None], groupby_key_ref_values=[None],
+            comparison_col_tag='_target_ref',
+            nested_groupby_key_target_values=[(None,None)], nested_groupby_key_ref_values= [(None,None)],
+            nested_comparison_col_tag='_target_con_ref_con',
+            sortby=None,ascending=False,
+            tests=['ttest_ind', 'ttest_rel','mannwhitneyu', 'WilcoxonSigned','ttest_rel_nested','WilcoxonSigned_nested'],
+            pair_by_key=None ,
+            add_values2results= False,
+            add_adata_var_column_key_list=None,
+            save_table=False,
+            save_path=None,
+            save_result_to_adata_uns_as_dict=False,
+
+            ):
     """
+    #### updated 2025-12-11 to add save options and adata.var columns to results 
     #### ## updated 2025-05-29 sort by hypothesis stats
     #### ## updated 2025-05-28 added the hypothesis stats to the results DataFrame
     ## updated 2025-05-28 added option to use raw data from adata.raw if available
@@ -327,6 +340,7 @@ def diff_test(adata, layer=None, use_raw=False,groupby_key=None, groupby_key_tar
 
             # add add the pair_by_key categories order to the results dataframe
             results[f'{pair_by_key}_order'] = [adata.obs[pair_by_key].cat.categories.tolist()] * len(results)
+
         elif 'ttest_rel' in tests or 'WilcoxonSigned' in tests:
             # Ensure `pair_by_key` is categorical for proper sorting
             if not isinstance(adata.obs[pair_by_key].dtype, pd.CategoricalDtype):
@@ -362,7 +376,6 @@ def diff_test(adata, layer=None, use_raw=False,groupby_key=None, groupby_key_tar
             results[f'{groupby_key_target_values[0]}_values'] = data1.T.tolist()
             # ref
             results[f'{groupby_key_ref_values[0]}_values'] = data2.T.tolist()
-            print('warning groupby_key_target_values and groupby_key_ref_values not used')
 
 
     ### Perform statistical tests
@@ -622,6 +635,39 @@ def diff_test(adata, layer=None, use_raw=False,groupby_key=None, groupby_key_tar
 
     # Sort the results by absolute value of the selected hypothesis test statistic
     if sortby is not None and sortby in results.columns:
-        results.sort_values(sortby, ascending=False, inplace=True, key=lambda x: x.abs(), na_position='last')
+        results.sort_values(sortby, ascending=ascending, inplace=True, key=lambda x: x.abs(), na_position='last')
+
+    # convert numeric columns to numeric dtype
+    num_cols = [
+                col for col in results.columns
+                if pd.to_numeric(results[col], errors="coerce").notna().all()
+            ]
+    if 'var_names' in num_cols:     # remove 'var_names' from num_cols
+        num_cols.remove('var_names')
+    results[num_cols] = results[num_cols].apply(pd.to_numeric)
+
+    # add adata.var columns to the results dataframe if specified
+    if add_adata_var_column_key_list is not None and adata is not None:
+        # add adata.var columns to the results dataframe
+        for var_col_key in add_adata_var_column_key_list:
+            if var_col_key in adata.var.columns:
+                var_col_values = adata.var[var_col_key]
+                results = results.merge(var_col_values, left_index=True, right_index=True, how='left', suffixes=('', f'_{var_col_key}'))
+            else:
+                print(f"Warning: '{var_col_key}' not found in adata.var columns. Skipping this column.")
+
+    # add results to adata.uns if specified
+    if save_result_to_adata_uns_as_dict and adata is not None:
+        key=f'{groupby_key}_{_groupby_key_target_values_str}_over_{_groupby_key_ref_values_str}'
+        if 'diff_test_results' not in adata.uns:
+            adata.uns['diff_test_results'] = {}
+        adata.uns['diff_test_results'][key] = results
+        print(f"Added diff test results to adata.uns['diff_test_results']['{key}']")
+
+    # save the results dataframe to the save_path
+    if save_table and save_path is not None:
+        import csv
+        results.to_csv(save_path,float_format="%.6f", quoting=csv.QUOTE_MINIMAL,)
+        print(f"Saved results diff test results to {save_path}")
 
     return results

@@ -301,6 +301,185 @@ def barh_column(
 
 
 ####### START ############. l2fc_pvalue plots ###################.###################.###################.###################.
+def l2fc_dotplot_single(
+    adata: anndata.AnnData | None = None,
+    var_df: pd.DataFrame | None = None,
+    feature_list: list[str] | None = None,
+    feature_label_vars_col: str | None = None,
+    feature_label_char_limit: int | None = 25,
+    figsize: tuple[int, int] = (8, 10),
+    fig_title: str | None = None,
+    fig_title_y: float = 1.02,
+    feature_label_fontsize: int | None = 14,
+    tick_label_fontsize: int | None = 12,
+    legend_fontsize: int | None = 14,
+    dotplot_pval_vars_col_label: str = 'pvalue',
+    dotplot_l2fc_vars_col_label: str = 'log2FoldChange',
+    dotplot_subplot_xlabel: str = 'log2fc ((target)/(ref))',
+    pval_label: str = 'p-value',
+    pvalue_cutoff_ring: float = 0.1,
+    sizes: tuple[int, int] = (20, 2000),
+    dotplot_set_xaxis_lims: tuple[int, int] | None = None,
+    dotplot_legend: bool = True,
+    dotplot_legend_bins: int | None = 4,
+    dotplot_legend_bbox_to_anchor: tuple[float, float] = (0.5, -0.05),
+    dotplot_annotate: bool = False,
+    dotplot_annotate_fontsize: int | None = None,
+):
+    """Single-axis l2fc dotplot with one row per feature."""
+    if not feature_list:
+        raise ValueError("feature_list must be provided and non-empty.")
+    _var_df = var_df.copy() if var_df is not None else (
+        adata.var.copy() if adata is not None else None)
+    if _var_df is None:
+        raise ValueError("Provide either `adata` or `var_df`.")
+    for col in (dotplot_pval_vars_col_label, dotplot_l2fc_vars_col_label):
+        if col not in _var_df.columns:
+            raise ValueError(f"Column '{col}' not found in var_df.")
+    missing = [f for f in feature_list if f not in _var_df.index]
+    if missing:
+        raise KeyError(f"Features not found in var_df index: {missing[:5]}" + (" ..." if len(missing) > 5 else ""))
+
+    log10pval_label = f"-log10({pval_label})"
+    _pvals = pd.to_numeric(_var_df[dotplot_pval_vars_col_label], errors="coerce").clip(1e-300, 1.0)
+    _var_df[log10pval_label] = -np.log10(_pvals)
+    size_metric_col = "dotplot_size_metric"
+    _var_df[size_metric_col] = np.where(_pvals > 0.5, 0.0, _var_df[log10pval_label])
+
+    plot_df = _var_df.loc[feature_list].copy()
+    if feature_label_vars_col and feature_label_vars_col in _var_df.columns:
+        _labels_series = _var_df[feature_label_vars_col]
+        lbls = _labels_series.where(_labels_series.notna(), _var_df.index.to_series()).astype(str)
+    else:
+        if feature_label_vars_col and feature_label_vars_col not in _var_df.columns:
+            print(f"Warning: feature_label_vars_col '{feature_label_vars_col}' not found; using index for labels.")
+        lbls = _var_df.index.to_series().astype(str)
+    if feature_label_char_limit is not None:
+        lbls = lbls.str.slice(0, int(feature_label_char_limit))
+    label_map = lbls.to_dict()
+    label_order = [label_map.get(f, str(f)) for f in feature_list]
+    plot_df["dotplot_feature_name"] = pd.Categorical(label_order, categories=label_order, ordered=True)
+    # explicit numeric y positions so feature_list[0] appears at the top
+    plot_df["dotplot_y"] = list(range(len(plot_df)))[::-1]
+
+    ring_col = "ring_cutoff"
+    log10_thresh = float(-np.log10(pvalue_cutoff_ring))
+    plot_df[ring_col] = np.round(log10_thresh, 2)
+    size_min = 0.0
+    size_max = float(pd.to_numeric(plot_df[size_metric_col], errors="coerce").replace([np.inf, -np.inf], np.nan).max())
+    size_max = float(max(size_max, log10_thresh, 1e-6))
+    cmap = plt.get_cmap("viridis_r")
+    norm = plt.Normalize(vmin=log10_thresh, vmax=size_max, clip=True)
+    l2fc_x_limit = float(plot_df[dotplot_l2fc_vars_col_label].abs().max())
+
+    fig, ax = plt.subplots(figsize=figsize)
+    if fig_title:
+        fig.suptitle(fig_title, fontsize=legend_fontsize + 2, y=fig_title_y)
+
+    sns.scatterplot(
+        data=plot_df,
+        x=dotplot_l2fc_vars_col_label,
+        y="dotplot_y",
+        size=ring_col,
+        size_norm=(size_min, size_max),
+        sizes=sizes,
+        facecolors="none",
+        edgecolors="red",
+        linewidths=1,
+        legend=False,
+        ax=ax,
+    )
+
+    sig_mask = plot_df[log10pval_label] >= log10_thresh
+    sns.scatterplot(
+        data=plot_df.loc[~sig_mask],
+        x=dotplot_l2fc_vars_col_label,
+        y="dotplot_y",
+        size=size_metric_col,
+        size_norm=(size_min, size_max),
+        sizes=sizes,
+        color="grey",
+        edgecolors="black",
+        linewidths=0.5,
+        legend=False,
+        ax=ax,
+    )
+    sns.scatterplot(
+        data=plot_df.loc[sig_mask],
+        x=dotplot_l2fc_vars_col_label,
+        y="dotplot_y",
+        size=size_metric_col,
+        size_norm=(size_min, size_max),
+        sizes=sizes,
+        hue=log10pval_label,
+        hue_norm=norm,
+        palette=cmap,
+        edgecolors="black",
+        linewidths=0.5,
+        legend=False,
+        ax=ax,
+    )
+
+    if dotplot_set_xaxis_lims is not None:
+        ax.set_xlim(dotplot_set_xaxis_lims)
+    else:
+        ax.set_xlim((-l2fc_x_limit * 1.05, l2fc_x_limit * 1.05))
+    ax.axvline(x=0, color="red", linestyle="--")
+    ax.set_xlabel(dotplot_subplot_xlabel, fontsize=legend_fontsize)
+    ax.set_ylabel("")
+    ax.tick_params(axis="x", labelsize=tick_label_fontsize)
+    ax.tick_params(axis="y", labelsize=feature_label_fontsize)
+    ax.xaxis.set_major_formatter(StrMethodFormatter("{x:g}"))
+    ax.set_yticks(plot_df["dotplot_y"])
+    ax.set_yticklabels(label_order)
+
+    if dotplot_annotate:
+        ann_fs = dotplot_annotate_fontsize or max(8, int(tick_label_fontsize))
+        for _, row in plot_df.iterrows():
+            if np.isfinite(row[dotplot_l2fc_vars_col_label]) and np.isfinite(row[dotplot_pval_vars_col_label]):
+                ax.text(
+                    row[dotplot_l2fc_vars_col_label],
+                    row["dotplot_feature_name"],
+                    f"l2fc: {row[dotplot_l2fc_vars_col_label]:.2g} | p:{row[dotplot_pval_vars_col_label]:.2g}",
+                    ha="left",
+                    va="center",
+                    fontsize=ann_fs,
+                )
+
+    if dotplot_legend:
+        from matplotlib.lines import Line2D
+        v_ring = float(-np.log10(pvalue_cutoff_ring))
+        n_bins = max(1, int(dotplot_legend_bins or 3))
+        edges = np.linspace(log10_thresh, size_max, n_bins + 1)[1:]
+        uniq_vals = sorted({round(float(u), 1) for u in edges if u > v_ring + 1e-6})
+        def _area(v): return float(np.interp(v, [size_min, size_max], sizes))
+        def _ms(v): return max(4.0, np.sqrt(_area(v)))
+        grey_handle = Line2D([0], [0], marker="o", linestyle="", markerfacecolor="grey",
+                             markeredgecolor="black", markersize=_ms(max(size_min, min(v_ring - 0.01, size_max))),
+                             label=f"< {v_ring:.1f}")
+        ring_handle = Line2D([0], [0], marker="o", linestyle="", markerfacecolor="none",
+                             markeredgecolor="red", markeredgewidth=1.5, markersize=_ms(v_ring),
+                             label=f"{v_ring:.1f} ring")
+        color_handles = [
+            Line2D([0], [0], marker="o", linestyle="", markerfacecolor=cmap(norm(u)),
+                   markeredgecolor="black", markersize=_ms(u), label=f"{u:.1f}")
+            for u in uniq_vals
+        ]
+        handles = [grey_handle] + color_handles + [ring_handle]
+        ax.legend(
+            handles=handles,
+            loc="lower center",
+            ncol=len(handles),
+            bbox_to_anchor=dotplot_legend_bbox_to_anchor,
+            title=log10pval_label,
+            fontsize=legend_fontsize,
+            title_fontsize=legend_fontsize,
+            frameon=True,
+        )
+
+    fig.tight_layout(rect=[0, 0.02 if dotplot_legend else 0, 1, 1])
+    return fig, ax
+
 
 def l2fc_dotplot_column(
         # shared parameters

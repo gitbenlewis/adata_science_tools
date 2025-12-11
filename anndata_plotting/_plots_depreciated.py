@@ -1621,9 +1621,11 @@ def l2fc_pvalue_dotplot_gex(
     sizes=(20, 2000),
     figsize=(6,10),
     bbox_to_anchor=(0.5, -0.25),
+    dotplot_set_xaxis_lims=None,
     plot_title='Target_vs_Reference l2fc ((target)/(ref))',
     savefig=False,
     file_name='test_plot.png'
+    
 ):
     """
     Create a ring-overlay dot plot of selected metabolites from 'diff_tests'.
@@ -1754,6 +1756,10 @@ def l2fc_pvalue_dotplot_gex(
         legend="brief",
         ax=ax,
     )
+
+        # x limits and ticks
+    if dotplot_set_xaxis_lims is not None:
+        ax.set_xlim(dotplot_set_xaxis_lims)
 
     # Vertical line at x=0
     ax.axvline(x=0, color="red", linestyle="--")
