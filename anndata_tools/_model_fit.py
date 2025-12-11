@@ -81,16 +81,62 @@ def fit_smf_ols_models_and_summarize_wide(
             summary_data[f'{model_name}_CI_low_{clean_param}'] = ci_low
             summary_data[f'{model_name}_CI_high_{clean_param}'] = ci_high
         summary_rows.append(summary_data)
+    # make the final results dataframe
+    results = pd.DataFrame(summary_rows, index=feature_columns)
+    var_names = feature_columns
+    results['var_names'] = var_names 
+    # place 'var_names' as the first column
+    cols = results.columns.tolist()
+    results = results[['var_names'] + [col for col in cols if col != 'var_names']]
+    return results
 
-    summary_df_single_row = pd.DataFrame(summary_rows, index=feature_columns)
-    return summary_df_single_row
 
-
-def fit_smf_ols_models_and_summarize_adata(adata,layer=None,use_raw=False, feature_columns=None, predictors=None, model_name='OLS_predictors'):
+def fit_smf_ols_models_and_summarize_adata(
+        adata,layer=None,use_raw=False,
+        feature_columns=None,
+        predictors=None, 
+        model_name='OLS_predictors',
+        add_adata_var_column_key_list=None,
+        save_table=False,
+        save_path=None,
+        save_result_to_adata_uns_as_dict=False,
+            ):
     obs_X_df=make_df_obs_adataX(adata,layer=layer,use_raw=use_raw,include_obs=True,)
     feature_columns=feature_columns if feature_columns is not None else adata.var_names.tolist()
-    summary_df=fit_smf_ols_models_and_summarize_wide(obs_X_df, feature_columns, predictors, model_name=model_name)
-    return summary_df
+    results=fit_smf_ols_models_and_summarize_wide(obs_X_df, feature_columns, predictors, model_name=model_name)
+    # convert numeric columns to numeric dtype
+    num_cols = [
+                col for col in results.columns
+                if pd.to_numeric(results[col], errors="coerce").notna().all()
+            ]
+    if 'var_names' in num_cols:     # remove 'var_names' from num_cols
+        num_cols.remove('var_names')
+    results[num_cols] = results[num_cols].apply(pd.to_numeric)
+
+    # add adata.var columns to the results dataframe if specified
+    if add_adata_var_column_key_list is not None and adata is not None:
+        # add adata.var columns to the results dataframe
+        for var_col_key in add_adata_var_column_key_list:
+            if var_col_key in adata.var.columns:
+                var_col_values = adata.var[var_col_key]
+                results = results.merge(var_col_values, left_index=True, right_index=True, how='left', suffixes=('', f'_{var_col_key}'))
+            else:
+                print(f"Warning: '{var_col_key}' not found in adata.var columns. Skipping this column.")
+
+    # add results to adata.uns if specified
+    if save_result_to_adata_uns_as_dict and adata is not None:
+        key=f'OLS_model_results_{model_name}'
+        if 'ols_model_results' not in adata.uns:
+            adata.uns['ols_model_results'] = {}
+        adata.uns['ols_model_results'][key] = results
+        print(f"Added fit_smf_ols_models_and_summarize_wide  results to adata.uns['ols_model_results']['{key}']")
+
+    # save the results dataframe to the save_path
+    if save_table and save_path is not None:
+        import csv
+        results.to_csv(save_path,float_format="%.6f", quoting=csv.QUOTE_MINIMAL,)
+        print(f"Saved results  fit_smf_ols_models_and_summarize_wide results to {save_path}")
+    return results
 
 
 
@@ -164,12 +210,61 @@ def fit_smf_mixedlm_models_and_summarize_wide(
                 summary_data[f'{model_name}_RE_{grp_label}_{clean_re}'] = re_val
         summary_rows.append(summary_data)
 
-    summary_df_single_row = pd.DataFrame(summary_rows, index=feature_columns)
-    return summary_df_single_row
+    # make the final results dataframe
+    results = pd.DataFrame(summary_rows, index=feature_columns)
+    var_names = feature_columns
+    results['var_names'] = var_names 
+    # place 'var_names' as the first column
+    cols = results.columns.tolist()
+    results = results[['var_names'] + [col for col in cols if col != 'var_names']]
+    return results
 
 
-def fit_smf_mixedlm_models_and_summarize_adata(adata,layer=None,use_raw=False, feature_columns=None, predictors=None, group=None,model_name='mixedlm_predictors',reml=True,):
+def fit_smf_mixedlm_models_and_summarize_adata(
+        adata,layer=None,use_raw=False,
+        feature_columns=None,
+        predictors=None,
+        group=None,
+        model_name='mixedlm_predictors',
+        reml=True,
+        add_adata_var_column_key_list=None,
+        save_table=False,
+        save_path=None,
+        save_result_to_adata_uns_as_dict=False,):
     obs_X_df=make_df_obs_adataX(adata,layer=layer,use_raw=use_raw,include_obs=True,)
     feature_columns=feature_columns if feature_columns is not None else adata.var_names.tolist()
-    summary_df=fit_smf_mixedlm_models_and_summarize_wide(obs_X_df, feature_columns, predictors, group=group,model_name=model_name,reml=reml)
-    return summary_df
+    results=fit_smf_mixedlm_models_and_summarize_wide(obs_X_df, feature_columns, predictors, group=group,model_name=model_name,reml=reml)
+    # convert numeric columns to numeric dtype
+    num_cols = [
+                col for col in results.columns
+                if pd.to_numeric(results[col], errors="coerce").notna().all()
+            ]
+    if 'var_names' in num_cols:     # remove 'var_names' from num_cols
+        num_cols.remove('var_names')
+    results[num_cols] = results[num_cols].apply(pd.to_numeric)
+
+    # add adata.var columns to the results dataframe if specified
+    if add_adata_var_column_key_list is not None and adata is not None:
+        # add adata.var columns to the results dataframe
+        for var_col_key in add_adata_var_column_key_list:
+            if var_col_key in adata.var.columns:
+                var_col_values = adata.var[var_col_key]
+                results = results.merge(var_col_values, left_index=True, right_index=True, how='left', suffixes=('', f'_{var_col_key}'))
+            else:
+                print(f"Warning: '{var_col_key}' not found in adata.var columns. Skipping this column.")
+
+    # add results to adata.uns if specified
+    if save_result_to_adata_uns_as_dict and adata is not None:
+        key=f'mixedlm_model_results_{model_name}'
+        if 'mixedlm_model_results' not in adata.uns:
+            adata.uns['mixedlm_model_results'] = {}
+        adata.uns['mixedlm_model_results'][key] = results
+        print(f"Added fit_smf_mixedlm_models_and_summarize_wide  results to adata.uns['mixedlm_model_results']['{key}']")
+
+    # save the results dataframe to the save_path
+    if save_table and save_path is not None:
+        import csv
+        results.to_csv(save_path,float_format="%.6f", quoting=csv.QUOTE_MINIMAL,)
+        print(f"Saved results  fit_smf_mixedlm_models_and_summarize_wide results to {save_path}")
+
+    return results
