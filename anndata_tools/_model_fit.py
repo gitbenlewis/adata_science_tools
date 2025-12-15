@@ -1,4 +1,6 @@
 # module imports
+# module at : /home/ubuntu/projects/gitbenlewis/adata_science_tools/anndata_tools/_model_fit.py
+
 from .. anndata_io._IO import make_df_obs_adataX
 
 import pandas as pd
@@ -6,6 +8,7 @@ import numpy as np
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
 from scipy.stats import chi2
+from statsmodels.stats.multitest import multipletests
 import warnings
 
 
@@ -14,6 +17,7 @@ def fit_smf_ols_models_and_summarize_wide(
         feature_columns=None, 
         predictors=None,
         model_name='OLS',
+        include_fdr=True,
     ):
     import statsmodels.api as sm
     import statsmodels.formula.api as smf
@@ -83,6 +87,16 @@ def fit_smf_ols_models_and_summarize_wide(
         summary_rows.append(summary_data)
     # make the final results dataframe
     results = pd.DataFrame(summary_rows, index=feature_columns)
+    if include_fdr:
+        pval_cols = [c for c in results.columns if c.startswith(f'{model_name}_P>|t|_')]
+        for col in pval_cols:
+            mask = results[col].notna()
+            if not mask.any():
+                continue
+            _, qvals, _, _ = multipletests(results.loc[mask, col], method='fdr_bh')
+            fdr_col = f'{col}_FDR'
+            results[fdr_col] = np.nan
+            results.loc[mask, fdr_col] = qvals
     var_names = feature_columns
     results['var_names'] = var_names 
     # place 'var_names' as the first column
@@ -100,10 +114,11 @@ def fit_smf_ols_models_and_summarize_adata(
         save_table=False,
         save_path=None,
         save_result_to_adata_uns_as_dict=False,
+        include_fdr=True,
             ):
     obs_X_df=make_df_obs_adataX(adata,layer=layer,use_raw=use_raw,include_obs=True,)
     feature_columns=feature_columns if feature_columns is not None else adata.var_names.tolist()
-    results=fit_smf_ols_models_and_summarize_wide(obs_X_df, feature_columns, predictors, model_name=model_name)
+    results=fit_smf_ols_models_and_summarize_wide(obs_X_df, feature_columns, predictors, model_name=model_name, include_fdr=include_fdr)
     # convert numeric columns to numeric dtype
     num_cols = [
                 col for col in results.columns
@@ -147,6 +162,7 @@ def fit_smf_mixedlm_models_and_summarize_wide(
         group=None,
         model_name='mixedlm',
         reml=True,
+        include_fdr=True,
     ):
     import statsmodels.api as sm
     import statsmodels.formula.api as smf
@@ -212,6 +228,16 @@ def fit_smf_mixedlm_models_and_summarize_wide(
 
     # make the final results dataframe
     results = pd.DataFrame(summary_rows, index=feature_columns)
+    if include_fdr:
+        pval_cols = [c for c in results.columns if c.startswith(f'{model_name}_P>|z|_')]
+        for col in pval_cols:
+            mask = results[col].notna()
+            if not mask.any():
+                continue
+            _, qvals, _, _ = multipletests(results.loc[mask, col], method='fdr_bh')
+            fdr_col = f'{col}_FDR'
+            results[fdr_col] = np.nan
+            results.loc[mask, fdr_col] = qvals
     var_names = feature_columns
     results['var_names'] = var_names 
     # place 'var_names' as the first column
@@ -230,10 +256,12 @@ def fit_smf_mixedlm_models_and_summarize_adata(
         add_adata_var_column_key_list=None,
         save_table=False,
         save_path=None,
-        save_result_to_adata_uns_as_dict=False,):
+        save_result_to_adata_uns_as_dict=False,
+        include_fdr=True,
+            ):
     obs_X_df=make_df_obs_adataX(adata,layer=layer,use_raw=use_raw,include_obs=True,)
     feature_columns=feature_columns if feature_columns is not None else adata.var_names.tolist()
-    results=fit_smf_mixedlm_models_and_summarize_wide(obs_X_df, feature_columns, predictors, group=group,model_name=model_name,reml=reml)
+    results=fit_smf_mixedlm_models_and_summarize_wide(obs_X_df, feature_columns, predictors, group=group,model_name=model_name,reml=reml, include_fdr=include_fdr)
     # convert numeric columns to numeric dtype
     num_cols = [
                 col for col in results.columns

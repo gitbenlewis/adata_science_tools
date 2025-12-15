@@ -1,5 +1,5 @@
 ''' correlation dotplots '''
-
+# module at /home/ubuntu/projects/gitbenlewis/adata_science_tools/anndata_plotting/_corr_dotplots.py
 from collections.abc import Sequence
 from typing import Any, Literal
 
@@ -314,3 +314,271 @@ def spearman_cor_dotplot_2(df, column_key_x, column_key_y, hue, hue_right, figsi
     )
 
     return figure1, axes
+
+
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy.stats import spearmanr
+
+def plot_rank_scatter(
+    list1,
+    list2,
+    extra_title="",
+    x_label="Rank in list1",
+    y_label="Rank in list2",
+    figsize=(8, 6),
+    show_diagonal=True,
+):
+    """
+    Plots a scatter plot of the ranks of common elements between two lists,
+    and includes the Spearman correlation and p-value in the plot title.
+    
+    Parameters:
+      list1 (list): First ranked list (e.g., gene IDs).
+      list2 (list): Second ranked list.
+      extra_title (str): Additional string to include in the title.
+      x_label (str): Label for the x-axis.
+      y_label (str): Label for the y-axis.
+      figsize (tuple): Size of the figure.
+      show_diagonal (bool): When True, draw an x=y reference line.
+      
+    Returns:
+      tuple: (correlation, p_value) computed from the common elements.
+    """
+    # If lists are provided as tuples (e.g., due to trailing commas), extract the list.
+    if isinstance(list1, tuple):
+        list1 = list1[0]
+    if isinstance(list2, tuple):
+        list2 = list2[0]
+    
+    # Find common elements between the two lists.
+    common = set(list1) & set(list2)
+    if not common:
+        print("No common elements found!")
+        return None, None
+    
+    # Create dictionaries mapping each common element to its rank (starting at 1)
+    rank_dict1 = {gene: rank for rank, gene in enumerate(list1, start=1) if gene in common}
+    rank_dict2 = {gene: rank for rank, gene in enumerate(list2, start=1) if gene in common}
+    
+    # Sort common elements for consistent ordering.
+    common_sorted = sorted(common)
+    
+    # Build arrays of ranks.
+    x_ranks = np.array([rank_dict1[gene] for gene in common_sorted])
+    y_ranks = np.array([rank_dict2[gene] for gene in common_sorted])
+    
+    # Compute Spearman rank correlation.
+    corr, p_value = spearmanr(x_ranks, y_ranks)
+    
+    # Create the scatter plot.
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
+    ax.scatter(x_ranks, y_ranks, color='blue', alpha=0.2)
+
+    # Match axis limits and aspect to keep the plot square.
+    min_val = min(x_ranks.min(), y_ranks.min())
+    max_val = max(x_ranks.max(), y_ranks.max())
+    span = max_val - min_val
+    pad = 0.05 * span if span > 0 else 1
+    lower = min_val - pad
+    upper = max_val + pad
+    ax.set_xlim(lower, upper)
+    ax.set_ylim(lower, upper)
+    ax.set_aspect("equal", adjustable="box")
+
+    if show_diagonal:
+        ax.plot([lower, upper], [lower, upper], color="gray", linestyle="--", linewidth=1)
+
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(y_label)
+    ax.set_title(f"{extra_title}\nSpearman Corr: {corr:.3f}, p-value: {p_value:.3e}")
+    ax.grid(True)
+    plt.show()
+    
+    return corr, p_value
+
+
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy.stats import spearmanr
+
+def plot_rank_heatmap(
+    list1,
+    list2,
+    extra_title="",
+    x_label="Rank in list1",
+    y_label="Rank in list2",
+    gridsize=50,
+    figsize=(8, 6),
+    show_diagonal=True,
+):
+    """
+    Plots a hexbin heatmap of the ranks of common elements between two lists,
+    and includes the Spearman correlation and p-value in the plot title.
+
+    Parameters:
+      list1 (list): First ranked list (e.g., gene IDs).
+      list2 (list): Second ranked list.
+      extra_title (str): Additional title string.
+      x_label (str): Label for the x-axis.
+      y_label (str): Label for the y-axis.
+      gridsize (int): Number of hexagons in the x-direction (affects resolution).
+      show_diagonal (bool): When True, draw an x=y reference line.
+
+    Returns:
+      tuple: (correlation, p_value) computed from the common elements.
+    """
+    # If lists are provided as tuples, extract the list.
+    if isinstance(list1, tuple):
+        list1 = list1[0]
+    if isinstance(list2, tuple):
+        list2 = list2[0]
+    
+    # Find common elements.
+    common = set(list1) & set(list2)
+    if not common:
+        print("No common elements found!")
+        return None, None
+    
+    # Create dictionaries mapping each common element to its rank (starting at 1)
+    rank_dict1 = {gene: rank for rank, gene in enumerate(list1, start=1) if gene in common}
+    rank_dict2 = {gene: rank for rank, gene in enumerate(list2, start=1) if gene in common}
+    
+    # Sort common elements for consistent ordering.
+    common_sorted = sorted(common)
+    
+    # Create arrays of ranks.
+    x_ranks = np.array([rank_dict1[gene] for gene in common_sorted])
+    y_ranks = np.array([rank_dict2[gene] for gene in common_sorted])
+    
+    # Compute Spearman rank correlation and p-value.
+    corr, p_value = spearmanr(x_ranks, y_ranks)
+    
+    # Create a hexbin (density) plot.
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
+    hb = ax.hexbin(x_ranks, y_ranks, gridsize=gridsize, cmap='viridis', mincnt=1)
+    cb = fig.colorbar(hb, ax=ax)
+    cb.set_label('Density')
+
+    # Match axis limits and aspect to keep the plot square.
+    min_val = min(x_ranks.min(), y_ranks.min())
+    max_val = max(x_ranks.max(), y_ranks.max())
+    span = max_val - min_val
+    pad = 0.05 * span if span > 0 else 1
+    lower = min_val - pad
+    upper = max_val + pad
+    ax.set_xlim(lower, upper)
+    ax.set_ylim(lower, upper)
+    ax.set_aspect("equal", adjustable="box")
+
+    if show_diagonal:
+        ax.plot([lower, upper], [lower, upper], color="gray", linestyle="--", linewidth=1)
+
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(y_label)
+    ax.set_title(f"{extra_title}\nSpearman Corr: {corr:.3f}, p-value: {p_value:.3e}")
+    ax.grid(True)
+    plt.show()
+    
+    return corr, p_value
+
+'''# Example usage:
+# Make sure your lists are defined without trailing commas.
+list1 = drug78hr_vehicle78hr_list_nested
+list2 = drug78hr_lmm_diff_list
+extra_title = "78hr Comparison"
+corr, p_val = plot_rank_heatmap(list1, list2, extra_title, 
+                                 x_label="Rank in drug78hr_vehicle78hr_list_nested", 
+                                 y_label="Rank in 78hr drug78hr_lmm_diff_list", 
+                                  gridsize=50)'''
+
+                                  
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy.stats import spearmanr, gaussian_kde
+
+def plot_rank_scatter_density(
+    list1,
+    list2,
+    extra_title="",
+    x_label="Rank in list1",
+    y_label="Rank in list2",
+    dot_size=20,
+    cmap="viridis",
+    figsize=(8, 6),
+    show_diagonal=True,
+):
+    """
+    Plots a scatter plot of the ranks of common elements between two lists.
+    Each dot is colored based on its local density (computed via a Gaussian KDE).
+    The plot title includes the Spearman correlation and p-value.
+    
+    Parameters:
+      list1 (list): First ranked list (e.g., gene IDs).
+      list2 (list): Second ranked list.
+      extra_title (str): Additional string to include in the title.
+      x_label (str): Label for the x-axis.
+      y_label (str): Label for the y-axis.
+      dot_size (int): Size of the dots.
+      cmap (str): Colormap for density.
+      show_diagonal (bool): When True, draw an x=y reference line.
+      
+    Returns:
+      tuple: (correlation, p_value) computed from the common elements.
+    """
+    # If lists are accidentally provided as tuples, extract the list.
+    if isinstance(list1, tuple):
+        list1 = list1[0]
+    if isinstance(list2, tuple):
+        list2 = list2[0]
+        
+    # Find common elements.
+    common = set(list1) & set(list2)
+    if not common:
+        print("No common elements found!")
+        return None, None
+    
+    # Map common genes to their ranks (starting at 1)
+    rank_dict1 = {gene: rank for rank, gene in enumerate(list1, start=1) if gene in common}
+    rank_dict2 = {gene: rank for rank, gene in enumerate(list2, start=1) if gene in common}
+    
+    # Sort common genes for consistent ordering.
+    common_sorted = sorted(common)
+    
+    # Create arrays of ranks.
+    x_ranks = np.array([rank_dict1[gene] for gene in common_sorted])
+    y_ranks = np.array([rank_dict2[gene] for gene in common_sorted])
+    
+    # Compute Spearman rank correlation.
+    corr, p_value = spearmanr(x_ranks, y_ranks)
+    
+    # Compute point density using Gaussian KDE.
+    xy = np.vstack([x_ranks, y_ranks])
+    z = gaussian_kde(xy)(xy)
+    
+    # Create the scatter plot with density coloring.
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
+    sc = ax.scatter(x_ranks, y_ranks, c=z, s=dot_size, cmap=cmap)
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(y_label)
+    ax.set_title(f"{extra_title}\nSpearman Corr: {corr:.3f}, p-value: {p_value:.3e}")
+
+    # Match axis limits and aspect to keep the plot square.
+    min_val = min(x_ranks.min(), y_ranks.min())
+    max_val = max(x_ranks.max(), y_ranks.max())
+    span = max_val - min_val
+    pad = 0.05 * span if span > 0 else 1
+    lower = min_val - pad
+    upper = max_val + pad
+    ax.set_xlim(lower, upper)
+    ax.set_ylim(lower, upper)
+    ax.set_aspect("equal", adjustable="box")
+
+    if show_diagonal:
+        ax.plot([lower, upper], [lower, upper], color="gray", linestyle="--", linewidth=1)
+
+    fig.colorbar(sc, ax=ax, label="Density")
+    ax.grid(True)
+    plt.show()
+    
+    return corr, p_value
