@@ -15,6 +15,8 @@ def diff_test(adata, layer=None, use_raw=False,
 
             ):
     """
+    #### updated 2025-12-11 changed pvals_corrected to pvals_FDR to be more explicit
+    #### updated 2025-12-11 store values in adata.uns as str to avoid issues with saving lists in anndata
     #### updated 2025-12-11 to add save options and adata.var columns to results 
     #### ## updated 2025-05-29 sort by hypothesis stats
     #### ## updated 2025-05-28 added the hypothesis stats to the results DataFrame
@@ -315,19 +317,19 @@ def diff_test(adata, layer=None, use_raw=False,
             results[f'paired_PCTchange_NESTED_diffcontrol{comparison_col_tag}'] = pct_diff_targetControl_target_rel
 
             # add values to the results dataframe
-            results[f'{nested_groupby_key_target_values[0][0]}_values'] = data_target_rel.T.tolist()
-            results[f'{nested_groupby_key_target_values[0][1]}_values'] = data_targetControl_rel.T.tolist()
-            results[f'{nested_groupby_key_ref_values[0][0]}_values'] = data_ref_rel.T.tolist()
-            results[f'{nested_groupby_key_ref_values[0][1]}_values'] = data_refControl_rel.T.tolist()
+            results[f'{nested_groupby_key_target_values[0][0]}_values'] = data_target_rel.T.astype(str).tolist()
+            results[f'{nested_groupby_key_target_values[0][1]}_values'] = data_targetControl_rel.T.astype(str).tolist()
+            results[f'{nested_groupby_key_ref_values[0][0]}_values'] = data_ref_rel.T.astype(str).tolist()
+            results[f'{nested_groupby_key_ref_values[0][1]}_values'] = data_refControl_rel.T.astype(str).tolist()
             # add diff values to the results dataframe
             # target-ref
-            results[f'{nested_groupby_key_target_values[0][0]}_minus_{nested_groupby_key_ref_values[0][0]}_values'] = (data_target_rel - data_ref_rel).T.tolist() 
+            results[f'{nested_groupby_key_target_values[0][0]}_minus_{nested_groupby_key_ref_values[0][0]}_values'] = (data_target_rel - data_ref_rel).T.astype(str).tolist() 
             # target-control 
-            results[f'{nested_groupby_key_target_values[0][0]}_minus_{nested_groupby_key_target_values[0][1]}_values'] = target_diff.T.tolist()
+            results[f'{nested_groupby_key_target_values[0][0]}_minus_{nested_groupby_key_target_values[0][1]}_values'] = target_diff.T.astype(str).tolist()
             # ref-control 
-            results[f'{nested_groupby_key_ref_values[0][0]}_minus_{nested_groupby_key_ref_values[0][1]}_values'] = ref_diff.T.tolist()
+            results[f'{nested_groupby_key_ref_values[0][0]}_minus_{nested_groupby_key_ref_values[0][1]}_values'] = ref_diff.T.astype(str).tolist()
             # nested diff (target-control) - (ref-control)
-            results[f'{nested_groupby_key_target_values[0][0]}_diffcontrol_minus_{nested_groupby_key_ref_values[0][0]}_diffcontrol_values'] = nested_diff.T.tolist()
+            results[f'{nested_groupby_key_target_values[0][0]}_diffcontrol_minus_{nested_groupby_key_ref_values[0][0]}_diffcontrol_values'] = nested_diff.T.astype(str).tolist()
             # add cvs for differences with control 
             cv_target_ref_diff= (np.std(data_target_rel - data_ref_rel, axis=0,ddof=1)/np.abs(np.mean(data_target_rel - data_ref_rel, axis=0)))*100
             cv_target_diff = (np.std(target_diff, axis=0,ddof=1)/np.abs(np.mean(target_diff, axis=0)))*100
@@ -339,7 +341,7 @@ def diff_test(adata, layer=None, use_raw=False,
             results[f'CVpct:'f'{nested_groupby_key_target_values[0][0]}_diffcontrol_minus_{nested_groupby_key_ref_values[0][0]}_diffcontrol_values'] = cv_nested_diff
 
             # add add the pair_by_key categories order to the results dataframe
-            results[f'{pair_by_key}_order'] = [adata.obs[pair_by_key].cat.categories.tolist()] * len(results)
+            results[f'{pair_by_key}_order'] = [adata.obs[pair_by_key].cat.categories.astype(str).tolist()] * len(results)
 
         elif 'ttest_rel' in tests or 'WilcoxonSigned' in tests:
             # Ensure `pair_by_key` is categorical for proper sorting
@@ -360,22 +362,22 @@ def diff_test(adata, layer=None, use_raw=False,
             results[f'paired_PCTchange{comparison_col_tag}'] = pct_diff_target_ref_rel
             # add values to the results dataframe
             # target
-            results[f'{groupby_key_target_values[0]}_values'] = data1_rel.T.tolist()
+            results[f'{groupby_key_target_values[0]}_values'] = data1_rel.T.astype(str).tolist()
             # ref
-            results[f'{groupby_key_ref_values[0]}_values'] = data2_rel.T.tolist()
+            results[f'{groupby_key_ref_values[0]}_values'] = data2_rel.T.astype(str).tolist()
             # target-ref
-            results[f'{groupby_key_target_values[0]}_minus_{groupby_key_ref_values[0]}_values'] = data1_rel_data2_rel_diff.T.tolist()
+            results[f'{groupby_key_target_values[0]}_minus_{groupby_key_ref_values[0]}_values'] = data1_rel_data2_rel_diff.T.astype(str).tolist()
             # add add the pair_by_key categories order to the results dataframe
-            results[f'{pair_by_key}_order'] = [adata.obs[pair_by_key].cat.categories.tolist()] * len(results)
+            results[f'{pair_by_key}_order'] = [adata.obs[pair_by_key].cat.categories.astype(str).tolist()] * len(results)
             # add cvs for differences with target-ref 
             cv_target_ref_diff= (np.std(data1_rel - data2_rel, axis=0,ddof=1)/np.abs(np.mean(data1_rel - data2_rel, axis=0)))*100
             results[f'CVpct:{groupby_key_target_values[0]}_minus_{groupby_key_ref_values[0]}'] = cv_target_ref_diff
         else:
             # add values to the results dataframe
             # target
-            results[f'{groupby_key_target_values[0]}_values'] = data1.T.tolist()
+            results[f'{groupby_key_target_values[0]}_values'] = data1.T.astype(str).tolist()
             # ref
-            results[f'{groupby_key_ref_values[0]}_values'] = data2.T.tolist()
+            results[f'{groupby_key_ref_values[0]}_values'] = data2.T.astype(str).tolist()
 
 
     ### Perform statistical tests
@@ -390,7 +392,7 @@ def diff_test(adata, layer=None, use_raw=False,
         # Add p-values to the results DataFrame
         results[f'ttest_ind_stat{comparison_col_tag}']=t_stat
         results[f'ttest_ind_pvals{comparison_col_tag}'] = t_test_pvals
-        results[f'ttest_ind_pvals_corrected{comparison_col_tag}'] = t_test_pvals_corrected_full
+        results[f'ttest_ind_pvals_FDR{comparison_col_tag}'] = t_test_pvals_corrected_full
     if 'mannwhitneyu' in tests:
         # Perform Mann-Whitney U tests with continuity correction
         u_statistic, u_test_pvals = stats.mannwhitneyu(data1, data2, axis=0, alternative='two-sided', use_continuity=True)
@@ -405,7 +407,7 @@ def diff_test(adata, layer=None, use_raw=False,
         # Add p-values to the results DataFrame
         results[f'mannwhitneyu_stat{comparison_col_tag}'] = u_statistic
         results[f'mannwhitneyu_pvals{comparison_col_tag}'] = u_test_pvals
-        results[f'mannwhitneyu_pvals_corrected{comparison_col_tag}'] = u_test_pvals_corrected_full
+        results[f'mannwhitneyu_pvals_FDR{comparison_col_tag}'] = u_test_pvals_corrected_full
 
     ### add a shapiro and ks test for normality for the target and ref groups  for idependent between-subjects designs
     if 'ttest_ind' in tests  or 'mannwhitneyu' in tests:
@@ -460,7 +462,7 @@ def diff_test(adata, layer=None, use_raw=False,
         # Add p-values to the results DataFrame
         results[f'ttest_rel_stat{comparison_col_tag}'] = t_rel_stat
         results[f'ttest_rel_pvals{comparison_col_tag}'] = t_rel_test_pvals
-        results[f'ttest_rel_pvals_corrected{comparison_col_tag}'] = t_rel_test_pvals_corrected_full
+        results[f'ttest_rel_pvals_FDR{comparison_col_tag}'] = t_rel_test_pvals_corrected_full
         results[f'ttest_rel_mean_paired_fc{comparison_col_tag}'] =mean_fc_rel
         results[f'ttest_rel_mean_paired_l2fc{comparison_col_tag}'] =mean_log2_fc_rel
     if 'WilcoxonSigned' in tests:
@@ -485,7 +487,7 @@ def diff_test(adata, layer=None, use_raw=False,
         # Add p-values to the results DataFrame
         results[f'WilcoxonSigned_stat{comparison_col_tag}'] = w_stat
         results[f'WilcoxonSigned_pvals{comparison_col_tag}'] = w_test_pvals
-        results[f'WilcoxonSigned_pvals_corrected{comparison_col_tag}'] = w_test_pvals_corrected_full
+        results[f'WilcoxonSigned_pvals_FDR{comparison_col_tag}'] = w_test_pvals_corrected_full
         results[f'WilcoxonSigned_mean_paired_fc{comparison_col_tag}'] =mean_fc_rel
         results[f'WilcoxonSigned_mean_paired_l2fc{comparison_col_tag}'] =mean_log2_fc_rel
 
@@ -549,7 +551,7 @@ def diff_test(adata, layer=None, use_raw=False,
         # Add p-values to the results DataFrame
         results[f'ttest_rel_nested_stat{nested_comparison_col_tag}'] = t_rel_nested_stat
         results[f'ttest_rel_nested_pvals{nested_comparison_col_tag}'] = t_rel_nested_test_pvals
-        results[f'ttest_rel_nested_pvals_corrected{nested_comparison_col_tag}'] = t_rel_nested_test_pvals_corrected_full
+        results[f'ttest_rel_nested_pvals_FDR{nested_comparison_col_tag}'] = t_rel_nested_test_pvals_corrected_full
         results[f'ttest_rel_nested_mean_paired_fcfc{nested_comparison_col_tag}'] =mean_fc_rel_nested
         results[f'ttest_rel_nested_mean_paired_l2fcfc{nested_comparison_col_tag}'] =mean_log2_fc_rel_nested
     if 'WilcoxonSigned_nested' in tests:
@@ -596,7 +598,7 @@ def diff_test(adata, layer=None, use_raw=False,
         # Add p-values to the results DataFrame
         results[f'WilcoxonSigned_nested_stat{nested_comparison_col_tag}'] = w_nested_stat
         results[f'WilcoxonSigned_nested_pvals{nested_comparison_col_tag}'] = w_nested_test_pvals
-        results[f'WilcoxonSigned_nested_pvals_corrected{nested_comparison_col_tag}'] = w_nested_test_pvals_full_corrected
+        results[f'WilcoxonSigned_nested_pvals_FDR{nested_comparison_col_tag}'] = w_nested_test_pvals_full_corrected
         results[f'WilcoxonSigned_nested_mean_paired_fcfc{nested_comparison_col_tag}'] =mean_fc_rel_nested
         results[f'WilcoxonSigned_nested_mean_paired_l2fcfc{nested_comparison_col_tag}'] =mean_log2_fc_rel_nested
     ### add a shapiro and ks test for normality for the nested difference [(Target-control) - (Ref-control)] data for  within-subjects design with baseline control
@@ -637,6 +639,34 @@ def diff_test(adata, layer=None, use_raw=False,
     if sortby is not None and sortby in results.columns:
         results.sort_values(sortby, ascending=ascending, inplace=True, key=lambda x: x.abs(), na_position='last')
 
+
+    # add results to adata.uns if specified
+    #if save_result_to_adata_uns_as_dict and adata is not None:
+    #    key=f'{groupby_key}_{_groupby_key_target_values_str}_over_{_groupby_key_ref_values_str}'
+    #    if 'diff_test_results' not in adata.uns:
+    #        adata.uns['diff_test_results'] = {}
+    #    adata.uns['diff_test_results'][key] = results
+    #    print(f"Added diff test results to adata.uns['diff_test_results']['{key}']")
+
+
+    if save_result_to_adata_uns_as_dict and adata is not None:
+        def _to_json_if_listlike(x):
+            import json
+            if isinstance(x, (list, tuple, np.ndarray, pd.Index)):
+                return json.dumps([None if (isinstance(v, float) and np.isnan(v)) else v for v in list(x)])
+            return x  # leave scalars alone
+        key = f'{groupby_key}_{_groupby_key_target_values_str}_over_{_groupby_key_ref_values_str}'
+        if 'diff_test_results' not in adata.uns:
+            adata.uns['diff_test_results'] = {}
+        results_for_uns = results.copy()
+        # stringify list-in-cell columns so h5ad can write them
+        list_cols = [c for c in results_for_uns.columns if c.endswith('_values') or c.endswith('_order')]
+        for c in list_cols:
+            results_for_uns[c] = results_for_uns[c].apply(_to_json_if_listlike).astype(str)
+        adata.uns['diff_test_results'][key] = results_for_uns
+        print(f"Added diff test results to adata.uns['diff_test_results']['{key}']")
+
+
     # convert numeric columns to numeric dtype
     num_cols = [
                 col for col in results.columns
@@ -655,14 +685,6 @@ def diff_test(adata, layer=None, use_raw=False,
                 results = results.merge(var_col_values, left_index=True, right_index=True, how='left', suffixes=('', f'_{var_col_key}'))
             else:
                 print(f"Warning: '{var_col_key}' not found in adata.var columns. Skipping this column.")
-
-    # add results to adata.uns if specified
-    if save_result_to_adata_uns_as_dict and adata is not None:
-        key=f'{groupby_key}_{_groupby_key_target_values_str}_over_{_groupby_key_ref_values_str}'
-        if 'diff_test_results' not in adata.uns:
-            adata.uns['diff_test_results'] = {}
-        adata.uns['diff_test_results'][key] = results
-        print(f"Added diff test results to adata.uns['diff_test_results']['{key}']")
 
     # save the results dataframe to the save_path
     if save_table and save_path is not None:
