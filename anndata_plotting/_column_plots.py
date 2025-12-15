@@ -910,8 +910,11 @@ def barh_l2fc_dotplot_column(
         feature_label_fontsize: int | None= 24,
         tick_label_fontsize: int | None= 20,
         legend_fontsize: int | None= 24,
+        row_hspace: float | None = None,
+        col_wspace: float | None = 0.07,
         bar2dotplot_width_ratios: list[float] | None = [1.5, 1.],
         tight_layout_rect_arg: list[float] | None = [0, 0, 1, 1],
+        use_tight_layout: bool = True,
         savefig: bool = False,
         file_name: str = 'test_plot.png',
         # barh specific parameters
@@ -1211,7 +1214,9 @@ def barh_l2fc_dotplot_column(
     # #) set up the figure and subfigures
     gene_list_len = len(feature_list)
     fig = plt.figure(figsize=figsize)
-    subfigs = fig.subfigures(1, 2, wspace=0.07, width_ratios=bar2dotplot_width_ratios)
+    #subfigs = fig.subfigures(1, 2, wspace=0.07, width_ratios=bar2dotplot_width_ratios)
+    subfigs = fig.subfigures(1, 2, wspace=col_wspace, width_ratios=bar2dotplot_width_ratios)
+
     # Optional overall title for the whole figure
     if fig_title is not None:
         ft_size = fig_title_fontsize or subfig_title_fontsize or (legend_fontsize + 2)
@@ -1232,6 +1237,10 @@ def barh_l2fc_dotplot_column(
         subfigs[1].suptitle(dotplot_figure_plot_title, fontsize=(subfig_title_fontsize or legend_fontsize), y=subfig_title_y)
     else:
         subfigs[1].suptitle(f"{dotplot_subplot_xlabel} grouped by {comparison_col}\n", fontsize=(subfig_title_fontsize or legend_fontsize), y=subfig_title_y)
+
+    if row_hspace is not None:
+        subfigs[0].subplots_adjust(hspace=row_hspace)
+        subfigs[1].subplots_adjust(hspace=row_hspace)
 
     ################## loop through features and create subplots ##################
     for plot_num, gene in enumerate(feature_list):
@@ -1476,7 +1485,8 @@ def barh_l2fc_dotplot_column(
         rect_used = (np.array(tight_layout_rect_arg) + np.array([0, 0.0, 0, 0])).tolist()
     else:
         rect_used = tight_layout_rect_arg
-    plt.tight_layout(rect=rect_used)
+    if use_tight_layout:
+        plt.tight_layout(rect=rect_used)
 
 
     if savefig:
