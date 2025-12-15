@@ -153,7 +153,7 @@ def soma_fill_sampletype_obs_values(
 
 # example usage
 #adata=adata_from_adat_somafile.copy()
-#set_sampletype_obs_values(
+#soma_fill_sampletype_obs_values(
 #    adata,
 #    donor_obs_column='SampleType',
 #    donor_obs_col_values_to_paste=['QC', 'Buffer', 'Calibrator'],
