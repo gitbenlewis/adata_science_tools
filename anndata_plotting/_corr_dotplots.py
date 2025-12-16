@@ -321,11 +321,11 @@ import numpy as np
 from scipy.stats import spearmanr
 
 def plot_rank_scatter(
-    list1,
-    list2,
+    list_y,
+    list_x,
     extra_title="",
-    x_label="Rank in list1",
-    y_label="Rank in list2",
+    x_label="Rank in list_y",
+    y_label="Rank in list_x",
     figsize=(8, 6),
     show_diagonal=True,
 ):
@@ -334,8 +334,8 @@ def plot_rank_scatter(
     and includes the Spearman correlation and p-value in the plot title.
     
     Parameters:
-      list1 (list): First ranked list (e.g., gene IDs).
-      list2 (list): Second ranked list.
+      list_y (list): First ranked list (e.g., gene IDs).
+      list_x (list): Second ranked list.
       extra_title (str): Additional string to include in the title.
       x_label (str): Label for the x-axis.
       y_label (str): Label for the y-axis.
@@ -346,20 +346,20 @@ def plot_rank_scatter(
       tuple: (correlation, p_value) computed from the common elements.
     """
     # If lists are provided as tuples (e.g., due to trailing commas), extract the list.
-    if isinstance(list1, tuple):
-        list1 = list1[0]
-    if isinstance(list2, tuple):
-        list2 = list2[0]
+    if isinstance(list_y, tuple):
+        list_y = list_y[0]
+    if isinstance(list_x, tuple):
+        list_x = list_x[0]
     
     # Find common elements between the two lists.
-    common = set(list1) & set(list2)
+    common = set(list_y) & set(list_x)
     if not common:
         print("No common elements found!")
         return None, None
     
     # Create dictionaries mapping each common element to its rank (starting at 1)
-    rank_dict1 = {gene: rank for rank, gene in enumerate(list1, start=1) if gene in common}
-    rank_dict2 = {gene: rank for rank, gene in enumerate(list2, start=1) if gene in common}
+    rank_dict1 = {gene: rank for rank, gene in enumerate(list_y, start=1) if gene in common}
+    rank_dict2 = {gene: rank for rank, gene in enumerate(list_x, start=1) if gene in common}
     
     # Sort common elements for consistent ordering.
     common_sorted = sorted(common)
@@ -403,11 +403,11 @@ import numpy as np
 from scipy.stats import spearmanr
 
 def plot_rank_heatmap(
-    list1,
-    list2,
+    list_y,
+    list_x,
     extra_title="",
-    x_label="Rank in list1",
-    y_label="Rank in list2",
+    x_label="Rank in list_y",
+    y_label="Rank in list_x",
     gridsize=50,
     figsize=(8, 6),
     show_diagonal=True,
@@ -417,8 +417,8 @@ def plot_rank_heatmap(
     and includes the Spearman correlation and p-value in the plot title.
 
     Parameters:
-      list1 (list): First ranked list (e.g., gene IDs).
-      list2 (list): Second ranked list.
+      list_y (list): First ranked list (e.g., gene IDs).
+      list_x (list): Second ranked list.
       extra_title (str): Additional title string.
       x_label (str): Label for the x-axis.
       y_label (str): Label for the y-axis.
@@ -429,20 +429,20 @@ def plot_rank_heatmap(
       tuple: (correlation, p_value) computed from the common elements.
     """
     # If lists are provided as tuples, extract the list.
-    if isinstance(list1, tuple):
-        list1 = list1[0]
-    if isinstance(list2, tuple):
-        list2 = list2[0]
+    if isinstance(list_y, tuple):
+        list_y = list_y[0]
+    if isinstance(list_x, tuple):
+        list_x = list_x[0]
     
     # Find common elements.
-    common = set(list1) & set(list2)
+    common = set(list_y) & set(list_x)
     if not common:
         print("No common elements found!")
         return None, None
     
     # Create dictionaries mapping each common element to its rank (starting at 1)
-    rank_dict1 = {gene: rank for rank, gene in enumerate(list1, start=1) if gene in common}
-    rank_dict2 = {gene: rank for rank, gene in enumerate(list2, start=1) if gene in common}
+    rank_dict1 = {gene: rank for rank, gene in enumerate(list_y, start=1) if gene in common}
+    rank_dict2 = {gene: rank for rank, gene in enumerate(list_x, start=1) if gene in common}
     
     # Sort common elements for consistent ordering.
     common_sorted = sorted(common)
@@ -482,15 +482,16 @@ def plot_rank_heatmap(
     
     return corr, p_value
 
-'''# Example usage:
-# Make sure your lists are defined without trailing commas.
-list1 = drug78hr_vehicle78hr_list_nested
-list2 = drug78hr_lmm_diff_list
-extra_title = "78hr Comparison"
-corr, p_val = plot_rank_heatmap(list1, list2, extra_title, 
-                                 x_label="Rank in drug78hr_vehicle78hr_list_nested", 
-                                 y_label="Rank in 78hr drug78hr_lmm_diff_list", 
-                                  gridsize=50)'''
+'''
+# Example usage:
+list_y = drug_vehicle_list_nested
+list_x = drug_lmm_diff_list
+extra_title = "xx hr Comparison"
+corr, p_val = plot_rank_heatmap(list_y, list_x, extra_title, 
+                                 y_label="Rank in drug_vehicle_list_nested", 
+                                 x_label="Rank in drug_lmm_diff_list", 
+                                  gridsize=50)
+'''
 
                                   
 import matplotlib.pyplot as plt
@@ -498,11 +499,11 @@ import numpy as np
 from scipy.stats import spearmanr, gaussian_kde
 
 def plot_rank_scatter_density(
-    list1,
-    list2,
+    list_y,
+    list_x,
     extra_title="",
-    x_label="Rank in list1",
-    y_label="Rank in list2",
+    y_label="Rank in list_y",
+    x_label="Rank in list_x",
     dot_size=20,
     cmap="viridis",
     figsize=(8, 6),
@@ -514,11 +515,11 @@ def plot_rank_scatter_density(
     The plot title includes the Spearman correlation and p-value.
     
     Parameters:
-      list1 (list): First ranked list (e.g., gene IDs).
-      list2 (list): Second ranked list.
+      list_y (list): First ranked list (e.g., gene IDs). (y-axis)
+      list_x (list): Second ranked list.(x-axis)
       extra_title (str): Additional string to include in the title.
-      x_label (str): Label for the x-axis.
-      y_label (str): Label for the y-axis.
+      y_label (str): Label for the x-axis.
+      x_label (str): Label for the y-axis.
       dot_size (int): Size of the dots.
       cmap (str): Colormap for density.
       show_diagonal (bool): When True, draw an x=y reference line.
@@ -527,20 +528,20 @@ def plot_rank_scatter_density(
       tuple: (correlation, p_value) computed from the common elements.
     """
     # If lists are accidentally provided as tuples, extract the list.
-    if isinstance(list1, tuple):
-        list1 = list1[0]
-    if isinstance(list2, tuple):
-        list2 = list2[0]
+    if isinstance(list_y, tuple):
+        list_y = list_y[0]
+    if isinstance(list_x, tuple):
+        list_x = list_x[0]
         
     # Find common elements.
-    common = set(list1) & set(list2)
+    common = set(list_y) & set(list_x)
     if not common:
         print("No common elements found!")
         return None, None
     
     # Map common genes to their ranks (starting at 1)
-    rank_dict1 = {gene: rank for rank, gene in enumerate(list1, start=1) if gene in common}
-    rank_dict2 = {gene: rank for rank, gene in enumerate(list2, start=1) if gene in common}
+    rank_dict1 = {gene: rank for rank, gene in enumerate(list_y, start=1) if gene in common}
+    rank_dict2 = {gene: rank for rank, gene in enumerate(list_x, start=1) if gene in common}
     
     # Sort common genes for consistent ordering.
     common_sorted = sorted(common)
@@ -582,3 +583,15 @@ def plot_rank_scatter_density(
     plt.show()
     
     return corr, p_value
+
+
+'''
+# Example usage:
+list_y = drug_vehicle_list_nested
+list_x = drug_lmm_diff_list
+extra_title = "xx hr Comparison"
+corr, p_val = plot_rank_scatter_density(list_y, list_x, extra_title, 
+                                 y_label="Rank in drug_vehicle_list_nested", 
+                                 x_label="Rank in drug_lmm_diff_list", 
+                                  dot_size=20)
+'''
