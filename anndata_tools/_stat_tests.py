@@ -1,3 +1,5 @@
+''' _stat_tests.py '''
+# module at /home/ubuntu/projects/gitbenlewis/adata_science_tools/anndata_tools/_stat_tests.py 
 
 def diff_test(adata, layer=None, use_raw=False,
             groupby_key=None, groupby_key_target_values=[None], groupby_key_ref_values=[None],
@@ -179,6 +181,12 @@ def diff_test(adata, layer=None, use_raw=False,
     from statsmodels.stats.multitest import multipletests
     import pandas as pd
 
+    def _safe_shapiro(vec):
+        n = vec.shape[0]
+        if n < 3 or n > 5000:
+            return 'n<3_or_n>5000'
+        return stats.shapiro(vec).pvalue
+
     ### ensure arguments are correct
 
     # if either or groupby_key  is None return error message
@@ -196,6 +204,17 @@ def diff_test(adata, layer=None, use_raw=False,
     if groupby_key_ref_values is None:
         print('groupby_key_ref_values is None, using all other values as groupby_key_ref_values')
         groupby_key_ref_values=[x for x in adata.obs[groupby_key].unique() if x not in groupby_key_target_values]
+    # paired/nested tests require a pairing key
+    paired_tests = {'ttest_rel', 'WilcoxonSigned', 'ttest_rel_nested', 'WilcoxonSigned_nested'}
+    needs_pairing = any(t in tests for t in paired_tests)
+    if needs_pairing:
+        if pair_by_key is None:
+            raise ValueError("pair_by_key is required for paired or nested tests.")
+        if pair_by_key not in adata.obs.columns:
+            raise ValueError(f"pair_by_key '{pair_by_key}' not found in adata.obs.")
+        if adata.obs[pair_by_key].isna().any():
+            raise ValueError("pair_by_key contains missing values; paired tests require complete pairs.")
+        adata.obs[pair_by_key] = adata.obs[pair_by_key].astype('category')
 
     ### extract the data matrix from the adata object and clean it
     # Select the data matrix
@@ -414,7 +433,7 @@ def diff_test(adata, layer=None, use_raw=False,
         # data1 shapiro test # ks test
         #shapiro_stat_group1, shapiro_pvals_group1 = stats.shapiro(data1,axis=0)
         #ks_stat_group1, ks_pvals_group1 = stats.kstest(data1, 'norm',axis=0)
-        shapiro_pvals_group1 =[stats.shapiro(data1[:, i]).pvalue for i in range(data1.shape[1])]
+        shapiro_pvals_group1 =[_safe_shapiro(data1[:, i]) for i in range(data1.shape[1])]
         ks_pvals_group1 = [
             stats.kstest(
                 data1[:, i],
@@ -425,7 +444,7 @@ def diff_test(adata, layer=None, use_raw=False,
         # data2 shapiro test # ks test
         #shapiro_stat_group2, shapiro_pvals_group2 = stats.shapiro(data2,axis=0)
         #ks_stat_group2, ks_pvals_group2 = stats.kstest(data2, 'norm',axis=0)
-        shapiro_pvals_group2 =[stats.shapiro(data2[:, i]).pvalue for i in range(data2.shape[1])]
+        shapiro_pvals_group2 =[_safe_shapiro(data2[:, i]) for i in range(data2.shape[1])]
         #ks_pvals_group2 = [stats.kstest(data2[:, i], 'norm').pvalue for i in range(data2.shape[1])]
         ks_pvals_group2 = [
             stats.kstest(
@@ -497,7 +516,7 @@ def diff_test(adata, layer=None, use_raw=False,
         # data1_rel_data2_rel_diff shapiro test # ks test
         #shapiro_stat_data1_rel_data2_rel_diff, shapiro_pvals_data1_rel_data2_rel_diff= stats.shapiro(data1_rel_data2_rel_diff,axis=0)
         #ks_stat_data1_rel_data2_rel_diff, ks_pvals_data1_rel_data2_rel_diff = stats.kstest(data1_rel_data2_rel_diff, 'norm',axis=0)
-        shapiro_pvals_data1_rel_data2_rel_diff =[stats.shapiro(data1_rel_data2_rel_diff[:, i]).pvalue for i in range(data1_rel_data2_rel_diff.shape[1])]
+        shapiro_pvals_data1_rel_data2_rel_diff =[_safe_shapiro(data1_rel_data2_rel_diff[:, i]) for i in range(data1_rel_data2_rel_diff.shape[1])]
         ks_pvals_data1_rel_data2_rel_diff = [
             stats.kstest(
                 data1_rel_data2_rel_diff[:, i],
@@ -579,7 +598,16 @@ def diff_test(adata, layer=None, use_raw=False,
         target_diff = data_target_rel - data_targetControl_rel
         ref_diff = data_ref_rel - data_refControl_rel
         # Perform Wilcoxon rank-sum tests
-        w_nested_stat, w_nested_test_pvals = stats.ranksums(target_diff, ref_diff)
+        #w_nested_stat, w_nested_test_pvals = stats.ranksums(target_diff, ref_diff) ### wrong drrrdadrr: this breaks the pairing
+        # Compute paired Wilcoxon on per-feature differences (keeps pairing intact)
+        w_nested_stat, w_nested_test_pvals = stats.wilcoxon(
+            target_diff,
+            ref_diff,
+            axis=0,
+            alternative="two-sided",
+            correction=True,   # keep continuity correction as before
+            zero_method="wilcox",  # or "pratt" if you want to keep zeros
+        )
         # Multiple testing correction
         _, w_nested_test_pvals_corrected, _, _ = multipletests(w_nested_test_pvals[np.isfinite(w_nested_test_pvals)], method="fdr_bh")
         # Create a full array to store the corrected p-values, keeping NaNs where they were
@@ -602,12 +630,12 @@ def diff_test(adata, layer=None, use_raw=False,
         results[f'WilcoxonSigned_nested_mean_paired_fcfc{nested_comparison_col_tag}'] =mean_fc_rel_nested
         results[f'WilcoxonSigned_nested_mean_paired_l2fcfc{nested_comparison_col_tag}'] =mean_log2_fc_rel_nested
     ### add a shapiro and ks test for normality for the nested difference [(Target-control) - (Ref-control)] data for  within-subjects design with baseline control
-    if 'ttest_rel_nested' in tests or 'wilcox_nested' in tests:
+    if 'ttest_rel_nested' in tests or 'WilcoxonSigned_nested' in tests:
         nested_diff = target_diff - ref_diff
         # (Target-control)-(Ref-control) shapiro test # ks test
         #shapiro_stat_nested_diff, shapiro_pvals_nested_diff = stats.shapiro(nested_diff,axis=0)
         #ks_stat_nested_diff, ks_pvals_nested_diff = stats.kstest(nested_diff, 'norm',axis=0)
-        shapiro_pvals_nested_diff =[stats.shapiro(nested_diff[:, i]).pvalue for i in range(nested_diff.shape[1])]
+        shapiro_pvals_nested_diff =[_safe_shapiro(nested_diff[:, i]) for i in range(nested_diff.shape[1])]
         ks_pvals_nested_diff = [
             stats.kstest(
                 nested_diff[:, i],
@@ -627,7 +655,7 @@ def diff_test(adata, layer=None, use_raw=False,
         if f'ttest_rel_nested_stat{nested_comparison_col_tag}' in results.columns:
             sortby = f'ttest_rel_nested_stat{nested_comparison_col_tag}'
         elif f'WilcoxonSigned_nested_stat{nested_comparison_col_tag}' in results.columns:
-            sortby = f'wilcox_nested_stat{nested_comparison_col_tag}'
+            sortby = f'WilcoxonSigned_nested_stat{nested_comparison_col_tag}'
         elif f'ttest_rel_stat{comparison_col_tag}' in results.columns:
             sortby = f'ttest_rel_stat{comparison_col_tag}'
         elif f'ttest_ind_stat{comparison_col_tag}' in results.columns:
@@ -648,6 +676,12 @@ def diff_test(adata, layer=None, use_raw=False,
     #    adata.uns['diff_test_results'][key] = results
     #    print(f"Added diff test results to adata.uns['diff_test_results']['{key}']")
 
+    _groupby_key_target_values_str = '_'.join([str(v) for v in (groupby_key_target_values or []) if v is not None])
+    if not _groupby_key_target_values_str:
+        _groupby_key_target_values_str = '_'.join([str(v) for v in (nested_groupby_key_target_values[0] if nested_groupby_key_target_values else []) if v is not None]) or 'target'
+    _groupby_key_ref_values_str = '_'.join([str(v) for v in (groupby_key_ref_values or []) if v is not None])
+    if not _groupby_key_ref_values_str:
+        _groupby_key_ref_values_str = '_'.join([str(v) for v in (nested_groupby_key_ref_values[0] if nested_groupby_key_ref_values else []) if v is not None]) or 'ref'
 
     if save_result_to_adata_uns_as_dict and adata is not None:
         def _to_json_if_listlike(x):
