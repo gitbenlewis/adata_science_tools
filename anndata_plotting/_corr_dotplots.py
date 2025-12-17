@@ -595,3 +595,96 @@ corr, p_val = plot_rank_scatter_density(list_y, list_x, extra_title,
                                  x_label="Rank in drug_lmm_diff_list", 
                                   dot_size=20)
 '''
+
+
+
+from scipy.stats import spearmanr
+
+
+def pairwise_spearman_corr_matrix(lists_dict):
+    """
+    Build a pairwise Spearman correlation matrix for ranked lists.
+    
+    Parameters:
+      lists_dict (dict): Dictionary where keys are list names and values are ranked lists.
+    
+    Returns:
+      pandas.DataFrame: A DataFrame containing pairwise Spearman correlation coefficients.
+    """
+    keys = list(lists_dict.keys())
+    # Initialize an empty DataFrame with keys as both rows and columns
+    corr_matrix = pd.DataFrame(index=keys, columns=keys, dtype=float)
+    
+    for i, key1 in enumerate(keys):
+        for j, key2 in enumerate(keys):
+            if i == j:
+                corr_matrix.loc[key1, key2] = 1.0
+            elif i < j:
+                res = compare_ranked_lists(lists_dict[key1], lists_dict[key2])
+                # If res is a tuple (correlation, p_value), extract the first element.
+                if isinstance(res, tuple):
+                    corr = res[0]
+                else:
+                    corr = res
+                corr_matrix.loc[key1, key2] = corr
+                corr_matrix.loc[key2, key1] = corr
+    return corr_matrix
+
+
+from scipy.stats import spearmanr
+
+def compare_ranked_lists(list1, list2):
+    """
+    Compare two ranked lists using Spearman rank correlation.
+    
+    Parameters:
+      list1, list2 (list): Two lists containing ranked items (e.g. gene IDs).
+      
+    Returns:
+      tuple: (correlation, p_value) from Spearman rank correlation,
+             or (None, None) if no common elements.
+    """
+    # Ensure inputs are actual lists (not tuples)
+    if isinstance(list1, tuple):
+        list1 = list1[0]
+    if isinstance(list2, tuple):
+        list2 = list2[0]
+
+    # Find the intersection of the two lists.
+    common_genes = set(list1) & set(list2)
+    if not common_genes:
+        print("No common elements to compare.")
+        return None, None
+
+    # Create dictionaries mapping gene to rank (starting at 1)
+    rank_dict1 = {gene: rank for rank, gene in enumerate(list1, start=1) if gene in common_genes}
+    rank_dict2 = {gene: rank for rank, gene in enumerate(list2, start=1) if gene in common_genes}
+
+    # For consistent ordering, sort the common genes (or you can use any fixed order)
+    common_genes_sorted = sorted(common_genes)
+
+    # Create rank arrays
+    ranks1 = [rank_dict1[gene] for gene in common_genes_sorted]
+    ranks2 = [rank_dict2[gene] for gene in common_genes_sorted]
+
+    # Compute Spearman rank correlation.
+    correlation, p_value = spearmanr(ranks1, ranks2)
+    return correlation, p_value
+
+
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+def plot_heatmap(corr_matrix, title="Heatmap", figsize=(8, 6)):
+    """
+    Plots a heatmap for the given correlation matrix.
+    
+    Parameters:
+      corr_matrix (pd.DataFrame): A DataFrame containing correlation coefficients.
+      title (str): Title of the heatmap.
+      figsize (tuple): Figure size.
+    """
+    plt.figure(figsize=figsize)
+    sns.heatmap(corr_matrix, annot=True, cmap="coolwarm", vmin=-1, vmax=1, fmt=".2f")
+    plt.title(title)
+    plt.show()
