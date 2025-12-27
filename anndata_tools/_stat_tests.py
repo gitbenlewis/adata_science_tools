@@ -14,6 +14,10 @@ def diff_test(adata, layer=None, use_raw=False,
             save_table=False,
             save_path=None,
             save_result_to_adata_uns_as_dict=False,
+            logger=None,
+            log_inputs=True,
+            log_level="INFO",
+            save_log=True,
 
             ):
     """
@@ -79,6 +83,15 @@ def diff_test(adata, layer=None, use_raw=False,
     add_values2results : bool, optional
         If True, additional columns with the raw, paired, or nested differences 
         (sorted by `pair_by_key`) are stored in the results.
+    logger : logging.Logger, optional
+        Logger to use for function output. Defaults to a module logger.
+    log_inputs : bool, optional
+        If True, logs the input arguments at INFO level.
+    log_level : int or str, optional
+        Logging level to set on the chosen logger (e.g., "INFO", "DEBUG"). Defaults to "INFO".
+        If no handlers are attached to the module logger, a StreamHandler is added.
+    save_log : bool, optional
+        If True, writes logs to a file at the same location as save_path with ".log" appended.
 
     Returns
     -------
@@ -176,10 +189,73 @@ def diff_test(adata, layer=None, use_raw=False,
          pair_by_key="AnimalID"
      )
     """
+    import logging
+    import os
+    from datetime import datetime
     import numpy as np
     from scipy import stats
     from statsmodels.stats.multitest import multipletests
     import pandas as pd
+
+    log = logger or logging.getLogger(__name__)
+    if log_level is not None:
+        log.setLevel(log_level)
+        if log.handlers:
+            for handler in log.handlers:
+                handler.setLevel(log_level)
+        elif logger is None:
+            handler = logging.StreamHandler()
+            handler.setLevel(log_level)
+            handler.setFormatter(logging.Formatter("%(levelname)s:%(name)s:%(message)s"))
+            log.addHandler(handler)
+            log.propagate = False
+    if save_log:
+        if save_path is None:
+            raise ValueError("save_path is required when save_log is True.")
+        log_path = f"{save_path}.log"
+        log_path_abs = os.path.abspath(log_path)
+        has_log_file = False
+        for handler in log.handlers:
+            if isinstance(handler, logging.FileHandler):
+                handler_path = os.path.abspath(getattr(handler, "baseFilename", ""))
+                if handler_path == log_path_abs:
+                    has_log_file = True
+                    break
+        if not has_log_file:
+            file_handler = logging.FileHandler(log_path)
+            if log_level is not None:
+                file_handler.setLevel(log_level)
+            file_handler.setFormatter(logging.Formatter("%(levelname)s:%(name)s:%(message)s"))
+            log.addHandler(file_handler)
+        log.info(f"diff_test log start: {datetime.now().isoformat(timespec='seconds')}")
+    if log_inputs and log.isEnabledFor(logging.INFO):
+        args_items = [
+            ('adata', adata),
+            ('layer', layer),
+            ('use_raw', use_raw),
+            ('groupby_key', groupby_key),
+            ('groupby_key_target_values', groupby_key_target_values),
+            ('groupby_key_ref_values', groupby_key_ref_values),
+            ('comparison_col_tag', comparison_col_tag),
+            ('nested_groupby_key_target_values', nested_groupby_key_target_values),
+            ('nested_groupby_key_ref_values', nested_groupby_key_ref_values),
+            ('nested_comparison_col_tag', nested_comparison_col_tag),
+            ('sortby', sortby),
+            ('ascending', ascending),
+            ('tests', tests),
+            ('pair_by_key', pair_by_key),
+            ('add_values2results', add_values2results),
+            ('add_adata_var_column_key_list', add_adata_var_column_key_list),
+            ('save_table', save_table),
+            ('save_path', save_path),
+            ('save_result_to_adata_uns_as_dict', save_result_to_adata_uns_as_dict),
+            ('logger', logger),
+            ('log_inputs', log_inputs),
+            ('log_level', log_level),
+            ('save_log', save_log),
+        ]
+        args_lines = "\n".join([f"  {key}: {value}" for key, value in args_items])
+        log.info(f"diff_test args:\n{args_lines}")
 
     def _safe_shapiro(vec):
         n = vec.shape[0]
@@ -222,7 +298,7 @@ def diff_test(adata, layer=None, use_raw=False,
         # if  groupby_key_target_values is None return error message
         raise ValueError("Please provide a groupby_key_target_values")
     if groupby_key_ref_values is None:
-        print('groupby_key_ref_values is None, using all other values as groupby_key_ref_values')
+        log.info(f"groupby_key_ref_values is None, using all other values as groupby_key_ref_values")
         groupby_key_ref_values=[x for x in adata.obs[groupby_key].unique() if x not in groupby_key_target_values]
     # paired/nested tests require a pairing key
     paired_tests = {'ttest_rel', 'WilcoxonSigned', 'ttest_rel_nested', 'WilcoxonSigned_nested'}
@@ -241,15 +317,18 @@ def diff_test(adata, layer=None, use_raw=False,
     #X = adata.layers[layer] if layer else adata.X
     if use_raw and adata.raw is not None:
         X = adata.raw.X if layer is None else adata.raw.layers[layer]
-        print(f'Using raw data from adata.raw.{layer}.' if layer else 'Using raw data from adata.raw.X.')
+        if layer:
+            log.info(f"Using raw data from adata.raw.{layer}.")
+        else:
+            log.info(f"Using raw data from adata.raw.X.")
     else:
         # Use the specified layer or the main data matrix
         if layer is not None and layer in adata.layers:
             X = adata.layers[layer]
-            print(f'Using data from adata.layers.{layer}.')
+            log.info(f"Using data from adata.layers.{layer}.")
         else:
             X = adata.X
-            print('Using data from adata.X.')
+            log.info(f"Using data from adata.X.")
     if hasattr(X, "toarray"):  # Convert sparse matrix to dense if necessary
         X = X.toarray()
     # Remove genes (columns) with zero expression across all cells
@@ -711,7 +790,7 @@ def diff_test(adata, layer=None, use_raw=False,
         for c in list_cols:
             results_for_uns[c] = results_for_uns[c].apply(_to_json_if_listlike).astype(str)
         adata.uns['diff_test_results'][key] = results_for_uns
-        print(f"Added diff test results to adata.uns['diff_test_results']['{key}']")
+        log.info(f"Added diff test results to adata.uns['diff_test_results']['{key}']")
 
 
     # convert numeric columns to numeric dtype
@@ -731,7 +810,7 @@ def diff_test(adata, layer=None, use_raw=False,
                 var_col_values = adata.var[var_col_key]
                 results = results.merge(var_col_values, left_index=True, right_index=True, how='left', suffixes=('', f'_{var_col_key}'))
             else:
-                print(f"Warning: '{var_col_key}' not found in adata.var columns. Skipping this column.")
+                log.warning(f"'{var_col_key}' not found in adata.var columns. Skipping this column.")
 
     # save the results dataframe to the save_path
     if save_table and save_path is not None:
@@ -739,6 +818,9 @@ def diff_test(adata, layer=None, use_raw=False,
         results.to_csv(save_path,
                        #float_format="%.6f",
                         quoting=csv.QUOTE_MINIMAL,)
-        print(f"Saved results diff test results to {save_path}")
+        log.info(f"Saved results diff test results to {save_path}")
+
+    if save_log:
+        log.info(f"diff_test log end: {datetime.now().isoformat(timespec='seconds')}")
 
     return results
