@@ -518,8 +518,8 @@ def plot_rank_scatter_density(
       list_y (list): First ranked list (e.g., gene IDs). (y-axis)
       list_x (list): Second ranked list.(x-axis)
       extra_title (str): Additional string to include in the title.
-      y_label (str): Label for the x-axis.
-      x_label (str): Label for the y-axis.
+      y_label (str): Label for the y-axis.
+      x_label (str): Label for the x-axis.
       dot_size (int): Size of the dots.
       cmap (str): Colormap for density.
       show_diagonal (bool): When True, draw an x=y reference line.
@@ -675,16 +675,73 @@ def compare_ranked_lists(list1, list2):
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-def plot_heatmap(corr_matrix, title="Heatmap", figsize=(8, 6)):
+def plot_heatmap(
+    corr_matrix,
+    title: str = "Heatmap",
+    vmin: float | None = -1,
+    vmax: float | None = 1,
+    figsize: tuple[float, float] = (8, 6),
+    *,
+    cluster: bool = True,
+    metric: str = "euclidean",
+    method: str = "average",
+    annot: bool = True,
+    cmap: str = "coolwarm",
+    show: bool = True,
+):
     """
-    Plots a heatmap for the given correlation matrix.
+    Plot a correlation heatmap, optionally clustered by hierarchical linkage.
     
-    Parameters:
-      corr_matrix (pd.DataFrame): A DataFrame containing correlation coefficients.
-      title (str): Title of the heatmap.
-      figsize (tuple): Figure size.
+    Parameters
+    ----------
+    corr_matrix : pandas.DataFrame
+        Correlation matrix to visualise.
+    title : str
+        Figure title.
+    vmin, vmax : float | None
+        Color scale limits forwarded to seaborn.
+    figsize : tuple[float, float]
+        Figure size.
+    cluster : bool
+        When True, cluster rows/columns with ``seaborn.clustermap``.
+    metric : str
+        Distance metric used for clustering when ``cluster`` is True.
+    method : str
+        Linkage method used for clustering when ``cluster`` is True.
+    annot : bool
+        Annotate cells with correlation values.
+    cmap : str
+        Colormap for the heatmap.
+    show : bool
+        Call ``plt.show()`` before returning.
+    
+    Returns
+    -------
+    seaborn.matrix.ClusterGrid | tuple[matplotlib.figure.Figure, matplotlib.axes.Axes]
+        ClusterGrid when clustering, otherwise the figure/axes tuple from ``sns.heatmap``.
     """
-    plt.figure(figsize=figsize)
-    sns.heatmap(corr_matrix, annot=True, cmap="coolwarm", vmin=-1, vmax=1, fmt=".2f")
-    plt.title(title)
-    plt.show()
+    if cluster:
+        g = sns.clustermap(
+            corr_matrix,
+            cmap=cmap,
+            vmin=vmin,
+            vmax=vmax,
+            method=method,
+            metric=metric,
+            linewidths=0.5,
+            annot=annot,
+            fmt=".2f" if annot else "",
+            figsize=figsize,
+        )
+        g.fig.suptitle(title, y=1.02)
+        if show:
+            plt.show()
+        return g
+
+    fig, ax = plt.subplots(figsize=figsize)
+    sns.heatmap(corr_matrix, annot=annot, cmap=cmap, vmin=vmin, vmax=vmax, fmt=".2f" if annot else "", ax=ax)
+    ax.set_title(title)
+    fig.tight_layout()
+    if show:
+        plt.show()
+    return fig, ax

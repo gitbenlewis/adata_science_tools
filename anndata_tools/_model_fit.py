@@ -188,7 +188,7 @@ def fit_smf_mixedlm_models_and_summarize_wide(
             converged = model.mle_retvals.get("converged")
         if converged is None:
             converged = True  # OLS solves in closed form, so treat as converged by default
-        warning_messages = "; ".join(f"{w.category.__name__}: {w.message}" for w in caught_warnings)
+        warning_messages = [f"{w.category.__name__}: {w.message}" for w in caught_warnings]
         ci = model.conf_int()
         summary_data = {
             f'{model_name}_Log-Likelihood': model.llf,
@@ -201,7 +201,7 @@ def fit_smf_mixedlm_models_and_summarize_wide(
             f'{model_name}_Method': "REML" if model.reml else "ML",
             f'{model_name}_Scale': model.scale,
             f'{model_name}_Converged': converged,
-            f'{model_name}_Warnings': warning_messages if warning_messages else np.nan,
+            f'{model_name}_Warnings': "; ".join(warning_messages) if warning_messages else np.nan,
         }
         if getattr(model, "cov_re", None) is not None:
             for re_name, var in zip(model.cov_re.index, np.diag(model.cov_re)):
@@ -218,12 +218,19 @@ def fit_smf_mixedlm_models_and_summarize_wide(
             ci_low, ci_high = ci.loc[param_name]
             summary_data[f'{model_name}_CI_low_{clean_param}'] = ci_low
             summary_data[f'{model_name}_CI_high_{clean_param}'] = ci_high
-        for grp_label, random_effect in getattr(model, "random_effects", {}).items():
+        random_effects = {}
+        try:
+            random_effects = getattr(model, "random_effects", {})
+        except ValueError as e:
+            # mixedlm can fail to invert a singular covariance matrix; keep going but note it
+            warning_messages.append(f"Random effects unavailable: {e}")
+        for grp_label, random_effect in random_effects.items():
             for re_name, re_val in random_effect.items():
                 clean_re = re_name
                 if clean_re.startswith('Q("') and clean_re.endswith('")'):
                     clean_re = clean_re[3:-2]
                 summary_data[f'{model_name}_RE_{grp_label}_{clean_re}'] = re_val
+        summary_data[f'{model_name}_Warnings'] = "; ".join(warning_messages) if warning_messages else np.nan
         summary_rows.append(summary_data)
 
     # make the final results dataframe

@@ -187,6 +187,26 @@ def diff_test(adata, layer=None, use_raw=False,
             return 'n<3_or_n>5000'
         return stats.shapiro(vec).pvalue
 
+    def _aligned_pairs(X, adata, idx_a, idx_b, pair_key, label_a, label_b):
+        ids_a = adata.obs.loc[idx_a, pair_key]
+        ids_b = adata.obs.loc[idx_b, pair_key]
+        common_ids = ids_a[ids_a.isin(ids_b)].unique()
+        if len(common_ids) == 0:
+            raise ValueError(f"No overlapping pairs on '{pair_key}' for {label_a} vs {label_b}.")
+        mask_a = ids_a.isin(common_ids)
+        mask_b = ids_b.isin(common_ids)
+        Xa = X[idx_a][mask_a]
+        Xb = X[idx_b][mask_b]
+        order_a = np.argsort(adata.obs.loc[idx_a, pair_key][mask_a].cat.codes)
+        order_b = np.argsort(adata.obs.loc[idx_b, pair_key][mask_b].cat.codes)
+        Xa = Xa[order_a]
+        Xb = Xb[order_b]
+        pair_order_a = adata.obs.loc[idx_a, pair_key][mask_a].iloc[order_a].astype(str).tolist()
+        pair_order_b = adata.obs.loc[idx_b, pair_key][mask_b].iloc[order_b].astype(str).tolist()
+        if Xa.shape[0] != Xb.shape[0] or pair_order_a != pair_order_b:
+            raise ValueError(f"Mismatched pairing on '{pair_key}' for {label_a} vs {label_b}.")
+        return Xa, Xb, pair_order_a
+
     ### ensure arguments are correct
 
     # if either or groupby_key  is None return error message
@@ -309,19 +329,17 @@ def diff_test(adata, layer=None, use_raw=False,
             group_ref_idx = adata.obs[groupby_key].isin([nested_groupby_key_ref_values[0][0]])
             group_refControl_idx = adata.obs[groupby_key].isin([nested_groupby_key_ref_values[0][1]])
             # Select the data matrix for each group
-            data_target=X[group_target_idx].copy()
-            data_targetControl=X[group_targetControl_idx].copy()
-            data_ref=X[group_ref_idx].copy()
-            data_refControl=X[group_refControl_idx].copy()
-            # sort the data by the pair_by_key
-            # Ensure `pair_by_key` is categorical for proper sorting
-            if not isinstance(adata.obs[pair_by_key].dtype, pd.CategoricalDtype):
-                adata.obs[pair_by_key] = adata.obs[pair_by_key].astype('category')
-            # Sort the data by `pair_by_key`
-            data_target_rel = data_target[np.argsort(adata.obs.loc[group_target_idx, pair_by_key].cat.codes)]
-            data_targetControl_rel = data_targetControl[np.argsort(adata.obs.loc[group_targetControl_idx, pair_by_key].cat.codes)]
-            data_ref_rel = data_ref[np.argsort(adata.obs.loc[group_ref_idx, pair_by_key].cat.codes)]
-            data_refControl_rel = data_refControl[np.argsort(adata.obs.loc[group_refControl_idx, pair_by_key].cat.codes)]
+            data_target_rel, data_targetControl_rel, pair_order_target = _aligned_pairs(
+                X, adata, group_target_idx, group_targetControl_idx, pair_by_key,
+                nested_groupby_key_target_values[0][0], nested_groupby_key_target_values[0][1]
+            )
+            data_ref_rel, data_refControl_rel, pair_order_ref = _aligned_pairs(
+                X, adata, group_ref_idx, group_refControl_idx, pair_by_key,
+                nested_groupby_key_ref_values[0][0], nested_groupby_key_ref_values[0][1]
+            )
+            if pair_order_target != pair_order_ref:
+                raise ValueError(f"Mismatched pairing on '{pair_by_key}' between target/control and ref/control.")
+            pair_order = pair_order_target
             # Compute the difference for each pair 
             target_diff = data_target_rel - data_targetControl_rel
             ref_diff = data_ref_rel - data_refControl_rel
@@ -360,7 +378,7 @@ def diff_test(adata, layer=None, use_raw=False,
             results[f'CVpct:'f'{nested_groupby_key_target_values[0][0]}_diffcontrol_minus_{nested_groupby_key_ref_values[0][0]}_diffcontrol_values'] = cv_nested_diff
 
             # add add the pair_by_key categories order to the results dataframe
-            results[f'{pair_by_key}_order'] = [adata.obs[pair_by_key].cat.categories.astype(str).tolist()] * len(results)
+            results[f'{pair_by_key}_order'] = [pair_order] * len(results)
 
         elif 'ttest_rel' in tests or 'WilcoxonSigned' in tests:
             # Ensure `pair_by_key` is categorical for proper sorting
@@ -368,11 +386,10 @@ def diff_test(adata, layer=None, use_raw=False,
                 adata.obs[pair_by_key] = adata.obs[pair_by_key].astype('category')
             group1_idx = adata.obs[groupby_key].isin(groupby_key_target_values)
             group2_idx = adata.obs[groupby_key].isin(groupby_key_ref_values)
-            data1 = X[group1_idx].copy()
-            data2 = X[group2_idx].copy()
-            # sort the data by the pair_by_key
-            data1_rel = data1[np.argsort(adata.obs.loc[group1_idx,pair_by_key].cat.codes)]
-            data2_rel = data2[np.argsort(adata.obs.loc[group2_idx,pair_by_key].cat.codes)]
+            data1_rel, data2_rel, pair_order = _aligned_pairs(
+                X, adata, group1_idx, group2_idx, pair_by_key,
+                groupby_key_target_values, groupby_key_ref_values
+            )
             data1_rel_data2_rel_diff=data1_rel - data2_rel
 
             # paired percentage change  target-ref
@@ -387,7 +404,7 @@ def diff_test(adata, layer=None, use_raw=False,
             # target-ref
             results[f'{groupby_key_target_values[0]}_minus_{groupby_key_ref_values[0]}_values'] = data1_rel_data2_rel_diff.T.astype(str).tolist()
             # add add the pair_by_key categories order to the results dataframe
-            results[f'{pair_by_key}_order'] = [adata.obs[pair_by_key].cat.categories.astype(str).tolist()] * len(results)
+            results[f'{pair_by_key}_order'] = [pair_order] * len(results)
             # add cvs for differences with target-ref 
             cv_target_ref_diff= (np.std(data1_rel - data2_rel, axis=0,ddof=1)/np.abs(np.mean(data1_rel - data2_rel, axis=0)))*100
             results[f'CVpct:{groupby_key_target_values[0]}_minus_{groupby_key_ref_values[0]}'] = cv_target_ref_diff
@@ -463,9 +480,10 @@ def diff_test(adata, layer=None, use_raw=False,
         # Ensure `pair_by_key` is categorical for proper sorting
         if not isinstance(adata.obs[pair_by_key].dtype, pd.CategoricalDtype):
             adata.obs[pair_by_key] = adata.obs[pair_by_key].astype('category')
-        # sort the data by the pair_by_key
-        data1_rel = data1[np.argsort(adata.obs.loc[group1_idx,pair_by_key].cat.codes)]
-        data2_rel = data2[np.argsort(adata.obs.loc[group2_idx,pair_by_key].cat.codes)]
+        data1_rel, data2_rel, _ = _aligned_pairs(
+            X, adata, group1_idx, group2_idx, pair_by_key,
+            groupby_key_target_values, groupby_key_ref_values
+        )
         data1_rel_data2_rel_diff= (data1_rel - data2_rel)
         # Perform vectorized t-tests
         t_rel_stat, t_rel_test_pvals = stats.ttest_rel(data1_rel, data2_rel, axis=0)
@@ -488,9 +506,10 @@ def diff_test(adata, layer=None, use_raw=False,
         # Ensure `pair_by_key` is categorical for proper sorting
         if not isinstance(adata.obs[pair_by_key].dtype, pd.CategoricalDtype):
             adata.obs[pair_by_key] = adata.obs[pair_by_key].astype('category')
-        # sort the data by the pair_by_key
-        data1_rel = data1[np.argsort(adata.obs.loc[group1_idx,pair_by_key].cat.codes)]
-        data2_rel = data2[np.argsort(adata.obs.loc[group2_idx,pair_by_key].cat.codes)]
+        data1_rel, data2_rel, _ = _aligned_pairs(
+            X, adata, group1_idx, group2_idx, pair_by_key,
+            groupby_key_target_values, groupby_key_ref_values
+        )
         # Perform Wilcoxon rank-sum tests
         #w_stat, w_test_pvals = stats.ranksums(data1_rel, data2_rel)
         w_stat, w_test_pvals = stats.wilcoxon(data1_rel, data2_rel,alternative='two-sided',axis=0,correction=True)
@@ -536,19 +555,16 @@ def diff_test(adata, layer=None, use_raw=False,
         group_ref_idx = adata.obs[groupby_key].isin([nested_groupby_key_ref_values[0][0]])
         group_refControl_idx = adata.obs[groupby_key].isin([nested_groupby_key_ref_values[0][1]])
         # Select the data matrix for each group
-        data_target=X[group_target_idx].copy()
-        data_targetControl=X[group_targetControl_idx].copy()
-        data_ref=X[group_ref_idx].copy()
-        data_refControl=X[group_refControl_idx].copy()
-        # sort the data by the pair_by_key
-        # Ensure `pair_by_key` is categorical for proper sorting
-        if not isinstance(adata.obs[pair_by_key].dtype, pd.CategoricalDtype):
-            adata.obs[pair_by_key] = adata.obs[pair_by_key].astype('category')
-        # Sort the data by `pair_by_key`
-        data_target_rel = data_target[np.argsort(adata.obs.loc[group_target_idx, pair_by_key].cat.codes)]
-        data_targetControl_rel = data_targetControl[np.argsort(adata.obs.loc[group_targetControl_idx, pair_by_key].cat.codes)]
-        data_ref_rel = data_ref[np.argsort(adata.obs.loc[group_ref_idx, pair_by_key].cat.codes)]
-        data_refControl_rel = data_refControl[np.argsort(adata.obs.loc[group_refControl_idx, pair_by_key].cat.codes)]
+        data_target_rel, data_targetControl_rel, pair_order_target = _aligned_pairs(
+            X, adata, group_target_idx, group_targetControl_idx, pair_by_key,
+            nested_groupby_key_target_values[0][0], nested_groupby_key_target_values[0][1]
+        )
+        data_ref_rel, data_refControl_rel, pair_order_ref = _aligned_pairs(
+            X, adata, group_ref_idx, group_refControl_idx, pair_by_key,
+            nested_groupby_key_ref_values[0][0], nested_groupby_key_ref_values[0][1]
+        )
+        if pair_order_target != pair_order_ref:
+            raise ValueError(f"Mismatched pairing on '{pair_by_key}' between target/control and ref/control.")
         # Compute the difference for each pair and run the paired t-test
         target_diff = data_target_rel - data_targetControl_rel
         ref_diff = data_ref_rel - data_refControl_rel
@@ -581,19 +597,16 @@ def diff_test(adata, layer=None, use_raw=False,
         group_ref_idx = adata.obs[groupby_key].isin([nested_groupby_key_ref_values[0][0]])
         group_refControl_idx = adata.obs[groupby_key].isin([nested_groupby_key_ref_values[0][1]])
         # Select the data matrix for each group
-        data_target=X[group_target_idx].copy()
-        data_targetControl=X[group_targetControl_idx].copy()
-        data_ref=X[group_ref_idx].copy()
-        data_refControl=X[group_refControl_idx].copy()
-        # sort the data by the pair_by_key
-        # Ensure `pair_by_key` is categorical for proper sorting
-        if not isinstance(adata.obs[pair_by_key].dtype, pd.CategoricalDtype):
-            adata.obs[pair_by_key] = adata.obs[pair_by_key].astype('category')
-        # Sort the data by `pair_by_key`
-        data_target_rel = data_target[np.argsort(adata.obs.loc[group_target_idx, pair_by_key].cat.codes)]
-        data_targetControl_rel = data_targetControl[np.argsort(adata.obs.loc[group_targetControl_idx, pair_by_key].cat.codes)]
-        data_ref_rel = data_ref[np.argsort(adata.obs.loc[group_ref_idx, pair_by_key].cat.codes)]
-        data_refControl_rel = data_refControl[np.argsort(adata.obs.loc[group_refControl_idx, pair_by_key].cat.codes)]
+        data_target_rel, data_targetControl_rel, pair_order_target = _aligned_pairs(
+            X, adata, group_target_idx, group_targetControl_idx, pair_by_key,
+            nested_groupby_key_target_values[0][0], nested_groupby_key_target_values[0][1]
+        )
+        data_ref_rel, data_refControl_rel, pair_order_ref = _aligned_pairs(
+            X, adata, group_ref_idx, group_refControl_idx, pair_by_key,
+            nested_groupby_key_ref_values[0][0], nested_groupby_key_ref_values[0][1]
+        )
+        if pair_order_target != pair_order_ref:
+            raise ValueError(f"Mismatched pairing on '{pair_by_key}' between target/control and ref/control.")
         # Compute the difference for each pair and run the paired Wilcoxon rank-sum test
         target_diff = data_target_rel - data_targetControl_rel
         ref_diff = data_ref_rel - data_refControl_rel
@@ -723,7 +736,9 @@ def diff_test(adata, layer=None, use_raw=False,
     # save the results dataframe to the save_path
     if save_table and save_path is not None:
         import csv
-        results.to_csv(save_path,float_format="%.6f", quoting=csv.QUOTE_MINIMAL,)
+        results.to_csv(save_path,
+                       #float_format="%.6f",
+                        quoting=csv.QUOTE_MINIMAL,)
         print(f"Saved results diff test results to {save_path}")
 
     return results

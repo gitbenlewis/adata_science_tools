@@ -92,6 +92,84 @@ def compute_paired_mean_adata(
     
     return adata_mean_datapoint_12, mean_datapoint_12_df
 
+
+def compute_paired_difference_adata(
+    adata,
+    layer='RFU',
+    pair_by_key='AnimalID_Tattoo',
+    groupby_key='Treatment_unique',
+    datapoint_1='drug78hr',
+    datapoint_2='drug30hr',
+    debug_mode=True
+):
+    """
+    Compute the paired difference (datapoint_1 - datapoint_2) in an AnnData object and return a new AnnData object.
+    
+    Parameters:
+    - adata: AnnData object
+    - layer: The layer to use (default: 'RFU'). If None, uses .X
+    - pair_by_key: The key in .obs to pair the data
+    - groupby_key: The key in .obs used to select groups
+    - datapoint_1: Group treated as minuend
+    - datapoint_2: Group treated as subtrahend
+    - debug_mode: If True, prints debug information
+    
+    Returns:
+    - adata_diff_datapoint_12: AnnData object with difference values
+    - diff_datapoint_12_df: DataFrame of difference values
+    """
+    _adata = adata.copy()
+    
+    X = _adata.layers[layer] if layer else _adata.X
+    
+    datapoint_1_idx = _adata.obs[groupby_key].isin([datapoint_1])
+    datapoint_2_idx = _adata.obs[groupby_key].isin([datapoint_2])
+    
+    data_datapoint_1 = X[datapoint_1_idx, :].copy()
+    data_datapoint_2 = X[datapoint_2_idx, :].copy()
+    
+    if debug_mode:
+        display('data_datapoint_1:', data_datapoint_1.shape, data_datapoint_1[:11,:2])
+        display('data_datapoint_2:', data_datapoint_2.shape, data_datapoint_2[:11,:2])
+    
+    if not isinstance(_adata.obs[pair_by_key].dtype, pd.CategoricalDtype):
+        _adata.obs[pair_by_key] = _adata.obs[pair_by_key].astype('category')
+    
+    data_datapoint_1_rel = data_datapoint_1[np.argsort(_adata.obs.loc[datapoint_1_idx, pair_by_key].cat.codes)]
+    data_datapoint_2_rel = data_datapoint_2[np.argsort(_adata.obs.loc[datapoint_2_idx, pair_by_key].cat.codes)]
+    
+    if debug_mode:
+        display('data_datapoint_1_rel:', data_datapoint_1_rel.shape, data_datapoint_1_rel[:11,:2])
+        display('data_datapoint_2_rel:', data_datapoint_2_rel.shape, data_datapoint_2_rel[:11,:2])
+    
+    diff_datapoint_12 = data_datapoint_1_rel - data_datapoint_2_rel
+    
+    if debug_mode:
+        display('diff_datapoint_12:', diff_datapoint_12.shape, diff_datapoint_12[:11,:2])
+    
+    diff_datapoint_12_df = pd.DataFrame(diff_datapoint_12, columns=_adata.var.index)
+    diff_datapoint_12_df['obs_names1'] = _adata[datapoint_1_idx].obs_names.to_numpy()[
+        np.argsort(_adata.obs.loc[datapoint_1_idx, pair_by_key].cat.codes)
+    ]
+    diff_datapoint_12_df['obs_names2'] = _adata[datapoint_2_idx].obs_names.to_numpy()[
+        np.argsort(_adata.obs.loc[datapoint_2_idx, pair_by_key].cat.codes)
+    ]
+    diff_datapoint_12_df['obs_names'] = 'diff_' + diff_datapoint_12_df['obs_names1'] + '_' + diff_datapoint_12_df['obs_names2']
+    diff_datapoint_12_df.set_index('obs_names', inplace=True)
+    diff_datapoint_12_df.drop(columns=['obs_names1', 'obs_names2'], inplace=True)
+    
+    if debug_mode:
+        display(diff_datapoint_12_df.head(5))
+    
+    adata_diff_datapoint_12 = ad.AnnData(X=diff_datapoint_12_df)
+    adata_diff_datapoint_12.var_names = _adata.var_names
+    adata_diff_datapoint_12.var = _adata.var.copy()
+    
+    if debug_mode:
+        display(adata_diff_datapoint_12[:11,:2])
+    
+    return adata_diff_datapoint_12, diff_datapoint_12_df
+
 '''_adata = adata.copy()
 adata_mean_datapoint_12, mean_datapoint_12_df = compute_mean_adata(
     adata=_adata,
