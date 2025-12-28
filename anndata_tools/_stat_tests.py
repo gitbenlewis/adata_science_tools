@@ -18,6 +18,9 @@ def diff_test(adata, layer=None, use_raw=False,
             log_inputs=True,
             log_level="INFO",
             save_log=True,
+            x_df=None,
+            var_df=None,
+            obs_df=None,
 
             ):
     """
@@ -30,8 +33,9 @@ def diff_test(adata, layer=None, use_raw=False,
     ## updated 2025-05-28 added option to use raw data from adata.raw if available
     ## updated 2025-03-12 fix WilcoxonSigned to paired not ranksums
     Perform various statistical comparisons (independent, paired, and nested paired tests) 
-    between groups or conditions in an AnnData object. This function can handle optional 
-    baseline or control conditions (nested comparisons) and provides both parametric 
+    between groups or conditions in an AnnData object (or x_df/obs_df/var_df inputs that 
+    are converted to AnnData). This function can handle optional baseline or control 
+    conditions (nested comparisons) and provides both parametric 
     (t-tests) and non-parametric (Mann-Whitney U, Wilcoxon Signed-rank) tests. It also 
     computes normality tests (Shapiro-Wilk and Kolmogorov-Smirnov) to help guide test 
     selection.
@@ -41,9 +45,20 @@ def diff_test(adata, layer=None, use_raw=False,
     adata : AnnData
         The AnnData object containing observations (rows in adata.obs) and variables 
         (columns in adata.var). The primary data can be in `adata.X` or in a specified 
-        `layer`.
+        `layer`. Ignored if x_df/obs_df/var_df are provided.
     layer : str, optional
         Key in `adata.layers` to use as the data matrix. If None, `adata.X` is used.
+        Ignored if x_df/obs_df/var_df are provided.
+    x_df : pandas.DataFrame or str or Path, optional
+        Alternative data matrix (observations x variables). If provided, `obs_df` and
+        `var_df` are required. If a string/Path, it is read with
+        `pandas.read_csv(index_col=0)`.
+    var_df : pandas.DataFrame or str or Path, optional
+        Alternative variables DataFrame. Index must match `x_df` columns. If a string/Path,
+        it is read with `pandas.read_csv(index_col=0)`.
+    obs_df : pandas.DataFrame or str or Path, optional
+        Alternative observations DataFrame. Index must match `x_df` index. If a string/Path,
+        it is read with `pandas.read_csv(index_col=0)`.
     groupby_key : str, optional
         Column in `adata.obs` that defines the groups/conditions to compare.
         Required for all tests except when explicitly doing nested comparisons with
@@ -189,14 +204,27 @@ def diff_test(adata, layer=None, use_raw=False,
          tests=['ttest_ind', 'ttest_rel','mannwhitneyu', 'WilcoxonSigned','ttest_rel_nested','WilcoxonSigned_nested'],
          pair_by_key="AnimalID"
      )
+    # Example using CSVs instead of adata:
+    diff_test(
+         adata=None,
+         x_df="x.csv",
+         obs_df="obs.csv",
+         var_df="var.csv",
+         groupby_key="Treatment",
+         groupby_key_target_values=["drug"],
+         groupby_key_ref_values=["vehicle"],
+         tests=['ttest_ind'],
+     )
     """
     import logging
     import os
     from datetime import datetime
+    from pathlib import Path
     import numpy as np
     from scipy import stats
     from statsmodels.stats.multitest import multipletests
     import pandas as pd
+    import anndata
 
     log = logger or logging.getLogger(__name__)
     if log_level is not None:
@@ -231,11 +259,66 @@ def diff_test(adata, layer=None, use_raw=False,
             file_handler.setFormatter(logging.Formatter("%(levelname)s:%(name)s:%(message)s"))
             log.addHandler(file_handler)
         log.info(f"diff_test log start: {datetime.now().isoformat(timespec='seconds')}")
+
+    def _coerce_df(df_like, name):
+        if df_like is None:
+            return None
+        if isinstance(df_like, pd.DataFrame):
+            log.info(f"Using provided {name} with shape {df_like.shape}")
+            return df_like
+        if isinstance(df_like, (str, Path)):
+            df = pd.read_csv(df_like, index_col=0)
+            log.info(f"Loaded {name} from {df_like} with shape {df.shape}")
+            return df
+        raise TypeError(f"{name} must be a pandas.DataFrame or CSV path.")
+
+    x_df = _coerce_df(x_df, "x_df")
+    var_df = _coerce_df(var_df, "var_df")
+    obs_df = _coerce_df(obs_df, "obs_df")
+
+    uses_alt_inputs = any(v is not None for v in (x_df, var_df, obs_df))
+    if not uses_alt_inputs and adata is None:
+        raise ValueError("Please provide an adata object or x_df/var_df/obs_df inputs.")
+    if uses_alt_inputs:
+        if x_df is None or var_df is None or obs_df is None:
+            raise ValueError("x_df, var_df, and obs_df must all be provided when using DataFrame/CSV inputs.")
+        if adata is not None:
+            log.info("x_df/var_df/obs_df provided; ignoring adata.")
+        missing_obs = x_df.index.difference(obs_df.index)
+        missing_xobs = obs_df.index.difference(x_df.index)
+        if len(missing_obs) or len(missing_xobs):
+            raise ValueError(
+                f"obs_df index must match x_df index; missing in obs_df={len(missing_obs)}, "
+                f"missing in x_df={len(missing_xobs)}"
+            )
+        if not x_df.index.equals(obs_df.index):
+            obs_df = obs_df.reindex(x_df.index)
+        missing_var = x_df.columns.difference(var_df.index)
+        missing_xvar = var_df.index.difference(x_df.columns)
+        if len(missing_var) or len(missing_xvar):
+            raise ValueError(
+                f"var_df index must match x_df columns; missing in var_df={len(missing_var)}, "
+                f"missing in x_df={len(missing_xvar)}"
+            )
+        if not x_df.columns.equals(var_df.index):
+            var_df = var_df.reindex(x_df.columns)
+        adata = anndata.AnnData(X=x_df.to_numpy(), obs=obs_df.copy(), var=var_df.copy())
+        layer = None
+        use_raw = False
+        log.info(f"Constructed AnnData from x_df/obs_df/var_df with shape {adata.shape}.")
+
+    def _summarize_df_input(df_like):
+        if isinstance(df_like, pd.DataFrame):
+            return f"DataFrame shape={df_like.shape}"
+        return df_like
     if log_inputs and log.isEnabledFor(logging.INFO):
         args_items = [
             ('adata', adata),
             ('layer', layer),
             ('use_raw', use_raw),
+            ('x_df', _summarize_df_input(x_df)),
+            ('var_df', _summarize_df_input(var_df)),
+            ('obs_df', _summarize_df_input(obs_df)),
             ('groupby_key', groupby_key),
             ('groupby_key_target_values', groupby_key_target_values),
             ('groupby_key_ref_values', groupby_key_ref_values),
