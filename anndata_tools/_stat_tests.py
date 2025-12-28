@@ -223,7 +223,9 @@ def diff_test(adata, layer=None, use_raw=False,
                     has_log_file = True
                     break
         if not has_log_file:
-            file_handler = logging.FileHandler(log_path)
+            file_handler = logging.FileHandler(log_path, 
+                                               mode="w" # ouverwrite existing log file
+                                               )
             if log_level is not None:
                 file_handler.setLevel(log_level)
             file_handler.setFormatter(logging.Formatter("%(levelname)s:%(name)s:%(message)s"))
@@ -280,6 +282,10 @@ def diff_test(adata, layer=None, use_raw=False,
         Xb = Xb[order_b]
         pair_order_a = adata.obs.loc[idx_a, pair_key][mask_a].iloc[order_a].astype(str).tolist()
         pair_order_b = adata.obs.loc[idx_b, pair_key][mask_b].iloc[order_b].astype(str).tolist()
+        log.info(
+            f"Aligned pairs for {label_a} vs {label_b}: {len(common_ids)} overlapping IDs; "
+            f"first 30 IDs: {pair_order_a[:30]}"
+        )
         if Xa.shape[0] != Xb.shape[0] or pair_order_a != pair_order_b:
             raise ValueError(f"Mismatched pairing on '{pair_key}' for {label_a} vs {label_b}.")
         return Xa, Xb, pair_order_a
@@ -291,6 +297,8 @@ def diff_test(adata, layer=None, use_raw=False,
             raise ValueError("Please provide a groupby key (column in adata.obs).")
     # Ensure `groupby` is categorical
     adata.obs[groupby_key] = adata.obs[groupby_key].astype("category")
+    log.info(f"Groupby key '{groupby_key}' categories: {adata.obs[groupby_key].cat.categories.tolist()}")
+    log.info(f"Number of observations per group in '{groupby_key}':\n{adata.obs[groupby_key].value_counts()}")
      # if tests is empty return error message or not a list return error message
     if not tests or not isinstance(tests, list):
         raise ValueError("Please provide a list of tests to perform.")
@@ -301,9 +309,12 @@ def diff_test(adata, layer=None, use_raw=False,
     if groupby_key_ref_values is None:
         log.info(f"groupby_key_ref_values is None, using all other values as groupby_key_ref_values")
         groupby_key_ref_values=[x for x in adata.obs[groupby_key].unique() if x not in groupby_key_target_values]
+        log.info(f"Using groupby_key_ref_values: {groupby_key_ref_values}")
     # paired/nested tests require a pairing key
     paired_tests = {'ttest_rel', 'WilcoxonSigned', 'ttest_rel_nested', 'WilcoxonSigned_nested'}
     needs_pairing = any(t in tests for t in paired_tests)
+    log.info(f"Requested tests: {tests}")
+    log.info(f"Pairing required: {needs_pairing} (pair_by_key={pair_by_key})")
     if needs_pairing:
         if pair_by_key is None:
             raise ValueError("pair_by_key is required for paired or nested tests.")
@@ -312,29 +323,39 @@ def diff_test(adata, layer=None, use_raw=False,
         if adata.obs[pair_by_key].isna().any():
             raise ValueError("pair_by_key contains missing values; paired tests require complete pairs.")
         adata.obs[pair_by_key] = adata.obs[pair_by_key].astype('category')
+        log.info(f"Pairing key '{pair_by_key}' has {adata.obs[pair_by_key].nunique()} unique IDs.")
+        log.info(f"Pairing by key '{pair_by_key}' with categories: {adata.obs[pair_by_key].cat.categories.tolist()}")
+        log.info(f"Number of unique pairs in '{pair_by_key}': {adata.obs[pair_by_key].nunique()}")
+        log.info(f"Pairing key '{pair_by_key}' value counts:\n{adata.obs[pair_by_key].value_counts()}")
 
-    ### extract the data matrix from the adata object and clean it
+    ### #) extract the data matrix from the adata object and clean it
     # Select the data matrix
     #X = adata.layers[layer] if layer else adata.X
+    data_source = None
     if use_raw and adata.raw is not None:
         X = adata.raw.X if layer is None else adata.raw.layers[layer]
         if layer:
             log.info(f"Using raw data from adata.raw.{layer}.")
+            data_source = f"adata.raw.layers.{layer}"
         else:
             log.info(f"Using raw data from adata.raw.X.")
+            data_source = "adata.raw.X"
     else:
         # Use the specified layer or the main data matrix
         if layer is not None and layer in adata.layers:
             X = adata.layers[layer]
             log.info(f"Using data from adata.layers.{layer}.")
+            data_source = f"adata.layers.{layer}"
         else:
             X = adata.X
             log.info(f"Using data from adata.X.")
+            data_source = "adata.X"
     if hasattr(X, "toarray"):  # Convert sparse matrix to dense if necessary
         X = X.toarray()
+    log.info(f"Data matrix loaded from {data_source} with shape {X.shape}, dtype {X.dtype}")
     # Remove genes (columns) with zero expression across all cells
     log.info(f"Data matrix shape before removing zero-expression variables: {X.shape}")
-    _X_shape_before_zero_removal=X.shape.copy()
+    _X_shape_before_zero_removal=X.shape
     non_zero_genes = ~np.all(X == 0, axis=0)
     X = X[:, non_zero_genes]
     var_names = adata.var_names[non_zero_genes]
@@ -348,6 +369,10 @@ def diff_test(adata, layer=None, use_raw=False,
     group2_idx = adata.obs[groupby_key].isin(groupby_key_ref_values)
     data1 = X[group1_idx].copy()
     data2 = X[group2_idx].copy()
+    log.info(
+        f"Group sizes for {groupby_key}: target={groupby_key_target_values} n={int(group1_idx.sum())}, "
+        f"ref={groupby_key_ref_values} n={int(group2_idx.sum())}"
+    )
 
     if groupby_key_target_values:
         # Boolean indexing to select cells in each group
@@ -463,6 +488,11 @@ def diff_test(adata, layer=None, use_raw=False,
 
             # add add the pair_by_key categories order to the results dataframe
             results[f'{pair_by_key}_order'] = [pair_order] * len(results)
+            log.info(
+                f"add_values2results: nested values stored for "
+                f"{nested_groupby_key_target_values[0]} vs {nested_groupby_key_ref_values[0]}; "
+                f"pair order stored in '{pair_by_key}_order'"
+            )
 
         elif 'ttest_rel' in tests or 'WilcoxonSigned' in tests:
             # Ensure `pair_by_key` is categorical for proper sorting
@@ -489,6 +519,10 @@ def diff_test(adata, layer=None, use_raw=False,
             results[f'{groupby_key_target_values[0]}_minus_{groupby_key_ref_values[0]}_values'] = data1_rel_data2_rel_diff.T.astype(str).tolist()
             # add add the pair_by_key categories order to the results dataframe
             results[f'{pair_by_key}_order'] = [pair_order] * len(results)
+            log.info(
+                f"add_values2results: paired values stored for {groupby_key_target_values[0]} vs "
+                f"{groupby_key_ref_values[0]}; pair order stored in '{pair_by_key}_order'"
+            )
             # add cvs for differences with target-ref 
             cv_target_ref_diff= (np.std(data1_rel - data2_rel, axis=0,ddof=1)/np.abs(np.mean(data1_rel - data2_rel, axis=0)))*100
             results[f'CVpct:{groupby_key_target_values[0]}_minus_{groupby_key_ref_values[0]}'] = cv_target_ref_diff
@@ -508,14 +542,20 @@ def diff_test(adata, layer=None, use_raw=False,
             ref_order = order_series[group2_idx].astype(str).tolist()
             results[f'{groupby_key_target_values[0]}_{order_key}_order'] = [target_order] * len(results)
             results[f'{groupby_key_ref_values[0]}_{order_key}_order'] = [ref_order] * len(results)
-
+            log.info(
+                f"add_values2results: independent values stored for {groupby_key_target_values[0]} vs "
+                f"{groupby_key_ref_values[0]}; order_key='{order_key}'"
+            )
 
     ### Perform statistical tests
+    nested_group_sizes_logged = False
     if 'ttest_ind' in tests:
         # Perform vectorized t-tests
         t_stat, t_test_pvals = stats.ttest_ind(data1, data2, equal_var=False, axis=0)
         # Multiple testing correction
         _, t_test_pvals_corrected, _, _ = multipletests(t_test_pvals[np.isfinite(t_test_pvals)], method="fdr_bh")
+        n_finite_ttest_ind = int(np.isfinite(t_test_pvals).sum())
+        log.info(f"ttest_ind: corrected {n_finite_ttest_ind} of {len(t_test_pvals)} p-values with FDR.")
         # Create a full array to store the corrected p-values, keeping NaNs where they were
         t_test_pvals_corrected_full = np.full_like(t_test_pvals, np.nan, dtype=float)
         t_test_pvals_corrected_full[np.isfinite(t_test_pvals)] = t_test_pvals_corrected
@@ -531,6 +571,8 @@ def diff_test(adata, layer=None, use_raw=False,
         #    for i in range(data1.shape[1])])
         # Multiple testing correction
         _, u_test_pvals_corrected, _, _ = multipletests(u_test_pvals[np.isfinite(u_test_pvals)], method="fdr_bh")
+        n_finite_mannwhitneyu = int(np.isfinite(u_test_pvals).sum())
+        log.info(f"mannwhitneyu: corrected {n_finite_mannwhitneyu} of {len(u_test_pvals)} p-values with FDR.")
         # Create a full array to store the corrected p-values, keeping NaNs where they were
         u_test_pvals_corrected_full = np.full_like(u_test_pvals, np.nan, dtype=float)
         u_test_pvals_corrected_full[np.isfinite(u_test_pvals)] = u_test_pvals_corrected
@@ -564,6 +606,12 @@ def diff_test(adata, layer=None, use_raw=False,
             ).pvalue
             for i in range(data2.shape[1])
         ]
+        skip_shapiro_group1 = shapiro_pvals_group1.count('n<3_or_n>5000')
+        skip_shapiro_group2 = shapiro_pvals_group2.count('n<3_or_n>5000')
+        log.info(
+            f"Shapiro skipped (n<3_or_n>5000): {group1_label} {skip_shapiro_group1}/{len(shapiro_pvals_group1)}, "
+            f"{group2_label} {skip_shapiro_group2}/{len(shapiro_pvals_group2)}"
+        )
         # Add p-values to the results DataFrame 
         results[f'shapiro_pvals: {group1_label}'] = shapiro_pvals_group1
         results[f'ks_pvals: {group1_label}'] = ks_pvals_group1
@@ -583,6 +631,8 @@ def diff_test(adata, layer=None, use_raw=False,
         t_rel_stat, t_rel_test_pvals = stats.ttest_rel(data1_rel, data2_rel, axis=0)
         # Multiple testing correction
         _, t_rel_test_pvals_corrected, _, _ = multipletests(t_rel_test_pvals[np.isfinite(t_rel_test_pvals)], method="fdr_bh")
+        n_finite_ttest_rel = int(np.isfinite(t_rel_test_pvals).sum())
+        log.info(f"ttest_rel: corrected {n_finite_ttest_rel} of {len(t_rel_test_pvals)} p-values with FDR.")
         # Create a full array to store the corrected p-values, keeping NaNs where they were
         t_rel_test_pvals_corrected_full = np.full_like(t_rel_test_pvals, np.nan, dtype=float)
         t_rel_test_pvals_corrected_full[np.isfinite(t_rel_test_pvals)] = t_rel_test_pvals_corrected
@@ -609,6 +659,8 @@ def diff_test(adata, layer=None, use_raw=False,
         w_stat, w_test_pvals = stats.wilcoxon(data1_rel, data2_rel,alternative='two-sided',axis=0,correction=True)
         # Multiple testing correction
         _, w_test_pvals_corrected, _, _ = multipletests(w_test_pvals[np.isfinite(w_test_pvals)], method="fdr_bh")
+        n_finite_wilcoxon = int(np.isfinite(w_test_pvals).sum())
+        log.info(f"WilcoxonSigned: corrected {n_finite_wilcoxon} of {len(w_test_pvals)} p-values with FDR.")
         # Create a full array to store the corrected p-values, keeping NaNs where they were
         w_test_pvals_corrected_full = np.full_like(w_test_pvals, np.nan, dtype=float)
         w_test_pvals_corrected_full[np.isfinite(w_test_pvals)] = w_test_pvals_corrected
@@ -637,6 +689,11 @@ def diff_test(adata, layer=None, use_raw=False,
             ).pvalue
             for i in range(data1_rel_data2_rel_diff.shape[1])
         ]
+        skip_shapiro_paired = shapiro_pvals_data1_rel_data2_rel_diff.count('n<3_or_n>5000')
+        log.info(
+            f"Shapiro skipped (n<3_or_n>5000): paired_diff ({group1_label}-{group2_label}) "
+            f"{skip_shapiro_paired}/{len(shapiro_pvals_data1_rel_data2_rel_diff)}"
+        )
         # Add p-values to the results DataFrame
         results[f'shapiro_pvals: paired_diff ({group1_label}-{group2_label})'] = shapiro_pvals_data1_rel_data2_rel_diff
         results[f'ks_pvals: paired_diff ({group1_label}-{group2_label})'] = ks_pvals_data1_rel_data2_rel_diff
@@ -648,6 +705,14 @@ def diff_test(adata, layer=None, use_raw=False,
         group_targetControl_idx = adata.obs[groupby_key].isin([nested_groupby_key_target_values[0][1]])
         group_ref_idx = adata.obs[groupby_key].isin([nested_groupby_key_ref_values[0][0]])
         group_refControl_idx = adata.obs[groupby_key].isin([nested_groupby_key_ref_values[0][1]])
+        if not nested_group_sizes_logged:
+            log.info(
+                f"Nested group sizes for {groupby_key}: target={nested_groupby_key_target_values[0]} "
+                f"n_target={int(group_target_idx.sum())}, n_target_control={int(group_targetControl_idx.sum())}, "
+                f"ref={nested_groupby_key_ref_values[0]} n_ref={int(group_ref_idx.sum())}, "
+                f"n_ref_control={int(group_refControl_idx.sum())}"
+            )
+            nested_group_sizes_logged = True
         # Select the data matrix for each group
         data_target_rel, data_targetControl_rel, pair_order_target = _aligned_pairs(
             X, adata, group_target_idx, group_targetControl_idx, pair_by_key,
@@ -666,6 +731,10 @@ def diff_test(adata, layer=None, use_raw=False,
         t_rel_nested_stat, t_rel_nested_test_pvals = stats.ttest_rel(target_diff, ref_diff, axis=0)
         # Multiple testing correction
         _, t_rel_nested_test_pvals_corrected, _, _ = multipletests(t_rel_nested_test_pvals[np.isfinite(t_rel_nested_test_pvals)], method="fdr_bh")
+        n_finite_ttest_rel_nested = int(np.isfinite(t_rel_nested_test_pvals).sum())
+        log.info(
+            f"ttest_rel_nested: corrected {n_finite_ttest_rel_nested} of {len(t_rel_nested_test_pvals)} p-values with FDR."
+        )
         # Create a full array to store the corrected p-values, keeping NaNs where they were
         t_rel_nested_test_pvals_corrected_full = np.full_like(t_rel_nested_test_pvals, np.nan, dtype=float)
         t_rel_nested_test_pvals_corrected_full[np.isfinite(t_rel_nested_test_pvals)] = t_rel_nested_test_pvals_corrected
@@ -690,6 +759,14 @@ def diff_test(adata, layer=None, use_raw=False,
         group_targetControl_idx = adata.obs[groupby_key].isin([nested_groupby_key_target_values[0][1]])
         group_ref_idx = adata.obs[groupby_key].isin([nested_groupby_key_ref_values[0][0]])
         group_refControl_idx = adata.obs[groupby_key].isin([nested_groupby_key_ref_values[0][1]])
+        if not nested_group_sizes_logged:
+            log.info(
+                f"Nested group sizes for {groupby_key}: target={nested_groupby_key_target_values[0]} "
+                f"n_target={int(group_target_idx.sum())}, n_target_control={int(group_targetControl_idx.sum())}, "
+                f"ref={nested_groupby_key_ref_values[0]} n_ref={int(group_ref_idx.sum())}, "
+                f"n_ref_control={int(group_refControl_idx.sum())}"
+            )
+            nested_group_sizes_logged = True
         # Select the data matrix for each group
         data_target_rel, data_targetControl_rel, pair_order_target = _aligned_pairs(
             X, adata, group_target_idx, group_targetControl_idx, pair_by_key,
@@ -717,6 +794,10 @@ def diff_test(adata, layer=None, use_raw=False,
         )
         # Multiple testing correction
         _, w_nested_test_pvals_corrected, _, _ = multipletests(w_nested_test_pvals[np.isfinite(w_nested_test_pvals)], method="fdr_bh")
+        n_finite_wilcoxon_nested = int(np.isfinite(w_nested_test_pvals).sum())
+        log.info(
+            f"WilcoxonSigned_nested: corrected {n_finite_wilcoxon_nested} of {len(w_nested_test_pvals)} p-values with FDR."
+        )
         # Create a full array to store the corrected p-values, keeping NaNs where they were
         w_nested_test_pvals_full_corrected = np.full_like(w_nested_test_pvals, np.nan, dtype=float)
         w_nested_test_pvals_full_corrected[np.isfinite(w_nested_test_pvals)] = w_nested_test_pvals_corrected
@@ -750,6 +831,12 @@ def diff_test(adata, layer=None, use_raw=False,
             ).pvalue
             for i in range(nested_diff.shape[1])
         ]
+        skip_shapiro_nested = shapiro_pvals_nested_diff.count('n<3_or_n>5000')
+        log.info(
+            f"Shapiro skipped (n<3_or_n>5000): paired_NESTED_diffcontrol "
+            f"{nested_groupby_key_target_values[0][0]}_{nested_groupby_key_ref_values[0][0]} "
+            f"{skip_shapiro_nested}/{len(shapiro_pvals_nested_diff)}"
+        )
         # Add p-values to the results DataFrame
         # f'{nested_groupby_key_target_values[0][0]}_{nested_groupby_key_ref_values[0][0]}_NESTED_diff_values'
         results[f'shapiro_pvals: paired_NESTED_diffcontrol {nested_groupby_key_target_values[0][0]}_{nested_groupby_key_ref_values[0][0]}'] = shapiro_pvals_nested_diff
@@ -773,6 +860,12 @@ def diff_test(adata, layer=None, use_raw=False,
     # Sort the results by absolute value of the selected hypothesis test statistic
     if sortby is not None and sortby in results.columns:
         results.sort_values(sortby, ascending=ascending, inplace=True, key=lambda x: x.abs(), na_position='last')
+        top_var = results.index[0] if len(results.index) else None
+        log.info(f"Sorted results by abs({sortby}), ascending={ascending}; top var_names={top_var}")
+    elif sortby is None:
+        log.info("sortby not provided and no default statistic available; results not sorted.")
+    else:
+        log.info(f"sortby '{sortby}' not in results columns; results not sorted.")
 
 
     # add results to adata.uns if specified
@@ -802,6 +895,10 @@ def diff_test(adata, layer=None, use_raw=False,
         results_for_uns = results.copy()
         # stringify list-in-cell columns so h5ad can write them
         list_cols = [c for c in results_for_uns.columns if c.endswith('_values') or c.endswith('_order')]
+        log.info(
+            f"Saving results to adata.uns['diff_test_results']['{key}'] "
+            f"(rows={results_for_uns.shape[0]}, cols={results_for_uns.shape[1]}, list_cols={len(list_cols)})"
+        )
         for c in list_cols:
             results_for_uns[c] = results_for_uns[c].apply(_to_json_if_listlike).astype(str)
         adata.uns['diff_test_results'][key] = results_for_uns
@@ -833,7 +930,7 @@ def diff_test(adata, layer=None, use_raw=False,
         results.to_csv(save_path,
                        #float_format="%.6f",
                         quoting=csv.QUOTE_MINIMAL,)
-        log.info(f"Saved results diff test results to {save_path}")
+        log.info(f"Saved results diff test results to {save_path} (rows={results.shape[0]}, cols={results.shape[1]})")
 
     if save_log:
         log.info(f"diff_test log end: {datetime.now().isoformat(timespec='seconds')}")
