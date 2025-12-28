@@ -21,6 +21,7 @@ def diff_test(adata, layer=None, use_raw=False,
 
             ):
     """
+    #### update4d 2025-12-27 added a logging and a save_log option
     #### updated 2025-12-11 changed pvals_corrected to pvals_FDR to be more explicit
     #### updated 2025-12-11 store values in adata.uns as str to avoid issues with saving lists in anndata
     #### updated 2025-12-11 to add save options and adata.var columns to results 
@@ -332,9 +333,13 @@ def diff_test(adata, layer=None, use_raw=False,
     if hasattr(X, "toarray"):  # Convert sparse matrix to dense if necessary
         X = X.toarray()
     # Remove genes (columns) with zero expression across all cells
+    log.info(f"Data matrix shape before removing zero-expression variables: {X.shape}")
+    _X_shape_before_zero_removal=X.shape.copy()
     non_zero_genes = ~np.all(X == 0, axis=0)
     X = X[:, non_zero_genes]
     var_names = adata.var_names[non_zero_genes]
+    log.info(f"Data matrix shape after removing zero-expression variables: {X.shape}")
+    log.info(f"Removed { _X_shape_before_zero_removal[1] - X.shape[1]} zero-expression variables (genes).")
 
     ### Initialize results DataFrame
     results = pd.DataFrame({"var_names": var_names, }, index=var_names)
@@ -493,6 +498,16 @@ def diff_test(adata, layer=None, use_raw=False,
             results[f'{groupby_key_target_values[0]}_values'] = data1.T.astype(str).tolist()
             # ref
             results[f'{groupby_key_ref_values[0]}_values'] = data2.T.astype(str).tolist()
+            if sortby is not None and sortby in adata.obs.columns:
+                order_key = sortby
+                order_series = adata.obs[sortby]
+            else:
+                order_key = adata.obs_names.name or "obs_name"
+                order_series = pd.Series(adata.obs_names, index=adata.obs.index)
+            target_order = order_series[group1_idx].astype(str).tolist()
+            ref_order = order_series[group2_idx].astype(str).tolist()
+            results[f'{groupby_key_target_values[0]}_{order_key}_order'] = [target_order] * len(results)
+            results[f'{groupby_key_ref_values[0]}_{order_key}_order'] = [ref_order] * len(results)
 
 
     ### Perform statistical tests
