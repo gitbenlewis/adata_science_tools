@@ -242,22 +242,18 @@ def diff_test(adata, layer=None, use_raw=False,
         if save_path is None:
             raise ValueError("save_path is required when save_log is True.")
         log_path = f"{save_path}.log"
-        log_path_abs = os.path.abspath(log_path)
-        has_log_file = False
-        for handler in log.handlers:
+        for handler in list(log.handlers):
             if isinstance(handler, logging.FileHandler):
-                handler_path = os.path.abspath(getattr(handler, "baseFilename", ""))
-                if handler_path == log_path_abs:
-                    has_log_file = True
-                    break
-        if not has_log_file:
-            file_handler = logging.FileHandler(log_path, 
-                                               mode="w" # ouverwrite existing log file
-                                               )
-            if log_level is not None:
-                file_handler.setLevel(log_level)
-            file_handler.setFormatter(logging.Formatter("%(levelname)s:%(name)s:%(message)s"))
-            log.addHandler(file_handler)
+                log.removeHandler(handler)
+                handler.close()
+        file_handler = logging.FileHandler(
+            log_path,
+            mode="w",  # overwrite existing log file
+        )
+        if log_level is not None:
+            file_handler.setLevel(log_level)
+        file_handler.setFormatter(logging.Formatter("%(levelname)s:%(name)s:%(message)s"))
+        log.addHandler(file_handler)
         log.info(f"diff_test log start: {datetime.now().isoformat(timespec='seconds')}")
 
     def _coerce_df(df_like, name):
