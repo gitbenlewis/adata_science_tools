@@ -28,8 +28,12 @@ def volcano_plot_generic(
         pvalue_threshold: float | None = None,
         figsize: tuple | None = (15, 10),
         legend_bbox_to_anchor: tuple | None = (1.15, 1),
+        title_fontsize: int | None = None,
+        axis_label_and_tick_fontsize: int | None = None,
+        legend_fontsize: int | None = None,
         label_top_features: bool | None = False,
         only_label_hue_dots: bool | None = True,
+        label_top_features_fontsize: int | None = None,
         feature_label_col: str | None = 'gene_names',
         n_top_features: int | None = 50,
         dot_size_shrink_factor: int | None = 300,
@@ -78,8 +82,16 @@ def volcano_plot_generic(
         Figure size (default (15, 10)).
     legend_bbox_to_anchor : tuple, optional
         Legend placement (default (1.15, 1)).
+    title_fontsize : int, optional
+        Font size for the plot title; if None, use Matplotlib defaults.
+    axis_label_and_tick_fontsize : int, optional
+        Font size for x/y axis labels and tick labels; if None, use Matplotlib defaults.
+    legend_fontsize : int, optional
+        Font size for legend text; if None, use Matplotlib defaults.
     label_top_features : bool, optional
         Whether to label top features (default False).
+    label_top_features_fontsize : int, optional
+        Font size for feature labels; if None, use Matplotlib defaults.
     feature_label_col : str, optional
         Column used for feature labels (default 'gene_names').
     n_top_features : int, optional
@@ -233,7 +245,7 @@ def volcano_plot_generic(
                             style='Marker', palette=significance_custom_palette,
                             sizes=rel_size, s=rel_size, ax=ax)
         p.set(xlim=(-xlimit, xlimit), ylim=(0, ylimit))
-        p.set_title(f'{title_text}\n{comparison_label}\n\n')
+        p.set_title(f'{title_text}\n{comparison_label}\n\n', fontsize=title_fontsize)
 
         # Add significance threshold lines
         if pvalue_threshold is not None:
@@ -242,9 +254,11 @@ def volcano_plot_generic(
         p.axvline(x=-log2FoldChange_threshold, color='gray', linestyle='--')
 
         # Axis labels + legend
-        p.set_xlabel(set_xlabel)
-        p.set_ylabel(set_ylabel)
-        p.legend(bbox_to_anchor=legend_bbox_to_anchor, loc=1, borderaxespad=0.05)
+        p.set_xlabel(set_xlabel, fontsize=axis_label_and_tick_fontsize)
+        p.set_ylabel(set_ylabel, fontsize=axis_label_and_tick_fontsize)
+        if axis_label_and_tick_fontsize is not None:
+            p.tick_params(axis="both", labelsize=axis_label_and_tick_fontsize)
+        p.legend(bbox_to_anchor=legend_bbox_to_anchor, loc=1, borderaxespad=0.05, fontsize=legend_fontsize)
 
     elif hue_column is not None:
         # Case 2: custom hue column
@@ -260,7 +274,7 @@ def volcano_plot_generic(
         p = sns.scatterplot(data=df, x=l2fc_col, y='-log10(padj)', hue=hue_value, style='Marker',
                             palette=hue_palette_custom_palette[:], s=rel_size, ax=ax)
         p.set(xlim=(-xlimit, xlimit), ylim=(0, ylimit))
-        p.set_title(f'{title_text}\n{comparison_label}\n\n')
+        p.set_title(f'{title_text}\n{comparison_label}\n\n', fontsize=title_fontsize)
 
         # Add threshold lines
         if pvalue_threshold is not None:
@@ -269,16 +283,22 @@ def volcano_plot_generic(
         p.axvline(x=-log2FoldChange_threshold, color='gray', linestyle='--')
 
         # Axis labels + legend cleanup
-        p.set_xlabel(set_xlabel)
-        p.set_ylabel(set_ylabel)
+        p.set_xlabel(set_xlabel, fontsize=axis_label_and_tick_fontsize)
+        p.set_ylabel(set_ylabel, fontsize=axis_label_and_tick_fontsize)
+        if axis_label_and_tick_fontsize is not None:
+            p.tick_params(axis="both", labelsize=axis_label_and_tick_fontsize)
         handles = p.get_legend_handles_labels()[0][2:]  # Skip legends from gray layer
         labels = p.get_legend_handles_labels()[1][2:]
-        p.legend(handles, labels, bbox_to_anchor=legend_bbox_to_anchor, loc=1, borderaxespad=0.05)
+        p.legend(handles, labels, bbox_to_anchor=legend_bbox_to_anchor, loc=1, borderaxespad=0.05, fontsize=legend_fontsize)
 
     # -------------------------
     # Optional: label top features
     # -------------------------
     if label_top_features:
+        label_kwargs = {"horizontalalignment": "left", "color": "black"}
+        if label_top_features_fontsize is not None:
+            label_kwargs["size"] = label_top_features_fontsize
+
         if ((hue_column is not None) and (only_label_hue_dots == True)):
             # Restrict labeling to rows with non-null hue values
             df = df[df[hue_column].notna()].sort_values(by=padj_col)
@@ -288,27 +308,27 @@ def volcano_plot_generic(
             p.text(df.sort_values(by=padj_col)[l2fc_col].to_list()[line],
                    df.sort_values(by=padj_col)['-log10(padj)'].to_list()[line],
                    df.sort_values(by=padj_col)[feature_label_col].to_list()[line],
-                   horizontalalignment='left', size='small', color='black')
+                   **label_kwargs)
 
         # Label top genes by most negative log2FC
         for line in range(0, int(n_top_features/2)):
             p.text(df.sort_values(by=l2fc_col)[l2fc_col].to_list()[line],
                    df.sort_values(by=l2fc_col)['-log10(padj)'].to_list()[line],
                    df.sort_values(by=l2fc_col)[feature_label_col].to_list()[line],
-                   horizontalalignment='left', size='small', color='black')
+                   **label_kwargs)
 
         # Label top genes by most positive log2FC
         for line in range(0, int(n_top_features/2)):
             p.text(df.sort_values(by=l2fc_col, ascending=False)[l2fc_col].to_list()[line],
                    df.sort_values(by=l2fc_col, ascending=False)['-log10(padj)'].to_list()[line],
                    df.sort_values(by=l2fc_col, ascending=False)[feature_label_col].to_list()[line],
-                   horizontalalignment='left', size='small', color='black')
+                   **label_kwargs)
 
     # -------------------------
     # Save figure if requested
     # -------------------------
     if savefig:
-        plt.savefig(file_name, dpi=600, bbox_inches="tight")
+        plt.savefig(file_name, dpi=300, bbox_inches="tight")
         print(f"Saved plot to {file_name}")
 
     return p
