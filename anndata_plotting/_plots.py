@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 
 
 # Todo add accept adata or df input
+# 2026.01.19 updated updated to have more font size parameters and a character limit for feature labels
 # 2025.08.22 updated to re org hue / label logic and add horizontal pvalue threshold to match updates elsewhere 
 # 2025.02.28 updated to used the hue_column to set the hue values
 # 2025.11.12 updated to add hue_palette_color_list parameter to accept custom color palettes for hue_column plotting mode
@@ -34,6 +35,7 @@ def volcano_plot_generic(
         label_top_features: bool | None = False,
         only_label_hue_dots: bool | None = True,
         label_top_features_fontsize: int | None = None,
+        label_features_char_limit: int | None = 40,
         feature_label_col: str | None = 'gene_names',
         n_top_features: int | None = 50,
         dot_size_shrink_factor: int | None = 300,
@@ -92,6 +94,8 @@ def volcano_plot_generic(
         Whether to label top features (default False).
     label_top_features_fontsize : int, optional
         Font size for feature labels; if None, use Matplotlib defaults.
+    label_features_char_limit : int, optional
+        Max characters to display for feature labels; truncated labels use "..." (default 40).
     feature_label_col : str, optional
         Column used for feature labels (default 'gene_names').
     n_top_features : int, optional
@@ -295,6 +299,18 @@ def volcano_plot_generic(
     # Optional: label top features
     # -------------------------
     if label_top_features:
+        def _truncate_label(value: object) -> str:
+            label = "" if value is None else str(value)
+            if label_features_char_limit is None:
+                return label
+            if label_features_char_limit <= 0:
+                return ""
+            if len(label) <= label_features_char_limit:
+                return label
+            if label_features_char_limit <= 3:
+                return label[:label_features_char_limit]
+            return f"{label[:label_features_char_limit - 3]}..."
+
         label_kwargs = {"horizontalalignment": "left", "color": "black"}
         if label_top_features_fontsize is not None:
             label_kwargs["size"] = label_top_features_fontsize
@@ -307,21 +323,21 @@ def volcano_plot_generic(
         for line in range(0, n_top_features):
             p.text(df.sort_values(by=padj_col)[l2fc_col].to_list()[line],
                    df.sort_values(by=padj_col)['-log10(padj)'].to_list()[line],
-                   df.sort_values(by=padj_col)[feature_label_col].to_list()[line],
+                   _truncate_label(df.sort_values(by=padj_col)[feature_label_col].to_list()[line]),
                    **label_kwargs)
 
         # Label top genes by most negative log2FC
         for line in range(0, int(n_top_features/2)):
             p.text(df.sort_values(by=l2fc_col)[l2fc_col].to_list()[line],
                    df.sort_values(by=l2fc_col)['-log10(padj)'].to_list()[line],
-                   df.sort_values(by=l2fc_col)[feature_label_col].to_list()[line],
+                   _truncate_label(df.sort_values(by=l2fc_col)[feature_label_col].to_list()[line]),
                    **label_kwargs)
 
         # Label top genes by most positive log2FC
         for line in range(0, int(n_top_features/2)):
             p.text(df.sort_values(by=l2fc_col, ascending=False)[l2fc_col].to_list()[line],
                    df.sort_values(by=l2fc_col, ascending=False)['-log10(padj)'].to_list()[line],
-                   df.sort_values(by=l2fc_col, ascending=False)[feature_label_col].to_list()[line],
+                   _truncate_label(df.sort_values(by=l2fc_col, ascending=False)[feature_label_col].to_list()[line]),
                    **label_kwargs)
 
     # -------------------------
