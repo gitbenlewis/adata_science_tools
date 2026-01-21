@@ -24,8 +24,6 @@ def diff_test(adata, layer=None, use_raw=False,
 
             ):
     """
-    #### update4d 2026-01-20 remove double var_names column in results DataFrame
-    #### update4d 2026-01-19 added a gaurd for constant variance  in test calculations to avoid errors
     #### update4d 2025-12-27 added a logging and a save_log option
     #### updated 2025-12-11 changed pvals_corrected to pvals_FDR to be more explicit
     #### updated 2025-12-11 store values in adata.uns as str to avoid issues with saving lists in anndata
@@ -444,8 +442,7 @@ def diff_test(adata, layer=None, use_raw=False,
     log.info(f"Removed { _X_shape_before_zero_removal[1] - X.shape[1]} zero-expression variables (genes).")
 
     ### Initialize results DataFrame
-    results = pd.DataFrame(#{"var_names": var_names, }, 
-        index=var_names)
+    results = pd.DataFrame({"var_names": var_names, }, index=var_names)
 
     group1_idx = adata.obs[groupby_key].isin(groupby_key_target_values)
     group2_idx = adata.obs[groupby_key].isin(groupby_key_ref_values)
@@ -634,23 +631,14 @@ def diff_test(adata, layer=None, use_raw=False,
     if 'ttest_ind' in tests:
         # Perform vectorized t-tests
         t_stat, t_test_pvals = stats.ttest_ind(data1, data2, equal_var=False, axis=0)
-        # Guard degenerate zero-variance features (both groups constant).
-        const_ind_mask = (np.ptp(data1, axis=0) == 0) & (np.ptp(data2, axis=0) == 0)
-        if np.any(const_ind_mask):
-            t_stat = t_stat.astype(float, copy=False)
-            t_test_pvals = t_test_pvals.astype(float, copy=False)
-            t_stat[const_ind_mask] = np.nan
-            t_test_pvals[const_ind_mask] = np.nan
         # Multiple testing correction
-        finite_mask = np.isfinite(t_test_pvals)
-        t_test_pvals_corrected_full = np.full_like(t_test_pvals, np.nan, dtype=float)
-        if finite_mask.any():
-            _, t_test_pvals_corrected, _, _ = multipletests(t_test_pvals[finite_mask], method="fdr_bh")
-            t_test_pvals_corrected_full[finite_mask] = t_test_pvals_corrected
-        n_finite_ttest_ind = int(finite_mask.sum())
+        _, t_test_pvals_corrected, _, _ = multipletests(t_test_pvals[np.isfinite(t_test_pvals)], method="fdr_bh")
+        n_finite_ttest_ind = int(np.isfinite(t_test_pvals).sum())
         log.info(f"ttest_ind: corrected {n_finite_ttest_ind} of {len(t_test_pvals)} p-values with FDR.")
+        # Create a full array to store the corrected p-values, keeping NaNs where they were
+        t_test_pvals_corrected_full = np.full_like(t_test_pvals, np.nan, dtype=float)
+        t_test_pvals_corrected_full[np.isfinite(t_test_pvals)] = t_test_pvals_corrected
         # Add p-values to the results DataFrame
-        results[f'ttest_ind_constVAR{comparison_col_tag}'] = const_ind_mask
         results[f'ttest_ind_stat{comparison_col_tag}']=t_stat
         results[f'ttest_ind_pvals{comparison_col_tag}'] = t_test_pvals
         results[f'ttest_ind_pvals_FDR{comparison_col_tag}'] = t_test_pvals_corrected_full
@@ -660,23 +648,14 @@ def diff_test(adata, layer=None, use_raw=False,
         #u_test_pvals = np.array([
         #    stats.mannwhitneyu(data1[:, i], data2[:, i], alternative='two-sided', use_continuity=True).pvalue
         #    for i in range(data1.shape[1])])
-        # Guard degenerate zero-variance features (both groups constant).
-        const_ind_mask = (np.ptp(data1, axis=0) == 0) & (np.ptp(data2, axis=0) == 0)
-        if np.any(const_ind_mask):
-            u_statistic = u_statistic.astype(float, copy=False)
-            u_test_pvals = u_test_pvals.astype(float, copy=False)
-            u_statistic[const_ind_mask] = np.nan
-            u_test_pvals[const_ind_mask] = np.nan
         # Multiple testing correction
-        finite_mask = np.isfinite(u_test_pvals)
-        u_test_pvals_corrected_full = np.full_like(u_test_pvals, np.nan, dtype=float)
-        if finite_mask.any():
-            _, u_test_pvals_corrected, _, _ = multipletests(u_test_pvals[finite_mask], method="fdr_bh")
-            u_test_pvals_corrected_full[finite_mask] = u_test_pvals_corrected
-        n_finite_mannwhitneyu = int(finite_mask.sum())
+        _, u_test_pvals_corrected, _, _ = multipletests(u_test_pvals[np.isfinite(u_test_pvals)], method="fdr_bh")
+        n_finite_mannwhitneyu = int(np.isfinite(u_test_pvals).sum())
         log.info(f"mannwhitneyu: corrected {n_finite_mannwhitneyu} of {len(u_test_pvals)} p-values with FDR.")
+        # Create a full array to store the corrected p-values, keeping NaNs where they were
+        u_test_pvals_corrected_full = np.full_like(u_test_pvals, np.nan, dtype=float)
+        u_test_pvals_corrected_full[np.isfinite(u_test_pvals)] = u_test_pvals_corrected
         # Add p-values to the results DataFrame
-        results[f'mannwhitneyu_constVAR{comparison_col_tag}'] = const_ind_mask
         results[f'mannwhitneyu_stat{comparison_col_tag}'] = u_statistic
         results[f'mannwhitneyu_pvals{comparison_col_tag}'] = u_test_pvals
         results[f'mannwhitneyu_pvals_FDR{comparison_col_tag}'] = u_test_pvals_corrected_full
@@ -729,27 +708,18 @@ def diff_test(adata, layer=None, use_raw=False,
         data1_rel_data2_rel_diff= (data1_rel - data2_rel)
         # Perform vectorized t-tests
         t_rel_stat, t_rel_test_pvals = stats.ttest_rel(data1_rel, data2_rel, axis=0)
-        # Guard degenerate zero-variance paired differences.
-        const_paired_mask = np.ptp(data1_rel_data2_rel_diff, axis=0) == 0
-        if np.any(const_paired_mask):
-            t_rel_stat = t_rel_stat.astype(float, copy=False)
-            t_rel_test_pvals = t_rel_test_pvals.astype(float, copy=False)
-            t_rel_stat[const_paired_mask] = np.nan
-            t_rel_test_pvals[const_paired_mask] = np.nan
         # Multiple testing correction
-        finite_mask = np.isfinite(t_rel_test_pvals)
-        t_rel_test_pvals_corrected_full = np.full_like(t_rel_test_pvals, np.nan, dtype=float)
-        if finite_mask.any():
-            _, t_rel_test_pvals_corrected, _, _ = multipletests(t_rel_test_pvals[finite_mask], method="fdr_bh")
-            t_rel_test_pvals_corrected_full[finite_mask] = t_rel_test_pvals_corrected
-        n_finite_ttest_rel = int(finite_mask.sum())
+        _, t_rel_test_pvals_corrected, _, _ = multipletests(t_rel_test_pvals[np.isfinite(t_rel_test_pvals)], method="fdr_bh")
+        n_finite_ttest_rel = int(np.isfinite(t_rel_test_pvals).sum())
         log.info(f"ttest_rel: corrected {n_finite_ttest_rel} of {len(t_rel_test_pvals)} p-values with FDR.")
+        # Create a full array to store the corrected p-values, keeping NaNs where they were
+        t_rel_test_pvals_corrected_full = np.full_like(t_rel_test_pvals, np.nan, dtype=float)
+        t_rel_test_pvals_corrected_full[np.isfinite(t_rel_test_pvals)] = t_rel_test_pvals_corrected
         # calculate mean log2 fold change for the paired data
         mean_fc_rel = np.mean(((data1_rel + 1e-9) / (data2_rel + 1e-9)), axis=0)
         # calculate mean log2 fold change for the paired data
         mean_log2_fc_rel = np.mean(np.log2((data1_rel + 1e-9) / (data2_rel + 1e-9)), axis=0)
         # Add p-values to the results DataFrame
-        results[f'ttest_rel_constVAR{comparison_col_tag}'] = const_paired_mask
         results[f'ttest_rel_stat{comparison_col_tag}'] = t_rel_stat
         results[f'ttest_rel_pvals{comparison_col_tag}'] = t_rel_test_pvals
         results[f'ttest_rel_pvals_FDR{comparison_col_tag}'] = t_rel_test_pvals_corrected_full
@@ -766,28 +736,18 @@ def diff_test(adata, layer=None, use_raw=False,
         # Perform Wilcoxon rank-sum tests
         #w_stat, w_test_pvals = stats.ranksums(data1_rel, data2_rel)
         w_stat, w_test_pvals = stats.wilcoxon(data1_rel, data2_rel,alternative='two-sided',axis=0,correction=True)
-        # Guard degenerate zero-variance paired differences.
-        paired_diff = data1_rel - data2_rel
-        const_paired_mask = np.ptp(paired_diff, axis=0) == 0
-        if np.any(const_paired_mask):
-            w_stat = w_stat.astype(float, copy=False)
-            w_test_pvals = w_test_pvals.astype(float, copy=False)
-            w_stat[const_paired_mask] = np.nan
-            w_test_pvals[const_paired_mask] = np.nan
         # Multiple testing correction
-        finite_mask = np.isfinite(w_test_pvals)
-        w_test_pvals_corrected_full = np.full_like(w_test_pvals, np.nan, dtype=float)
-        if finite_mask.any():
-            _, w_test_pvals_corrected, _, _ = multipletests(w_test_pvals[finite_mask], method="fdr_bh")
-            w_test_pvals_corrected_full[finite_mask] = w_test_pvals_corrected
-        n_finite_wilcoxon = int(finite_mask.sum())
+        _, w_test_pvals_corrected, _, _ = multipletests(w_test_pvals[np.isfinite(w_test_pvals)], method="fdr_bh")
+        n_finite_wilcoxon = int(np.isfinite(w_test_pvals).sum())
         log.info(f"WilcoxonSigned: corrected {n_finite_wilcoxon} of {len(w_test_pvals)} p-values with FDR.")
+        # Create a full array to store the corrected p-values, keeping NaNs where they were
+        w_test_pvals_corrected_full = np.full_like(w_test_pvals, np.nan, dtype=float)
+        w_test_pvals_corrected_full[np.isfinite(w_test_pvals)] = w_test_pvals_corrected
         # calculate mean  fold change for the paired data
         mean_fc_rel = np.mean(((data1_rel + 1e-9) / (data2_rel + 1e-9)), axis=0)
         # calculate mean log2 fold change for the paired data
         mean_log2_fc_rel = np.mean(np.log2((data1_rel + 1e-9) / (data2_rel + 1e-9)), axis=0)
         # Add p-values to the results DataFrame
-        results[f'WilcoxonSigned_constVAR{comparison_col_tag}'] = const_paired_mask
         results[f'WilcoxonSigned_stat{comparison_col_tag}'] = w_stat
         results[f'WilcoxonSigned_pvals{comparison_col_tag}'] = w_test_pvals
         results[f'WilcoxonSigned_pvals_FDR{comparison_col_tag}'] = w_test_pvals_corrected_full
@@ -848,24 +808,15 @@ def diff_test(adata, layer=None, use_raw=False,
         ref_diff = data_ref_rel - data_refControl_rel
         # Perform vectorized t-tests
         t_rel_nested_stat, t_rel_nested_test_pvals = stats.ttest_rel(target_diff, ref_diff, axis=0)
-        # Guard degenerate zero-variance nested differences.
-        nested_diff = target_diff - ref_diff
-        const_nested_mask = np.ptp(nested_diff, axis=0) == 0
-        if np.any(const_nested_mask):
-            t_rel_nested_stat = t_rel_nested_stat.astype(float, copy=False)
-            t_rel_nested_test_pvals = t_rel_nested_test_pvals.astype(float, copy=False)
-            t_rel_nested_stat[const_nested_mask] = np.nan
-            t_rel_nested_test_pvals[const_nested_mask] = np.nan
         # Multiple testing correction
-        finite_mask = np.isfinite(t_rel_nested_test_pvals)
-        t_rel_nested_test_pvals_corrected_full = np.full_like(t_rel_nested_test_pvals, np.nan, dtype=float)
-        if finite_mask.any():
-            _, t_rel_nested_test_pvals_corrected, _, _ = multipletests(t_rel_nested_test_pvals[finite_mask], method="fdr_bh")
-            t_rel_nested_test_pvals_corrected_full[finite_mask] = t_rel_nested_test_pvals_corrected
-        n_finite_ttest_rel_nested = int(finite_mask.sum())
+        _, t_rel_nested_test_pvals_corrected, _, _ = multipletests(t_rel_nested_test_pvals[np.isfinite(t_rel_nested_test_pvals)], method="fdr_bh")
+        n_finite_ttest_rel_nested = int(np.isfinite(t_rel_nested_test_pvals).sum())
         log.info(
             f"ttest_rel_nested: corrected {n_finite_ttest_rel_nested} of {len(t_rel_nested_test_pvals)} p-values with FDR."
         )
+        # Create a full array to store the corrected p-values, keeping NaNs where they were
+        t_rel_nested_test_pvals_corrected_full = np.full_like(t_rel_nested_test_pvals, np.nan, dtype=float)
+        t_rel_nested_test_pvals_corrected_full[np.isfinite(t_rel_nested_test_pvals)] = t_rel_nested_test_pvals_corrected
         # calculate mean fold change for the nested paired test data
         mean_fc_rel_nested = np.mean(((
             ((data_target_rel + 1e-9) / (data_targetControl_rel + 1e-9))/((data_ref_rel + 1e-9) / (data_refControl_rel + 1e-9)))
@@ -875,7 +826,6 @@ def diff_test(adata, layer=None, use_raw=False,
             ((data_target_rel + 1e-9) / (data_targetControl_rel + 1e-9))/((data_ref_rel + 1e-9) / (data_refControl_rel + 1e-9)))
             ), axis=0)
         # Add p-values to the results DataFrame
-        results[f'ttest_rel_nested_constVAR{nested_comparison_col_tag}'] = const_nested_mask
         results[f'ttest_rel_nested_stat{nested_comparison_col_tag}'] = t_rel_nested_stat
         results[f'ttest_rel_nested_pvals{nested_comparison_col_tag}'] = t_rel_nested_test_pvals
         results[f'ttest_rel_nested_pvals_FDR{nested_comparison_col_tag}'] = t_rel_nested_test_pvals_corrected_full
@@ -921,24 +871,15 @@ def diff_test(adata, layer=None, use_raw=False,
             correction=True,   # keep continuity correction as before
             zero_method="wilcox",  # or "pratt" if you want to keep zeros
         )
-        # Guard degenerate zero-variance nested differences.
-        nested_diff = target_diff - ref_diff
-        const_nested_mask = np.ptp(nested_diff, axis=0) == 0
-        if np.any(const_nested_mask):
-            w_nested_stat = w_nested_stat.astype(float, copy=False)
-            w_nested_test_pvals = w_nested_test_pvals.astype(float, copy=False)
-            w_nested_stat[const_nested_mask] = np.nan
-            w_nested_test_pvals[const_nested_mask] = np.nan
         # Multiple testing correction
-        finite_mask = np.isfinite(w_nested_test_pvals)
-        w_nested_test_pvals_full_corrected = np.full_like(w_nested_test_pvals, np.nan, dtype=float)
-        if finite_mask.any():
-            _, w_nested_test_pvals_corrected, _, _ = multipletests(w_nested_test_pvals[finite_mask], method="fdr_bh")
-            w_nested_test_pvals_full_corrected[finite_mask] = w_nested_test_pvals_corrected
-        n_finite_wilcoxon_nested = int(finite_mask.sum())
+        _, w_nested_test_pvals_corrected, _, _ = multipletests(w_nested_test_pvals[np.isfinite(w_nested_test_pvals)], method="fdr_bh")
+        n_finite_wilcoxon_nested = int(np.isfinite(w_nested_test_pvals).sum())
         log.info(
             f"WilcoxonSigned_nested: corrected {n_finite_wilcoxon_nested} of {len(w_nested_test_pvals)} p-values with FDR."
         )
+        # Create a full array to store the corrected p-values, keeping NaNs where they were
+        w_nested_test_pvals_full_corrected = np.full_like(w_nested_test_pvals, np.nan, dtype=float)
+        w_nested_test_pvals_full_corrected[np.isfinite(w_nested_test_pvals)] = w_nested_test_pvals_corrected
 
         # calculate mean fold change for the nested paired test data
         mean_fc_rel_nested = np.mean(((
@@ -950,7 +891,6 @@ def diff_test(adata, layer=None, use_raw=False,
             ((data_target_rel + 1e-9) / (data_targetControl_rel + 1e-9))/((data_ref_rel + 1e-9) / (data_refControl_rel + 1e-9)))
             ), axis=0)
         # Add p-values to the results DataFrame
-        results[f'WilcoxonSigned_nested_constVAR{nested_comparison_col_tag}'] = const_nested_mask
         results[f'WilcoxonSigned_nested_stat{nested_comparison_col_tag}'] = w_nested_stat
         results[f'WilcoxonSigned_nested_pvals{nested_comparison_col_tag}'] = w_nested_test_pvals
         results[f'WilcoxonSigned_nested_pvals_FDR{nested_comparison_col_tag}'] = w_nested_test_pvals_full_corrected
