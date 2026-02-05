@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 
 
 # Todo add accept adata or df input
+# 2026.01.19 updated to change padj_col to pvalue_col
 # 2026.01.19 updated updated to have more font size parameters and a character limit for feature labels
 # 2025.08.22 updated to re org hue / label logic and add horizontal pvalue threshold to match updates elsewhere 
 # 2025.02.28 updated to used the hue_column to set the hue values
@@ -18,8 +19,8 @@ def volcano_plot_generic(
         l2fc_col: str | None = 'log2FoldChange',
         set_xlabel: str | None = 'log2fc model',
         xlimit: str | None = None,
-        padj_col: str | None = 'padj',
-        set_ylabel: str | None = '-log10(padj)',
+        pvalue_col: str | None = 'pvalue',
+        set_ylabel: str | None = '-log10(pvalue)',
         ylimit: str | None = None,
         title_text: str | None = 'volcano_plot',
         comparison_label: str | None = ' Comparison',
@@ -47,11 +48,11 @@ def volcano_plot_generic(
     Generate a volcano plot for a single differential expression comparison.
 
     Creates a volcano plot using Seaborn/Matplotlib with log2 fold change on the x-axis 
-    and -log10 adjusted p-value (padj) on the y-axis. Data points are categorized by 
+    and -log10 adjusted p-value (pvalue) on the y-axis. Data points are categorized by
     significance thresholds (alpha=0.05, 0.1, 0.2) and optionally labeled with top features.
 
     Preprocessing includes:
-      - Replacing missing padj values with 1 and computing -log10(padj).
+      - Replacing missing pvalue values with 1 and computing -log10(pvalue).
       - Adding significance flags at alpha levels (0.2, 0.1, 0.05) with a log2FC cutoff.
       - Combining flags into a categorical "Significance" column for consistent legend order.
       - Clipping extreme values to calculated axis limits (x, y).
@@ -63,10 +64,10 @@ def volcano_plot_generic(
         Differential expression results with log2 fold change and adjusted p-values.
     l2fc_col : str, optional
         Column for log2 fold change (default 'log2FoldChange').
-    padj_col : str, optional
-        Column for adjusted p-values (default 'padj').
+    pvalue_col : str, optional
+        Column for p-values (default 'pvalue').
     set_xlabel, set_ylabel : str, optional
-        Axis labels (default 'log2fc model' and '-log10(padj)').
+        Axis labels (default 'log2fc model' and '-log10(pvalue)').
     xlimit, ylimit : float, optional
         Axis limits; computed automatically if None.
     title_text, comparison_label : str, optional
@@ -165,23 +166,23 @@ def volcano_plot_generic(
         hue_value = hue_column
 
     # Ensure required columns exist
-    required_columns = {l2fc_col, padj_col}
+    required_columns = {l2fc_col, pvalue_col}
     if not required_columns.issubset(df.columns):
         raise ValueError(f"DataFrame is missing one of the required columns: {required_columns}")
 
     # -------------------------
     # Preprocessing: p-value transformations and significance flags
     # -------------------------
-    # Fill missing padj values with 1 (max nonsignificance)
-    df[padj_col] = df[padj_col].fillna(1)
+    # Fill missing pvalue values with 1 (max nonsignificance)
+    df[pvalue_col] = df[pvalue_col].fillna(1)
 
-    # Add -log10(padj) column for y-axis
-    df['-log10(padj)'] = -np.log10(df[padj_col].replace(0, np.nextafter(0, 1)))
+    # Add -log10(pvalue) column for y-axis
+    df['-log10(pvalue)'] = -np.log10(df[pvalue_col].replace(0, np.nextafter(0, 1)))
 
     # Add boolean columns for multiple alpha thresholds (0.2, 0.1, 0.05)
-    df['alpha=0.2'] = ((df[padj_col] < 0.2) & (abs(df[l2fc_col]) >= log2FoldChange_threshold))
-    df['alpha=0.1'] = ((df[padj_col] < 0.1) & (abs(df[l2fc_col]) >= log2FoldChange_threshold))
-    df['alpha=0.05'] = ((df[padj_col] < 0.05) & (abs(df[l2fc_col]) >= log2FoldChange_threshold))
+    df['alpha=0.2'] = ((df[pvalue_col] < 0.2) & (abs(df[l2fc_col]) >= log2FoldChange_threshold))
+    df['alpha=0.1'] = ((df[pvalue_col] < 0.1) & (abs(df[l2fc_col]) >= log2FoldChange_threshold))
+    df['alpha=0.05'] = ((df[pvalue_col] < 0.05) & (abs(df[l2fc_col]) >= log2FoldChange_threshold))
 
     # -------------------------
     # Combine significance levels into a single categorical column
@@ -202,15 +203,15 @@ def volcano_plot_generic(
     # -------------------------
     # Axis limit calculations
     # -------------------------
-    # Y-axis limit: 99th percentile of -log10(padj) among significant hits
+    # Y-axis limit: 99th percentile of -log10(pvalue) among significant hits
     if not ylimit:
-        ylimit = df[(df[padj_col] < 0.05) & (df[l2fc_col].abs() > log2FoldChange_threshold)]['-log10(padj)'].quantile(0.99)
+        ylimit = df[(df[pvalue_col] < 0.05) & (df[l2fc_col].abs() > log2FoldChange_threshold)]['-log10(pvalue)'].quantile(0.99)
         if np.isnan(ylimit):
-            ylimit = df['-log10(padj)'].quantile(0.99)
+            ylimit = df['-log10(pvalue)'].quantile(0.99)
 
     # X-axis limit: 99th percentile of absolute log2FC among significant hits
     if not xlimit:
-        xlimit = df[(df[padj_col] < 0.05) & (df[l2fc_col].abs() > log2FoldChange_threshold)][l2fc_col].abs().quantile(0.99)
+        xlimit = df[(df[pvalue_col] < 0.05) & (df[l2fc_col].abs() > log2FoldChange_threshold)][l2fc_col].abs().quantile(0.99)
         if np.isnan(xlimit):
             xlimit = df[l2fc_col].abs().quantile(0.99)
 
@@ -219,14 +220,14 @@ def volcano_plot_generic(
     # -------------------------
     df['Marker'] = pd.Categorical(['In_Range' for _ in range(df.shape[0])],
                                   categories=['In_Range', 'Out_of_Range'], ordered=True)
-    df.loc[df['-log10(padj)'] >= ylimit, 'Marker'] = 'Out_of_Range'
+    df.loc[df['-log10(pvalue)'] >= ylimit, 'Marker'] = 'Out_of_Range'
     df.loc[abs(df[l2fc_col]) >= xlimit, 'Marker'] = 'Out_of_Range'
 
     # Clip values at limits to improve readability
     if ylimit:
-        df['-log10(padj)'] = df['-log10(padj)'].apply(lambda x: (ylimit * 0.99) if x >= ylimit else x)
+        df['-log10(pvalue)'] = df['-log10(pvalue)'].apply(lambda x: (ylimit * 0.99) if x >= ylimit else x)
     else:
-        ylimit = df['-log10(padj)'].max()
+        ylimit = df['-log10(pvalue)'].max()
 
     if xlimit:
         df[l2fc_col] = df[l2fc_col].apply(lambda x: (xlimit * 0.99) if x >= xlimit else x)
@@ -245,7 +246,7 @@ def volcano_plot_generic(
     if hue_column is None:
         # Case 1: hue = Significance
         fig, ax = plt.subplots(figsize=figsize)
-        p = sns.scatterplot(data=df, x=l2fc_col, y='-log10(padj)', hue=hue_value,
+        p = sns.scatterplot(data=df, x=l2fc_col, y='-log10(pvalue)', hue=hue_value,
                             style='Marker', palette=significance_custom_palette,
                             sizes=rel_size, s=rel_size, ax=ax)
         p.set(xlim=(-xlimit, xlimit), ylim=(0, ylimit))
@@ -269,13 +270,13 @@ def volcano_plot_generic(
         fig, ax = plt.subplots(figsize=figsize)
 
         # First plot: all dots in gray (background layer)
-        p = sns.scatterplot(data=df, x=l2fc_col, y='-log10(padj)', style='Marker',
+        p = sns.scatterplot(data=df, x=l2fc_col, y='-log10(pvalue)', style='Marker',
                             color='gray', s=rel_size/2, alpha=0.5, ax=ax)
         p.set(xlim=(-xlimit, xlimit), ylim=(0, ylimit))
         p.legend_.remove()  # Remove legend from background layer
 
         # Second plot: overlay hue-colored points
-        p = sns.scatterplot(data=df, x=l2fc_col, y='-log10(padj)', hue=hue_value, style='Marker',
+        p = sns.scatterplot(data=df, x=l2fc_col, y='-log10(pvalue)', hue=hue_value, style='Marker',
                             palette=hue_palette_custom_palette[:], s=rel_size, ax=ax)
         p.set(xlim=(-xlimit, xlimit), ylim=(0, ylimit))
         p.set_title(f'{title_text}\n{comparison_label}\n\n', fontsize=title_fontsize)
@@ -317,26 +318,26 @@ def volcano_plot_generic(
 
         if ((hue_column is not None) and (only_label_hue_dots == True)):
             # Restrict labeling to rows with non-null hue values
-            df = df[df[hue_column].notna()].sort_values(by=padj_col)
+            df = df[df[hue_column].notna()].sort_values(by=pvalue_col)
 
-        # Label top genes by padj
+        # Label top genes by pvalue
         for line in range(0, n_top_features):
-            p.text(df.sort_values(by=padj_col)[l2fc_col].to_list()[line],
-                   df.sort_values(by=padj_col)['-log10(padj)'].to_list()[line],
-                   _truncate_label(df.sort_values(by=padj_col)[feature_label_col].to_list()[line]),
+            p.text(df.sort_values(by=pvalue_col)[l2fc_col].to_list()[line],
+                   df.sort_values(by=pvalue_col)['-log10(pvalue)'].to_list()[line],
+                   _truncate_label(df.sort_values(by=pvalue_col)[feature_label_col].to_list()[line]),
                    **label_kwargs)
 
         # Label top genes by most negative log2FC
         for line in range(0, int(n_top_features/2)):
             p.text(df.sort_values(by=l2fc_col)[l2fc_col].to_list()[line],
-                   df.sort_values(by=l2fc_col)['-log10(padj)'].to_list()[line],
+                   df.sort_values(by=l2fc_col)['-log10(pvalue)'].to_list()[line],
                    _truncate_label(df.sort_values(by=l2fc_col)[feature_label_col].to_list()[line]),
                    **label_kwargs)
 
         # Label top genes by most positive log2FC
         for line in range(0, int(n_top_features/2)):
             p.text(df.sort_values(by=l2fc_col, ascending=False)[l2fc_col].to_list()[line],
-                   df.sort_values(by=l2fc_col, ascending=False)['-log10(padj)'].to_list()[line],
+                   df.sort_values(by=l2fc_col, ascending=False)['-log10(pvalue)'].to_list()[line],
                    _truncate_label(df.sort_values(by=l2fc_col, ascending=False)[feature_label_col].to_list()[line]),
                    **label_kwargs)
 

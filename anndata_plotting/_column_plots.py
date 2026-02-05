@@ -2493,6 +2493,474 @@ def barh_dotplot_dotplot_dotplot_column(
     return fig, subfigs
 
 
+def barh_4X_dotplot_column(
+        adata: anndata.AnnData | None = None,
+        layer: str | None = None,
+        x_df: pd.DataFrame | None = None,
+        var_df: pd.DataFrame | None = None,
+        obs_df: pd.DataFrame | None = None,
+        feature_list: list[str] | None = None,
+        feature_label_vars_col: str | None = None,
+        feature_label_char_limit: int | None = 40,
+        feature_label_x: float = -0.02,
+        figsize: tuple[int, int] | None = (22, 25),
+        fig_title: str | None = None,
+        fig_title_y: float = 1.0,
+        subfig_title_y: float = 0.94,
+        fig_title_fontsize: int | None = 30,
+        subfig_title_fontsize: int | None = 24,
+        feature_label_fontsize: int | None = 24,
+        tick_label_fontsize: int | None = 16,
+        legend_fontsize: int | None = 20,
+        row_hspace: float | None = None,
+        col_wspace: float | None = 0.07,
+        bar_dotplot_width_ratios: list[float] | None = [1.5, 1.0, 1.0, 1.0, 1.0],
+        tight_layout_rect_arg: list[float] | None = [0, 0, 1, 1],
+        use_tight_layout: bool = True,
+        savefig: bool = False,
+        file_name: str = 'barh_4X_dotplot.png',
+        # barh
+        comparison_col: str | None = 'Treatment',
+        barh_remove_yticklabels: bool = True,
+        comparison_order: list[str] | None = None,
+        barh_figure_plot_title: str | None = 'Expression',
+        barh_subplot_xlabel: str | None = 'Expression',
+        barh_sharex: bool = False,
+        barh_set_xaxis_lims: tuple[int, int] | None = None,
+        barh_legend: bool = True,
+        barh_legend_bbox_to_anchor: tuple[int, int] | None = (0.5, -.05),
+        # dotplot1
+        dotplot_figure_plot_title: str | None = 'log2fc',
+        dotplot_pval_vars_col_label: str | None = 'pvalue',
+        dotplot_l2fc_vars_col_label: str | None = 'log2FoldChange',
+        dotplot_subplot_xlabel: str | None = 'log2fc ((target)/(ref))',
+        pval_label: str = 'p-value',
+        pvalue_cutoff_ring: float = 0.1,
+        sizes: tuple[int, int] | None = (20, 2000),
+        dotplot_sharex: bool = False,
+        dotplot_set_xaxis_lims: tuple[int, int] | None = None,
+        dotplot_legend: bool = True,
+        dotplot_legend_bins: int | None = 4,
+        dotplot_legend_bbox_to_anchor: tuple[int, int] | None = (0.5, -.05),
+        dotplot_annotate: bool = False,
+        dotplot_annotate_xy: tuple[float, float] | None = (0.8, 1.2),
+        dotplot_annotate_labels: tuple[str, str] | None = ('l2fc: ', 'p:'),
+        dotplot_annotate_fontsize: int | None = None,
+        # dotplot2
+        dotplot2_figure_plot_title: str | None = 'log2fc (2)',
+        dotplot2_pval_vars_col_label: str | None = 'pvalue_alt',
+        dotplot2_l2fc_vars_col_label: str | None = 'log2FoldChange_alt',
+        dotplot2_subplot_xlabel: str | None = 'log2fc ((target)/(ref))',
+        dotplot2_pval_label: str = 'p-value',
+        dotplot2_pvalue_cutoff_ring: float = 0.1,
+        dotplot2_sizes: tuple[int, int] | None = (20, 2000),
+        dotplot2_sharex: bool = False,
+        dotplot2_set_xaxis_lims: tuple[int, int] | None = None,
+        dotplot2_legend: bool = True,
+        dotplot2_legend_bins: int | None = 4,
+        dotplot2_legend_bbox_to_anchor: tuple[int, int] | None = (0.5, -.05),
+        dotplot2_annotate: bool = False,
+        dotplot2_annotate_xy: tuple[float, float] | None = (0.8, 1.2),
+        dotplot2_annotate_labels: tuple[str, str] | None = ('l2fc: ', 'p:'),
+        dotplot2_annotate_fontsize: int | None = None,
+        # dotplot3
+        dotplot3_figure_plot_title: str | None = 'log2fc (3)',
+        dotplot3_pval_vars_col_label: str | None = 'pvalue_alt2',
+        dotplot3_l2fc_vars_col_label: str | None = 'log2FoldChange_alt2',
+        dotplot3_subplot_xlabel: str | None = 'log2fc ((target)/(ref))',
+        dotplot3_pval_label: str = 'p-value',
+        dotplot3_pvalue_cutoff_ring: float = 0.1,
+        dotplot3_sizes: tuple[int, int] | None = (20, 2000),
+        dotplot3_sharex: bool = False,
+        dotplot3_set_xaxis_lims: tuple[int, int] | None = None,
+        dotplot3_legend: bool = True,
+        dotplot3_legend_bins: int | None = 4,
+        dotplot3_legend_bbox_to_anchor: tuple[int, int] | None = (0.5, -.05),
+        dotplot3_annotate: bool = False,
+        dotplot3_annotate_xy: tuple[float, float] | None = (0.8, 1.2),
+        dotplot3_annotate_labels: tuple[str, str] | None = ('l2fc: ', 'p:'),
+        dotplot3_annotate_fontsize: int | None = None,
+        # dotplot4
+        dotplot4_figure_plot_title: str | None = 'log2fc (4)',
+        dotplot4_pval_vars_col_label: str | None = 'pvalue_alt3',
+        dotplot4_l2fc_vars_col_label: str | None = 'log2FoldChange_alt3',
+        dotplot4_subplot_xlabel: str | None = 'log2fc ((target)/(ref))',
+        dotplot4_pval_label: str = 'p-value',
+        dotplot4_pvalue_cutoff_ring: float = 0.1,
+        dotplot4_sizes: tuple[int, int] | None = (20, 2000),
+        dotplot4_sharex: bool = False,
+        dotplot4_set_xaxis_lims: tuple[int, int] | None = None,
+        dotplot4_legend: bool = True,
+        dotplot4_legend_bins: int | None = 4,
+        dotplot4_legend_bbox_to_anchor: tuple[int, int] | None = (0.5, -.05),
+        dotplot4_annotate: bool = False,
+        dotplot4_annotate_xy: tuple[float, float] | None = (0.8, 1.2),
+        dotplot4_annotate_labels: tuple[str, str] | None = ('l2fc: ', 'p:'),
+        dotplot4_annotate_fontsize: int | None = None,
+    ):
+    """Five-column layout: bar column + four dotplot columns."""
+    if feature_list is None:
+        raise ValueError("feature_list must be provided.")
+
+    if adata is not None:
+        if layer is not None and layer not in adata.layers:
+            raise ValueError(f"Layer '{layer}' not found in adata.layers.")
+        if comparison_col not in adata.obs.columns:
+            raise ValueError(f"Column '{comparison_col}' not found in adata.obs.")
+    if x_df is not None:
+        _x_df = x_df.copy()
+    elif layer is None:
+        _x_df = adata.X.copy()
+    elif adata is not None and layer in adata.layers:
+        _x_df = adata.layers[layer].copy()
+
+    _var_df = var_df.copy() if var_df is not None else adata.var.copy()
+    _obs_df = obs_df.copy() if obs_df is not None else adata.obs.copy()
+
+    if hasattr(_x_df, "toarray"):
+        _x_df = _x_df.toarray()
+    df_obs_x = pd.DataFrame(_x_df, columns=_var_df.index, index=_obs_df.index)
+    df_obs_x = pd.concat([_obs_df, df_obs_x], axis=1)
+
+    if comparison_order is None:
+        categories = list(pd.Series(df_obs_x[comparison_col]).astype('category').cat.categories) \
+                     or list(df_obs_x[comparison_col].unique())
+    else:
+        categories = list(comparison_order)
+    palette = sns.color_palette('tab10', n_colors=len(categories))
+    color_map = dict(zip(categories, palette))
+
+    if (feature_label_vars_col is not None) and (feature_label_vars_col in _var_df.columns):
+        _feature_label_series = _var_df[feature_label_vars_col].where(
+            _var_df[feature_label_vars_col].notna(), _var_df.index.to_series()
+        ).astype(str)
+    else:
+        _feature_label_series = _var_df.index.to_series().astype(str)
+    if feature_label_char_limit is not None:
+        _feature_label_series = _feature_label_series.str.slice(0, int(feature_label_char_limit))
+    _var_df['dotplot_feature_name'] = _feature_label_series
+    _feature_label_map = _feature_label_series.astype(str).to_dict()
+
+    def _prep_dotplot(prefix: str,
+                      pval_col: str,
+                      l2fc_col: str,
+                      friendly_pval_label: str,
+                      pval_cutoff_ring: float,
+                      size_tuple: tuple[int, int]):
+        if pval_col not in _var_df.columns:
+            raise ValueError(f"Column '{pval_col}' not found in var_df.")
+        if l2fc_col not in _var_df.columns:
+            raise ValueError(f"Column '{l2fc_col}' not found in var_df.")
+        log10_label = f"-log10({friendly_pval_label})"
+        log10_col = f"{prefix}_log10pval"
+        size_col = f"{prefix}_dotplot_size_metric"
+        ring_col = f"{prefix}_ring_cutoff"
+        _pvals = pd.to_numeric(_var_df[pval_col], errors='coerce').clip(lower=1e-300, upper=1.0)
+        _var_df[log10_col] = -np.log10(_pvals)
+        _var_df[size_col] = np.where(_pvals > 0.5, 0.0, _var_df[log10_col])
+        size_min = 0.0
+        _size_vals = pd.to_numeric(_var_df.loc[feature_list, size_col], errors='coerce').replace([np.inf, -np.inf], np.nan)
+        size_max = float(_size_vals.max()) if np.isfinite(_size_vals.max()) else 0.0
+        l2fc_x_limit = _var_df.loc[feature_list, l2fc_col].abs().max()
+        log10_thresh = float(-np.log10(pval_cutoff_ring))
+        _var_df[ring_col] = np.round(log10_thresh, 2)
+        size_max = float(max(size_max, log10_thresh, 1e-6))
+        _cmap = plt.get_cmap('viridis_r')
+        _color_norm = plt.Normalize(vmin=log10_thresh, vmax=max(size_max, log10_thresh), clip=True)
+        return {
+            'log10_label': log10_label,
+            'log10_col': log10_col,
+            'size_col': size_col,
+            'ring_col': ring_col,
+            'size_min': size_min,
+            'size_max': size_max,
+            'cmap': _cmap,
+            'color_norm': _color_norm,
+            'l2fc_x_limit': l2fc_x_limit,
+            'pval_col': pval_col,
+            'l2fc_col': l2fc_col,
+            'ring_value': log10_thresh,
+            'sizes': size_tuple,
+        }
+
+    dot1_meta = _prep_dotplot('dot1', dotplot_pval_vars_col_label, dotplot_l2fc_vars_col_label,
+                              pval_label, pvalue_cutoff_ring, (sizes or (20, 2000)))
+    dot2_meta = _prep_dotplot('dot2', dotplot2_pval_vars_col_label, dotplot2_l2fc_vars_col_label,
+                              dotplot2_pval_label, dotplot2_pvalue_cutoff_ring, (dotplot2_sizes or (20, 2000)))
+    dot3_meta = _prep_dotplot('dot3', dotplot3_pval_vars_col_label, dotplot3_l2fc_vars_col_label,
+                              dotplot3_pval_label, dotplot3_pvalue_cutoff_ring, (dotplot3_sizes or (20, 2000)))
+    dot4_meta = _prep_dotplot('dot4', dotplot4_pval_vars_col_label, dotplot4_l2fc_vars_col_label,
+                              dotplot4_pval_label, dotplot4_pvalue_cutoff_ring, (dotplot4_sizes or (20, 2000)))
+
+    gene_list_len = len(feature_list)
+    fig = plt.figure(figsize=figsize)
+    subfigs = fig.subfigures(1, 5, wspace=col_wspace, width_ratios=bar_dotplot_width_ratios)
+    if fig_title is not None:
+        ft_size = fig_title_fontsize or subfig_title_fontsize or (legend_fontsize + 2)
+        fig.suptitle(fig_title, fontsize=ft_size, y=fig_title_y)
+
+    axes0 = subfigs[0].subplots(gene_list_len, 1, sharex=barh_sharex)
+    subfigs[0].suptitle(barh_figure_plot_title or barh_subplot_xlabel, fontsize=(subfig_title_fontsize or legend_fontsize), y=subfig_title_y)
+
+    axes1 = subfigs[1].subplots(gene_list_len, 1, sharex=dotplot_sharex)
+    subfigs[1].suptitle(dotplot_figure_plot_title or dotplot_subplot_xlabel, fontsize=(subfig_title_fontsize or legend_fontsize), y=subfig_title_y)
+
+    axes2 = subfigs[2].subplots(gene_list_len, 1, sharex=dotplot2_sharex)
+    subfigs[2].suptitle(dotplot2_figure_plot_title or dotplot2_subplot_xlabel, fontsize=(subfig_title_fontsize or legend_fontsize), y=subfig_title_y)
+
+    axes3 = subfigs[3].subplots(gene_list_len, 1, sharex=dotplot3_sharex)
+    subfigs[3].suptitle(dotplot3_figure_plot_title or dotplot3_subplot_xlabel, fontsize=(subfig_title_fontsize or legend_fontsize), y=subfig_title_y)
+
+    axes4 = subfigs[4].subplots(gene_list_len, 1, sharex=dotplot4_sharex)
+    subfigs[4].suptitle(dotplot4_figure_plot_title or dotplot4_subplot_xlabel, fontsize=(subfig_title_fontsize or legend_fontsize), y=subfig_title_y)
+
+    if row_hspace is not None:
+        subfigs[0].subplots_adjust(hspace=row_hspace)
+        subfigs[1].subplots_adjust(hspace=row_hspace)
+        subfigs[2].subplots_adjust(hspace=row_hspace)
+        subfigs[3].subplots_adjust(hspace=row_hspace)
+        subfigs[4].subplots_adjust(hspace=row_hspace)
+
+    def _draw_dot(ax, meta, gene, subplot_xlabel, sharex_flag,
+                  annotate_flag, annotate_xy, annotate_labels, annotate_fontsize,
+                  set_xaxis_lims):
+        sns.scatterplot(
+            data=_var_df.loc[[gene]],
+            x=meta['l2fc_col'],
+            y='dotplot_feature_name',
+            size=meta['ring_col'],
+            size_norm=(meta['size_min'], meta['size_max']),
+            sizes=meta['sizes'],
+            facecolors="none",
+            edgecolors="red",
+            linewidths=1,
+            zorder=4,
+            legend=False,
+            ax=ax,
+        )
+        _val = float(_var_df.loc[gene, meta['log10_col']]) if gene in _var_df.index else np.nan
+        _dot_color = meta['cmap'](meta['color_norm'](_val)) if (np.isfinite(_val) and (_val >= meta['ring_value'])) else 'grey'
+        sns.scatterplot(
+            data=_var_df.loc[[gene]],
+            x=meta['l2fc_col'],
+            y='dotplot_feature_name',
+            size=meta['size_col'],
+            size_norm=(meta['size_min'], meta['size_max']),
+            sizes=meta['sizes'],
+            color=_dot_color,
+            edgecolors="black",
+            linewidths=.5,
+            zorder=3,
+            legend=False,
+            ax=ax,
+        )
+        if annotate_flag and (gene in _var_df.index):
+            try:
+                _l2fc_val = _var_df.loc[gene, meta['l2fc_col']]
+                _pval_val = _var_df.loc[gene, meta['pval_col']]
+                if np.isfinite(_l2fc_val) and np.isfinite(_pval_val):
+                    _ann_text = f"{annotate_labels[0]}{_l2fc_val:.2g} | {annotate_labels[1]}{_pval_val:.2g}"
+                    _ann_fs = annotate_fontsize or max(8, int(tick_label_fontsize))
+                    _xy = annotate_xy or (0.8, 1.2)
+                    ax.text(_xy[0], _xy[1], _ann_text, transform=ax.transAxes,
+                            ha='right', va='center', fontsize=_ann_fs, color='black')
+            except Exception as e:
+                print(f"Dotplot annotation failed for feature '{gene}': {e}")
+        if set_xaxis_lims is not None:
+            ax.set_xlim(set_xaxis_lims)
+        else:
+            l2fc_xaxis_pad = 1.05
+            ax.set_xlim((-meta['l2fc_x_limit'] * l2fc_xaxis_pad), (meta['l2fc_x_limit'] * l2fc_xaxis_pad))
+        ax.tick_params(axis='x', labelsize=tick_label_fontsize)
+        ax.xaxis.set_major_formatter(StrMethodFormatter('{x:g}'))
+        ax.axvline(x=0, color="red", linestyle="--")
+        ax.set_ylabel('')
+        ax.set_yticklabels([])
+
+    if gene_list_len == 1:
+        axes0_list = [axes0]
+        axes1_list = [axes1]
+        axes2_list = [axes2]
+        axes3_list = [axes3]
+        axes4_list = [axes4]
+    else:
+        axes0_list = list(axes0)
+        axes1_list = list(axes1)
+        axes2_list = list(axes2)
+        axes3_list = list(axes3)
+        axes4_list = list(axes4)
+
+    for plot_num, gene in enumerate(feature_list):
+        ax0 = axes0_list[plot_num]
+        ax1 = axes1_list[plot_num]
+        ax2 = axes2_list[plot_num]
+        ax3 = axes3_list[plot_num]
+        ax4 = axes4_list[plot_num]
+
+        sns.barplot(
+            x=gene, y=comparison_col,
+            data=df_obs_x,
+            order=categories,
+            ax=ax0,
+            hue=comparison_col,
+            hue_order=categories,
+            legend=False,
+            palette=color_map,
+        )
+        if barh_remove_yticklabels:
+            ax0.set_yticklabels([])
+        sns.stripplot(
+            x=gene, y=comparison_col,
+            data=df_obs_x,
+            order=categories,
+            ax=ax0,
+            color='black',
+            legend=False
+        )
+        if barh_set_xaxis_lims is not None:
+            ax0.set_xlim(barh_set_xaxis_lims)
+        ax0.tick_params(axis='x', labelsize=tick_label_fontsize)
+        ax0.xaxis.set_major_formatter(StrMethodFormatter('{x:g}'))
+        ax0.set_xlabel('')
+        _feat_label = _feature_label_map.get(gene, str(gene))
+        ax0.set_ylabel(_feat_label, rotation=0, fontsize=feature_label_fontsize, ha='right', va='center')
+        ax0.yaxis.set_label_coords(feature_label_x, 0.5)
+
+        _draw_dot(ax1, dot1_meta, gene, dotplot_subplot_xlabel, dotplot_sharex,
+                  dotplot_annotate, dotplot_annotate_xy, dotplot_annotate_labels, dotplot_annotate_fontsize,
+                  dotplot_set_xaxis_lims)
+        _draw_dot(ax2, dot2_meta, gene, dotplot2_subplot_xlabel, dotplot2_sharex,
+                  dotplot2_annotate, dotplot2_annotate_xy, dotplot2_annotate_labels, dotplot2_annotate_fontsize,
+                  dotplot2_set_xaxis_lims)
+        _draw_dot(ax3, dot3_meta, gene, dotplot3_subplot_xlabel, dotplot3_sharex,
+                  dotplot3_annotate, dotplot3_annotate_xy, dotplot3_annotate_labels, dotplot3_annotate_fontsize,
+                  dotplot3_set_xaxis_lims)
+        _draw_dot(ax4, dot4_meta, gene, dotplot4_subplot_xlabel, dotplot4_sharex,
+                  dotplot4_annotate, dotplot4_annotate_xy, dotplot4_annotate_labels, dotplot4_annotate_fontsize,
+                  dotplot4_set_xaxis_lims)
+
+        if dotplot_sharex and plot_num < gene_list_len - 1:
+            ax1.set_xlabel('')
+        if dotplot2_sharex and plot_num < gene_list_len - 1:
+            ax2.set_xlabel('')
+        if dotplot3_sharex and plot_num < gene_list_len - 1:
+            ax3.set_xlabel('')
+        if dotplot4_sharex and plot_num < gene_list_len - 1:
+            ax4.set_xlabel('')
+
+    axes0_list[-1].set_xlabel(barh_subplot_xlabel, fontsize=legend_fontsize)
+    axes1_list[-1].set_xlabel(dotplot_subplot_xlabel, fontsize=legend_fontsize)
+    axes2_list[-1].set_xlabel(dotplot2_subplot_xlabel, fontsize=legend_fontsize)
+    axes3_list[-1].set_xlabel(dotplot3_subplot_xlabel, fontsize=legend_fontsize)
+    axes4_list[-1].set_xlabel(dotplot4_subplot_xlabel, fontsize=legend_fontsize)
+
+    if barh_legend:
+        handles = [Patch(facecolor=color_map[c], edgecolor='none', label=str(c)) for c in categories]
+        subfigs[0].legend(
+            handles=handles,
+            labels=[str(c) for c in categories],
+            loc='lower center',
+            ncol=min(len(categories), 6),
+            title=comparison_col,
+            bbox_to_anchor=barh_legend_bbox_to_anchor,
+            fontsize=legend_fontsize,
+            title_fontsize=legend_fontsize,
+        )
+
+    def _dot_legend(subfig, meta, legend_bins, legend_bbox):
+        from matplotlib.lines import Line2D
+        vmin_leg = meta['ring_value']
+        vmax_leg = max(meta['size_max'], meta['ring_value'])
+        cmap = meta['cmap']
+        norm = plt.Normalize(vmin=vmin_leg, vmax=vmax_leg, clip=True)
+        v_ring = meta['ring_value']
+        n_bins = max(1, int(legend_bins or 3))
+        edges = np.linspace(vmin_leg, vmax_leg, n_bins + 1)
+        uppers = edges[1:]
+        uniq_vals = []
+        seen = set()
+        for u in uppers:
+            key = round(float(u), 1)
+            if key <= round(v_ring, 1) + 1e-6:
+                continue
+            if key in seen:
+                continue
+            seen.add(key)
+            uniq_vals.append(float(u))
+
+        def _area_for(v):
+            return float(np.interp(v, [meta['size_min'], meta['size_max']], meta['sizes']))
+        def _ms_for(v):
+            return max(4.0, np.sqrt(_area_for(v)))
+
+        handles = []
+        ms_ring = _ms_for(v_ring)
+        ring_handle = Line2D([0], [0], marker='o', linestyle='',
+                             markerfacecolor='none', markeredgecolor='red', markeredgewidth=1.5,
+                             markersize=ms_ring, label=f"{v_ring:.1f} ring")
+        v_grey = max(meta['size_min'], min(v_ring - 0.01, vmax_leg))
+        grey_handle = Line2D([0], [0], marker='o', linestyle='',
+                             markerfacecolor='grey', markeredgecolor='black',
+                             markersize=_ms_for(v_grey), label=f"< {v_ring:.1f}")
+        for u in uniq_vals:
+            handles.append(
+                Line2D([0], [0], marker='o', linestyle='',
+                       markerfacecolor=cmap(norm(u)), markeredgecolor='black',
+                       markersize=_ms_for(u), label=f"{round(u,1):.1f}")
+            )
+        desired_handles = [grey_handle] + handles + [ring_handle]
+        ncol = 4 if len(desired_handles) >= 4 else len(desired_handles) or 1
+        nrow = int(np.ceil(len(desired_handles) / ncol))
+        grid = [[None for _ in range(ncol)] for _ in range(nrow)]
+        for idx, handle in enumerate(desired_handles):
+            r = idx // ncol
+            c = idx % ncol
+            grid[r][c] = handle
+        legend_handles = []
+        for c in range(ncol):
+            for r in range(nrow):
+                h = grid[r][c]
+                if h is not None:
+                    legend_handles.append(h)
+        legend_labels = [h.get_label() for h in legend_handles]
+        subfig.legend(
+            handles=legend_handles,
+            labels=legend_labels,
+            loc='lower center',
+            ncol=ncol,
+            bbox_to_anchor=legend_bbox,
+            title=f"{meta['log10_label']}",
+            fontsize=legend_fontsize,
+            title_fontsize=legend_fontsize,
+            frameon=True,
+            markerfirst=True,
+            handletextpad=0.6,
+            columnspacing=0.8,
+            borderaxespad=0.2,
+        )
+
+    if dotplot_legend:
+        _dot_legend(subfigs[1], dot1_meta, dotplot_legend_bins, dotplot_legend_bbox_to_anchor)
+    if dotplot2_legend:
+        _dot_legend(subfigs[2], dot2_meta, dotplot2_legend_bins, dotplot2_legend_bbox_to_anchor)
+    if dotplot3_legend:
+        _dot_legend(subfigs[3], dot3_meta, dotplot3_legend_bins, dotplot3_legend_bbox_to_anchor)
+    if dotplot4_legend:
+        _dot_legend(subfigs[4], dot4_meta, dotplot4_legend_bins, dotplot4_legend_bbox_to_anchor)
+
+    rect_used = (np.array(tight_layout_rect_arg) + np.array([0, 0.0, 0, 0])).tolist() if (
+        dotplot_legend or barh_legend or dotplot2_legend or dotplot3_legend or dotplot4_legend
+    ) else tight_layout_rect_arg
+    if use_tight_layout:
+        plt.tight_layout(rect=rect_used)
+
+    if savefig:
+        plt.savefig(file_name, dpi=300, bbox_inches="tight")
+        print(f"Saved plot to {file_name}")
+    plt.show()
+    return fig, subfigs
+
+
 #### great parameters for 15 rows with  barh_dotplot_dotplot_dotplot_column
 
 '''
