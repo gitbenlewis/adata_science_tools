@@ -1,7 +1,11 @@
 # adata_science_tools/anndata_io/_metab_IO.py
 # functions to read Metabolon Excel files into AnnData objects
-# module level package imports
+# adata_science_tools/anndata_io/_metab_IO.py
+# functions to read Metabolon Excel files into AnnData objects
+'''
 # updated 2026-02-04
+'''
+# module level package imports
 import logging
 from typing import Dict, List, TextIO, Tuple, Union
 import numpy as np
