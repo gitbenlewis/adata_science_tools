@@ -1,9 +1,11 @@
-import matplotlib.pyplot as plt
+#adata_science_tools/anndata_plotting/_column_plots.py
+'''
+updated 2026-01-30 ish to add barh_4X_dotplot_column() function
 
+'''
+import matplotlib.pyplot as plt
 # module at projects/gitbenlewis/adata_science_tools/anndata_plotting/_column_plots.py
 ####### START ############. _column plots (horizontal bar / l2fc dotplots ) ###################.###################.###################.###################.
-
-
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
