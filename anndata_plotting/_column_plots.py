@@ -921,8 +921,9 @@ def barh_l2fc_dotplot_column(
         file_name: str = 'test_plot.png',
         # barh specific parameters
         comparison_col: str | None = 'Treatment',
-        barh_remove_yticklabels: bool = True,
         comparison_order: list[str] | None = None,
+        hue_palette_color_list: list[str] | None = None,
+        barh_remove_yticklabels: bool = True,
         barh_figure_plot_title: str | None = f'Expression (TPM)',
         barh_subplot_xlabel: str | None = 'Expression (TPM)',
         barh_sharex: bool = False,
@@ -1004,10 +1005,13 @@ def barh_l2fc_dotplot_column(
         Output path used when `savefig` is enabled.
     comparison_col : str | None, optional
         Observation column used to group samples prior to computing bar aggregates.
-    barh_remove_yticklabels : bool, optional
-        If `True`, remove tick labels on the bar plot y-axis (feature labels remain as axis labels).
     comparison_order : list[str] | None, optional
         Explicit ordering of categories in `comparison_col`; detected from data when `None`.
+    hue_palette_color_list : list[str] | None, optional
+        Explicit list of colors used to map `comparison_col` categories to bar colors.
+        When provided, length must be at least the number of categories; extra colors are ignored.
+    barh_remove_yticklabels : bool, optional
+        If `True`, remove tick labels on the bar plot y-axis (feature labels remain as axis labels).
     barh_figure_plot_title : str | None, optional
         Title displayed above the bar plot subfigure.
     barh_subplot_xlabel : str | None, optional
@@ -1078,8 +1082,13 @@ def barh_l2fc_dotplot_column(
         savefig=False,
         file_name='barh_l2fc_dotplot.png',
         comparison_col='Treatment',
-        barh_remove_yticklabels=True,
         comparison_order=None,
+        hue_palette_color_list=[
+            "#332288", "#88CCEE", "#44AA99", "#117733",
+            "#999933", "#DDCC77", "#661100", "#CC6677",
+            "#882255", "#AA4499", "#8D8D8D"
+        ],
+        barh_remove_yticklabels=True,
         barh_figure_plot_title='Feature Summary',
         barh_subplot_xlabel='Feature Values',
         barh_sharex=False,
@@ -1155,8 +1164,25 @@ def barh_l2fc_dotplot_column(
     else:
         categories = list(comparison_order)
 
+    # -------------------------
+    # build color map for barh based on categories and optional user-provided palette
+    # -------------------------
+    # Paul Tol’s 10-color set + gray
+    tol_colors_w_grey = [
+        "#332288","#661100","#117733","#999933",
+          "#88CCEE", "#882255" "#44AA99",  "#DDCC77",
+          "#CC6677","#8D8D8D",  "#AA4499",
+        
+    ]
     # Build a fixed palette used for every subplot
-    palette = sns.color_palette('tab10', n_colors=len(categories))
+    if hue_palette_color_list is not None:
+        if len(hue_palette_color_list) < len(categories):
+            raise ValueError(
+                "hue_palette_color_list must provide at least one color per comparison_col category."
+            )
+        palette = list(hue_palette_color_list)[:len(categories)]
+    else:
+        palette = sns.color_palette('tab10', n_colors=len(categories))
     color_map = dict(zip(categories, palette))
 
 
@@ -1529,8 +1555,9 @@ def barh_dotplot_dotplot_column(
         file_name: str = 'barh_dotplot_dotplot.png',
         # barh specific parameters
         comparison_col: str | None = 'Treatment',
-        barh_remove_yticklabels: bool = True,
         comparison_order: list[str] | None = None,
+        hue_palette_color_list: list[str] | None = None,
+        barh_remove_yticklabels: bool = True,
         barh_figure_plot_title: str | None = 'Expression (TPM)',
         barh_subplot_xlabel: str | None = 'Expression (TPM)',
         barh_sharex: bool = False,
@@ -1576,6 +1603,7 @@ def barh_dotplot_dotplot_column(
     barh_dotplot_dotplot_column()
     #----------
     Compose three-column figure with one barplot column and two dotplot columns per feature.
+    Use `hue_palette_color_list` to override bar colors when provided.
     ------#
     """
     if feature_list is None:
@@ -1621,7 +1649,14 @@ def barh_dotplot_dotplot_column(
                      or list(df_obs_x[comparison_col].unique())
     else:
         categories = list(comparison_order)
-    palette = sns.color_palette('tab10', n_colors=len(categories))
+    if hue_palette_color_list is not None:
+        if len(hue_palette_color_list) < len(categories):
+            raise ValueError(
+                "hue_palette_color_list must provide at least one color per comparison_col category."
+            )
+        palette = list(hue_palette_color_list)[:len(categories)]
+    else:
+        palette = sns.color_palette('tab10', n_colors=len(categories))
     color_map = dict(zip(categories, palette))
 
     if (feature_label_vars_col is not None) and (feature_label_vars_col in _var_df.columns):
@@ -2015,8 +2050,13 @@ adtl.barh_dotplot_dotplot_column(
         #file_name=G.nulisa_top15_DA_ttest_rel_plot_ttest_rel_MAD_file,
         # barh specific parameters
         comparison_col='Timepoint',
-        barh_remove_yticklabels=True,
         comparison_order=None,
+        hue_palette_color_list=[
+            "#332288", "#88CCEE", "#44AA99", "#117733",
+            "#999933", "#DDCC77", "#661100", "#CC6677",
+            "#882255", "#AA4499", "#8D8D8D"
+        ],
+        barh_remove_yticklabels=True,
         barh_figure_plot_title='Assay Values',
         barh_subplot_xlabel='Assay Values',
         barh_sharex=False,
@@ -2091,8 +2131,9 @@ def barh_dotplot_dotplot_dotplot_column(
         file_name: str = 'barh_dotplot_dotplot_dotplot.png',
         # barh
         comparison_col: str | None = 'Treatment',
-        barh_remove_yticklabels: bool = True,
         comparison_order: list[str] | None = None,
+        hue_palette_color_list: list[str] | None = None,
+        barh_remove_yticklabels: bool = True,
         barh_figure_plot_title: str | None = 'Expression',
         barh_subplot_xlabel: str | None = 'Expression',
         barh_sharex: bool = False,
@@ -2151,7 +2192,9 @@ def barh_dotplot_dotplot_dotplot_column(
         dotplot3_annotate_labels: tuple[str, str] | None = ('l2fc: ', 'p:'),
         dotplot3_annotate_fontsize: int | None = None,
     ):
-    """Four-column layout: bar column + three dotplot columns."""
+    """Four-column layout: bar column + three dotplot columns.
+    Use `hue_palette_color_list` to override bar colors when provided.
+    """
     if feature_list is None:
         raise ValueError("feature_list must be provided.")
 
@@ -2180,7 +2223,14 @@ def barh_dotplot_dotplot_dotplot_column(
                      or list(df_obs_x[comparison_col].unique())
     else:
         categories = list(comparison_order)
-    palette = sns.color_palette('tab10', n_colors=len(categories))
+    if hue_palette_color_list is not None:
+        if len(hue_palette_color_list) < len(categories):
+            raise ValueError(
+                "hue_palette_color_list must provide at least one color per comparison_col category."
+            )
+        palette = list(hue_palette_color_list)[:len(categories)]
+    else:
+        palette = sns.color_palette('tab10', n_colors=len(categories))
     color_map = dict(zip(categories, palette))
 
     if (feature_label_vars_col is not None) and (feature_label_vars_col in _var_df.columns):
@@ -2523,8 +2573,9 @@ def barh_4X_dotplot_column(
         file_name: str = 'barh_4X_dotplot.png',
         # barh
         comparison_col: str | None = 'Treatment',
-        barh_remove_yticklabels: bool = True,
         comparison_order: list[str] | None = None,
+        hue_palette_color_list: list[str] | None = None,
+        barh_remove_yticklabels: bool = True,
         barh_figure_plot_title: str | None = 'Expression',
         barh_subplot_xlabel: str | None = 'Expression',
         barh_sharex: bool = False,
@@ -2600,7 +2651,9 @@ def barh_4X_dotplot_column(
         dotplot4_annotate_labels: tuple[str, str] | None = ('l2fc: ', 'p:'),
         dotplot4_annotate_fontsize: int | None = None,
     ):
-    """Five-column layout: bar column + four dotplot columns."""
+    """Five-column layout: bar column + four dotplot columns.
+    Use `hue_palette_color_list` to override bar colors when provided.
+    """
     if feature_list is None:
         raise ValueError("feature_list must be provided.")
 
@@ -2629,7 +2682,14 @@ def barh_4X_dotplot_column(
                      or list(df_obs_x[comparison_col].unique())
     else:
         categories = list(comparison_order)
-    palette = sns.color_palette('tab10', n_colors=len(categories))
+    if hue_palette_color_list is not None:
+        if len(hue_palette_color_list) < len(categories):
+            raise ValueError(
+                "hue_palette_color_list must provide at least one color per comparison_col category."
+            )
+        palette = list(hue_palette_color_list)[:len(categories)]
+    else:
+        palette = sns.color_palette('tab10', n_colors=len(categories))
     color_map = dict(zip(categories, palette))
 
     if (feature_label_vars_col is not None) and (feature_label_vars_col in _var_df.columns):
@@ -2995,8 +3055,13 @@ adtl.barh_dotplot_dotplot_dotplot_column(
         #file_name=G.nulisa_top15_DA_ttest_rel_plot_ttest_rel_file,
         # barh specific parameters
         comparison_col='Treatment',
-        barh_remove_yticklabels=True,
         comparison_order=None,
+        hue_palette_color_list=[
+            "#332288", "#88CCEE", "#44AA99", "#117733",
+            "#999933", "#DDCC77", "#661100", "#CC6677",
+            "#882255", "#AA4499", "#8D8D8D"
+        ],
+        barh_remove_yticklabels=True,
         barh_figure_plot_title='Assay Values',
         barh_subplot_xlabel='Assay Values',
         barh_sharex=False,
