@@ -1,0 +1,130 @@
+
+# py0_download_and_parse_input_files_PMID_33969320_params.py configs
+py0_download_and_parse_input_files_PMID_33969320_params:
+  download_input_files_params:
+    repo_or_project_dir: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/input_files/
+    overwrite_existing_files: false
+    observation_metadata_url: https://data.mendeley.com/public-files/datasets/nf853r8xsj/files/e81b51ed-8f29-4f2b-bccc-5b3364341e92/file_downloaded
+    observation_metadata_filename: Clinical_Metadata.xlsx
+    olink_data_url: https://data.mendeley.com/public-files/datasets/nf853r8xsj/files/430eabd8-9b62-4e5f-b7c4-75ac26567c2f/file_downloaded
+    olink_data_filename: Olink_Proteomics.xlsx
+    olink_var_metadata_url: https://data.mendeley.com/public-files/datasets/nf853r8xsj/files/5cf61188-4534-4e86-9114-72a833bfeddd/file_downloaded
+    olink_var_metadata_filename: Supplemental-Table-2-Olink-Assays-NPX-values_v2.xlsx
+    somalogic_data_url: https://data.mendeley.com/public-files/datasets/nf853r8xsj/files/1bc0ffe4-13c1-4809-927d-07dcffe11c15/file_downloaded
+    somalogic_data_filename: Somalogic_Proteomics.xlsx
+  parse_olink_xlsx_file_2_adata_params:
+    overwrite_existing_files: true
+    adata_parsed_data_output_path: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/input_files/olink_dataset_PMID_33969320
+    save_X_obs_var_csv: true
+    save_layers_as_csv: true
+    olink_X_data_xlsx_path: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/input_files/Olink_Proteomics.xlsx
+    olink_data_adata_X_sheet_name: "Olink Proteomics"
+    olink_obs_data_xlsx_path: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/input_files/Clinical_Metadata.xlsx
+    olink_data_adata_obs_sheet_name: "Subject-level metadata"
+    olink_var_data_xlsx_path: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/input_files/Supplemental-Table-2-Olink-Assays-NPX-values_v2.xlsx
+    olink_data_adata_var_sheet_name_1: "2A-Olink-Assay"
+    olink_data_adata_var_sheet_name_1_columns_to_use: ["OlinkID","Assay", "UniProt", "Panel", "Panel_Version"]
+    olink_data_adata_var_sheet_name_2: "2B Olink proteins"
+    run_uniprot_2_gene_name_mapping: true
+    save_uniprot_2_gene_name_mapping: true
+  parse_somalogic_xlsx_file_2_adata_params:
+    overwrite_existing_files: true
+    adata_parsed_data_output_path: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/input_files/somalogic_dataset_PMID_33969320
+    save_X_obs_var_csv: true
+    save_layers_as_csv: true
+    somalogic_X_data_xlsx_path: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/input_files/Somalogic_Proteomics.xlsx
+    somalogic_data_adata_X_sheet_name: "Sheet1"
+    somalogic_obs_data_xlsx_path: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/input_files/Clinical_Metadata.xlsx
+    somalogic_data_adata_obs_sheet_name: "Subject-level metadata"
+    run_uniprot_2_gene_name_mapping: true
+    save_uniprot_2_gene_name_mapping: true
+    uniprot_2_gene_name_mapping_output_path: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/input_files/uniprot_2_gene_name_mapping.csv
+    merge_var_metadata_from_csv: true
+    somalogic_var_data_csv_path: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/input_files/uniprot_2_gene_name_mapping.csv
+
+make_diff_test_tables_params:
+  repo_results_dir: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/results/diff_test/
+  default_params:
+    layer: 
+    ascending: true
+    groupby_key: 
+    save_output: true
+    add_adata_var_column_key_list:
+    add_values2results: true
+    use_raw: false
+  diff_test_runs:
+    COVID_over_NOT_D0:
+      run: true
+      adata_path:  /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/input_files/olink_dataset_PMID_33969320.h5ad
+      comparison_col_tag: _COVID_over_NOT_D0
+      groupby_key: COVID
+      groupby_key_target_values:
+        - '1'
+      groupby_key_ref_values:
+        - '0'
+      tests:
+        - ttest_ind
+        - mannwhitneyu
+      sortby: ttest_ind_pvals_COVID_over_NOT_D0
+      save_path: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/results/diff_test/diff_test_COVID_over_NOT_D0.csv
+      save_result_to_adata_uns_as_dict: false
+
+make_annotated_adata_params:
+  repo_results_dir: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/results/datasets/
+  annotate_adata_runs:
+    input:
+      run: true
+      name: input
+      adata_input_h5ad_path: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/input_files/olink_dataset_PMID_33969320.h5ad
+      annotated_adata_output_h5ad_path: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/results/datasets/olink_dataset_PMID_33969320.ann.h5ad
+      sample_metadata_sheet: 
+      dirs_with_tables_2_merge_2_adata_var:
+        diff_test:
+          merge: true
+          always_add_suffix_result_columns: false
+          var_results_dir: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/results/diff_test/
+          var_table_filenames_list:
+            - diff_test_COVID_over_NOT_D0.csv
+          suffix_for_adata_var_columns_list:
+            - .src_COVID_over_NOT_D0
+      PCA_analysis_params:
+        add_pca_results_to_adata: false
+        obsm_key_for_pcs: X_pca_custom
+      parse_annotate_adata: true
+      parse_dataset_call_key: annotated
+
+diff_datapoint_plots_params:
+  repo_results_dir: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/results/figures/diff_datapoint_plots/
+  defaults_params:
+  barh_l2fc_dotplot_column_calls_defaults:
+    figsize:
+      - 15
+      - 25
+    feature_label_vars_col: gene_name
+    feature_label_char_limit: 30
+    barh_figure_plot_title: OLINK norm units
+    barh_subplot_xlabel: OLINK norm units
+    dotplot_figure_plot_title: log2FoldChange(OLINK norm units)
+    layer:
+  barh_l2fc_dotplot_column_calls:
+    COVID_over_NOT_D0:
+      run: true
+      adata_h5ad_path:  /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/results/datasets/olink_dataset_PMID_33969320.ann.h5ad
+      file_name: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/results/figures/diff_datapoint_plots/COVID_over_NOT_D0_barh_l2fc_dotplot.png
+      sortby_col: ttest_ind_pvals_COVID_over_NOT_D0
+      ascending: true
+      top_n_features: 15
+      fig_title: "OLINK proteomics PMID_33969320 Top 15 Differential T-test Features
+      
+        by D0 - COVID over NOT | dotplot= l2fc, indep t-test pvalues"
+      comparison_col: COVID
+      comparison_col_order: ['0', '1']
+      hue_palette_color_list: [ "#999933","#117733"]
+      dotplot_figure_plot_title: "l2fc: COVID (Positive/negative)"
+      dotplot_pval_vars_col_label: ttest_ind_pvals_COVID_over_NOT_D0
+      dotplot_l2fc_vars_col_label: l2fc_COVID_over_NOT_D0
+      dotplot_subplot_xlabel: log2fc COVID over NOT D0
+      pval_label: "RAW paired pvalue:"
+      dotplot_annotate_labels:
+       - 'l2fc: '
+       - 'RAW pvalue: '
