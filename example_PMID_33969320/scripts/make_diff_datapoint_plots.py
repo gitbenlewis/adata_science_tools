@@ -63,7 +63,6 @@ from dataclasses import dataclass
 class G():
     '''Class to hold global variables'''
     WRITE_DIR='/home/ubuntu/write/'
-    ACTIO_REPO_PARENT_DIR='/home/ubuntu/projects/ActioBio/'
     GITBENLEWIS_REPO_PARENT_DIR='/home/ubuntu/projects/gitbenlewis/'
     SCRIPTS_DIR='../scripts/'
     CONFIG_DIR='../config/'
