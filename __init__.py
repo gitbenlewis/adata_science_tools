@@ -1,11 +1,11 @@
 """  Bens anndata data science tools ... """
 
-from . import anndata_io as io
-from . import anndata_preprocessing as pp
-from . import anndata_plotting as pl
-from . import anndata_tools as tl
+from . import _io as io
+from . import _preprocessing as pp
+from . import _plotting as pl
+from . import _tools as tl
 
-from .anndata_io import *
-from .anndata_preprocessing import *
-from .anndata_plotting import *
-from .anndata_tools import *
+from ._io import *
+from ._preprocessing import *
+from ._plotting import *
+from ._tools import *

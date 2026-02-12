@@ -1,0 +1,41 @@
+name: not_base
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+  - conda
+dependencies:
+  - python=3.10
+  - pip
+  - anndata
+  - bbknn
+  - click
+  - gseapy
+  - huggingface::datasets
+  - h5py
+  - ipykernel
+  - ipython
+  - ipywidgets
+  - leidenalg
+  - matplotlib
+  - networkx
+  - numba
+  - numpy
+  - pandas
+  - plotnine
+  - pynndescent
+  - python-igraph
+  - scanpy
+  - scikit-learn
+  - scikit-misc
+  - scipy
+  - seaborn
+  - session-info
+  - statsmodels
+  - tmux
+  - tqdm
+  - umap-learn
+  - upsetplot
+  - openpyxl
+  - yq
+  - lxml
