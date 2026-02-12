@@ -61,7 +61,6 @@ from dataclasses import dataclass
 class G():
     '''Class to hold global variables'''
     WRITE_DIR='WRITE_DIR/'
-    ACTIO_REPO_PARENT_DIR='HOME_PATH'
     GITBENLEWIS_REPO_PARENT_DIR='REPO_PARENT/'
     SCRIPTS_DIR='../scripts/'
     CONFIG_DIR='../config/'
