@@ -207,7 +207,8 @@ def metabolon_excel_2_adata_h5ad_csv(
                 left_on=merge_key_in_raw_obs_metadata,
                 right_on=merge_key_in_external_obs_metadata,
                 validate='one_to_one',
-                how='left'
+                how='left',
+                suffixes=('', '_external_metadata')
 
             )
             logger.info(f"adata.obs after merge head(2): \n{adata.obs.head(2)}")
@@ -248,7 +249,8 @@ def metabolon_excel_2_adata_h5ad_csv(
             left_on=merge_key_in_external_var_metadata,#
             right_index=True,#
             validate='one_to_one',
-                how='left'
+                how='left',
+                suffixes=('', '_external_metadata')
             )
             logger.info(f"new_var {new_var.head()}")
             logger.info(f"new_var.shape {new_var.shape}")
