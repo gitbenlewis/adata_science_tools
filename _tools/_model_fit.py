@@ -167,11 +167,37 @@ def fit_smf_mixedlm_models_and_summarize_wide(
     import statsmodels.api as sm
     import statsmodels.formula.api as smf
 
+    if predictors is None or len(predictors) == 0:
+        raise ValueError("fit_smf_mixedlm_models_and_summarize_wide requires a non-empty predictors list.")
+    if group is None:
+        raise ValueError("fit_smf_mixedlm_models_and_summarize_wide requires a non-empty group column name.")
+
     # Store models and any fit warnings in a dictionary keyed by feature
     models = {}
     for feature in feature_columns:
-        columns2keep = [feature] + predictors+ [group]
-        df = obs_X_df[columns2keep]
+        columns2keep = [feature] + predictors + [group]
+        missing_cols = [col for col in columns2keep if col not in obs_X_df.columns]
+        if missing_cols:
+            raise ValueError(
+                f"[{model_name}] Missing required columns for feature '{feature}': {missing_cols}."
+            )
+        df = obs_X_df[columns2keep].replace([np.inf, -np.inf], np.nan)
+        complete_case_mask = df.notna().all(axis=1)
+        n_complete = int(complete_case_mask.sum())
+        if n_complete == 0:
+            missing_counts = df.isna().sum().to_dict()
+            raise ValueError(
+                f"[{model_name}] No complete-case rows for feature '{feature}' "
+                f"with predictors {predictors} and group '{group}'. "
+                f"Missing counts by column: {missing_counts}."
+            )
+        df = df.loc[complete_case_mask]
+        n_groups = df[group].nunique(dropna=True)
+        if n_groups < 2:
+            raise ValueError(
+                f"[{model_name}] Need at least 2 non-empty groups in '{group}' for feature '{feature}', "
+                f"but found {n_groups} after complete-case filtering."
+            )
         predictors_q = [f'Q("{p}")' for p in predictors]
         model_string = f'Q("{feature}") ~ {" + ".join(predictors_q)}'
         summary_formula = f'{feature} ~ {" + ".join(predictors)} | {group}'

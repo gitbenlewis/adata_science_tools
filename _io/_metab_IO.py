@@ -209,7 +209,6 @@ def metabolon_excel_2_adata_h5ad_csv(
                 validate='one_to_one',
                 how='left',
                 suffixes=('', '_external_metadata')
-
             )
             logger.info(f"adata.obs after merge head(2): \n{adata.obs.head(2)}")
             logger.info(f"adata.obs columns after merge: \n{adata.obs.columns}")
