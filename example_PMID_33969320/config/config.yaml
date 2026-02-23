@@ -128,3 +128,71 @@ diff_datapoint_plots_params:
       dotplot_annotate_labels:
        - 'l2fc: '
        - 'RAW pvalue: '
+    COVID_over_NOT_D0_FDR:
+      run: true
+      adata_h5ad_path:  /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/results/datasets/olink_dataset_PMID_33969320.ann.h5ad
+      file_name: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/results/figures/diff_datapoint_plots/COVID_over_NOT_D0_barh_l2fc_dotplot_FDR.png
+      sortby_col: ttest_ind_pvals_FDR_COVID_over_NOT_D0
+      ascending: true
+      top_n_features: 15
+      fig_title: "OLINK proteomics PMID_33969320 Top 15 Differential T-test Features
+      
+        by D0 - COVID over NOT | dotplot= l2fc, indep t-test pvalues"
+      comparison_col: COVID
+      comparison_col_order: ['0', '1']
+      hue_palette_color_list: [ "#999933","#117733"]
+      dotplot_figure_plot_title: "l2fc: COVID (Positive/negative)"
+      dotplot_pval_vars_col_label: ttest_ind_pvals_FDR_COVID_over_NOT_D0
+      dotplot_l2fc_vars_col_label: l2fc_COVID_over_NOT_D0
+      dotplot_subplot_xlabel: log2fc COVID over NOT D0
+      pval_label: "FDR paired pvalue:"
+      dotplot_annotate_labels:
+       - 'l2fc: '
+       - 'FDR pvalue: '
+
+  
+volcano_plot_params:
+  repo_results_dir: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/results/figures/volcano_plots/
+  defaults_params:
+    dot_size_shrink_factor: 40
+    figsize:
+      - 15
+      - 10
+    legend_fontsize: 14
+    label_top_features: true
+    only_label_hue_dots: true
+    label_top_features_fontsize: 14
+    label_features_char_limit: 40
+    pvalue_threshold: 0.05
+    log2FoldChange_threshold: 0.5
+    table_sep: ','
+    feature_label_col: gene_name
+  volcano_plot_runs:
+    COVID_over_NOT_D0_ttest:
+      run: true
+      adata_h5ad_path: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/results/datasets/olink_dataset_PMID_33969320.ann.h5ad
+      file_name: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/results/figures/volcano_plots/COVID_over_NOT_D0_volcano.png
+      l2fc_col: l2fc_COVID_over_NOT_D0
+      set_xlabel: log2fc COVID over NOT D0
+      xlimit: 5
+      pvalue_col: ttest_ind_pvals_COVID_over_NOT_D0
+      set_ylabel: -log10(Raw p-value)
+      ylimit: 60
+      pvalue_threshold: 0.05
+      log2FoldChange_threshold: 1
+      title_text: OLINK PMID_33969320 D0 COVID over NOT
+      comparison_label: "RAW p-value : t-test"
+    COVID_over_NOT_D0_ttest_FDR:
+      run: true
+      adata_h5ad_path: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/results/datasets/olink_dataset_PMID_33969320.ann.h5ad
+      file_name: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/results/figures/volcano_plots/COVID_over_NOT_D0_volcano_FDR.png
+      l2fc_col: l2fc_COVID_over_NOT_D0
+      set_xlabel: log2fc COVID over NOT D0
+      xlimit: 5
+      pvalue_col: ttest_ind_pvals_FDR_COVID_over_NOT_D0
+      set_ylabel: -log10(FDR p-value)
+      ylimit: 60
+      pvalue_threshold: 0.05
+      log2FoldChange_threshold: 1
+      title_text: OLINK PMID_33969320 D0 COVID over NOT
+      comparison_label: "FDR p-value : t-test"
