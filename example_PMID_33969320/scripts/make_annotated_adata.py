@@ -84,12 +84,17 @@ print(f"REPO_ROOT set to: {str(REPO_ROOT)}")
 if str(REPO_ROOT) not in sys.path:
     sys.path.append(str(REPO_ROOT))
 from code_library import adata_science_tools as adtl
-print(f"Using adtl from {adtl.__file__}")
-#from code_library import gseapy_pre_rank_wrap as gprw
-#print(f"Using gprw from {gprw.__file__}")
-#from code_library import gseapy_dot_plots as gdp
-#print(f"Using gdp from {gdp.__file__}")
-
+print(f"Using adata_science_tools / adtl from {adtl.__file__}")
+try:    
+    from code_library import run_GSEApy_wrapper as rgw
+    print(f"Using run_GSEApy_wrapper / rgw from {rgw.__file__}")
+except ImportError as e:
+    print(f"run_GSEApy_wrapper not available: {e}")
+try:    
+    from code_library import RNAseq_analysis as rnaseq
+    print(f"Using RNAseq_analysis / rnaseq from {rnaseq.__file__}")
+except ImportError as e:
+    print(f"RNAseq_analysis not available: {e}")
 ########################################################## import custom code libraries ################################################
 
 
