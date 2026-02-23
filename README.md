@@ -23,11 +23,17 @@ bash example_PMID_33969320/scripts/000_run_everything.bash
 
 # Some example plots from example_PMID_33969320
 
-# Column plots 
+## Column plots 
  > /adata_science_tools/_plotting/_column_plots.py
 [view src file](_plotting/_column_plots.py)
 
-## barh_l2fc_dotplot()
-[View plot file](example_PMID_33969320/results/figures/diff_datapoint_plots/COVID_over_NOT_D0_barh_l2fc_dotplot.png)
+### adtl.barh_l2fc_dotplot()
+[View plot file](example_PMID_33969320/results/figures/diff_datapoint_plots/COVID_over_NOT_D0_barh_l2fc_dotplot_FDR.png)
+![COVID_over_NOT_D0_barh_l2fc_dotplot](example_PMID_33969320/results/figures/diff_datapoint_plots/COVID_over_NOT_D0_barh_l2fc_dotplot_FDR.png)
 
-![COVID_over_NOT_D0_barh_l2fc_dotplot](example_PMID_33969320/results/figures/diff_datapoint_plots/COVID_over_NOT_D0_barh_l2fc_dotplot.png)
+
+## Volcano plots 
+
+### adtl.volcano_plot_generic()
+[View plot file](example_PMID_33969320/results/figures/volcano_plots/COVID_over_NOT_D0_volcano_FDR.png)
+![COVID_over_NOT_D0_barh_l2fc_dotplot](example_PMID_33969320/results/figures/volcano_plots/COVID_over_NOT_D0_volcano_FDR.png)

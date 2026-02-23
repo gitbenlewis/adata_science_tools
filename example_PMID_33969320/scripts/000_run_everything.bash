@@ -63,7 +63,9 @@ echo "[INFO] Changed directory to repo root: $REPO_ROOT"
 "${PYTHON_BIN}" ./scripts/make_diff_test_tables.py
 # 5) run the make_annotated_adata.py script
 "${PYTHON_BIN}" ./scripts/make_annotated_adata.py
-# 7) run the make_diff_datapoint_plots.py script
+# 8) run the make_volcano_plots.py script
+"${PYTHON_BIN}" ./scripts/make_volcano_plots.py
+# 9) run the make_diff_datapoint_plots.py script
 "${PYTHON_BIN}" ./scripts/make_diff_datapoint_plots.py
 
 ##########################################################
@@ -80,16 +82,21 @@ echo "[INFO] Changed directory to repo root: $REPO_ROOT"
 # 4) run the make_model_fit_tables script
 #"${PYTHON_BIN}" ./scripts/make_model_fit_tables.py
 
-# 5) run the make_annotated_adata.py script
+# 5) run the make_gseapy_tables.py script
+#"${PYTHON_BIN}" ./scripts/make_gseapy_tables.py
+
+# 6) run the make_gseapy_dotplots.py script
+#"${PYTHON_BIN}" ./scripts/make_gseapy_dotplots.py
+
+# 7) run the make_annotated_adata.py script
 #"${PYTHON_BIN}" ./scripts/make_annotated_adata.py
 
-# 6) run the make_volcano_plots.py script
+# 8) run the make_volcano_plots.py script
 #"${PYTHON_BIN}" ./scripts/make_volcano_plots.py
 
-# 7) run the make_diff_datapoint_plots.py script
+# 9) run the make_diff_datapoint_plots.py script
 #"${PYTHON_BIN}" ./scripts/make_diff_datapoint_plots.py
 
-# 8) run the make_gseapy_dotplots.py script
-#"${PYTHON_BIN}" ./scripts/make_gseapy_dotplots.py
+
 #########################################################
 
