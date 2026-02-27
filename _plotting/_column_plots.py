@@ -1,7 +1,7 @@
 #adata_science_tools/_plotting/_column_plots.py
 '''
 updated 2026-01-30 ish to add barh_4X_dotplot_column() function
-
+updated 2026-02-25 to add use_single_dotplot_colormap: true config option and apply to all dotplots in the script
 '''
 import matplotlib.pyplot as plt
 # module at projects/gitbenlewis/adata_science_tools/_plotting/_column_plots.py
@@ -2650,6 +2650,7 @@ def barh_4X_dotplot_column(
         dotplot4_annotate_xy: tuple[float, float] | None = (0.8, 1.2),
         dotplot4_annotate_labels: tuple[str, str] | None = ('l2fc: ', 'p:'),
         dotplot4_annotate_fontsize: int | None = None,
+        use_single_dotplot_colormap: bool = False,
     ):
     """Five-column layout: bar column + four dotplot columns.
     Use `hue_palette_color_list` to override bar colors when provided.
@@ -2753,6 +2754,20 @@ def barh_4X_dotplot_column(
                               dotplot3_pval_label, dotplot3_pvalue_cutoff_ring, (dotplot3_sizes or (20, 2000)))
     dot4_meta = _prep_dotplot('dot4', dotplot4_pval_vars_col_label, dotplot4_l2fc_vars_col_label,
                               dotplot4_pval_label, dotplot4_pvalue_cutoff_ring, (dotplot4_sizes or (20, 2000)))
+    if use_single_dotplot_colormap:
+        dot_metas = [dot1_meta, dot2_meta, dot3_meta, dot4_meta]
+        shared_ring_value = dot1_meta['ring_value']
+        shared_size_max = max([m['size_max'] for m in dot_metas] + [shared_ring_value, 1e-6])
+        shared_color_norm = plt.Normalize(vmin=shared_ring_value, vmax=max(shared_size_max, shared_ring_value), clip=True)
+        shared_sizes = dot1_meta['sizes']
+        for meta in dot_metas:
+            meta['cmap'] = dot1_meta['cmap']
+            meta['color_norm'] = shared_color_norm
+            meta['ring_value'] = shared_ring_value
+            meta['size_min'] = dot1_meta['size_min']
+            meta['size_max'] = shared_size_max
+            meta['sizes'] = shared_sizes
+            _var_df[meta['ring_col']] = np.round(shared_ring_value, 2)
 
     gene_list_len = len(feature_list)
     fig = plt.figure(figsize=figsize)
@@ -3001,14 +3016,18 @@ def barh_4X_dotplot_column(
             borderaxespad=0.2,
         )
 
-    if dotplot_legend:
-        _dot_legend(subfigs[1], dot1_meta, dotplot_legend_bins, dotplot_legend_bbox_to_anchor)
-    if dotplot2_legend:
-        _dot_legend(subfigs[2], dot2_meta, dotplot2_legend_bins, dotplot2_legend_bbox_to_anchor)
-    if dotplot3_legend:
-        _dot_legend(subfigs[3], dot3_meta, dotplot3_legend_bins, dotplot3_legend_bbox_to_anchor)
-    if dotplot4_legend:
-        _dot_legend(subfigs[4], dot4_meta, dotplot4_legend_bins, dotplot4_legend_bbox_to_anchor)
+    if use_single_dotplot_colormap:
+        if dotplot_legend:
+            _dot_legend(subfigs[1], dot1_meta, dotplot_legend_bins, dotplot_legend_bbox_to_anchor)
+    else:
+        if dotplot_legend:
+            _dot_legend(subfigs[1], dot1_meta, dotplot_legend_bins, dotplot_legend_bbox_to_anchor)
+        if dotplot2_legend:
+            _dot_legend(subfigs[2], dot2_meta, dotplot2_legend_bins, dotplot2_legend_bbox_to_anchor)
+        if dotplot3_legend:
+            _dot_legend(subfigs[3], dot3_meta, dotplot3_legend_bins, dotplot3_legend_bbox_to_anchor)
+        if dotplot4_legend:
+            _dot_legend(subfigs[4], dot4_meta, dotplot4_legend_bins, dotplot4_legend_bbox_to_anchor)
 
     rect_used = (np.array(tight_layout_rect_arg) + np.array([0, 0.0, 0, 0])).tolist() if (
         dotplot_legend or barh_legend or dotplot2_legend or dotplot3_legend or dotplot4_legend
