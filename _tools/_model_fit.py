@@ -1,6 +1,7 @@
 # module imports
 # module at : /home/ubuntu/projects/gitbenlewis/adata_science_tools/_tools/_model_fit.py
-
+## updated 2026-02-24 added guard to skip features with no complete cases after dropping NaN/inf, and to record the reason for skipping in the model summary dataframe
+## updated 2026-02-24 added guard to coerce numeric-like predictors to numeric dtype so they are treated as continuous in the formula instead of categorical dummies, and added this coercion step to both OLS and mixedlm functions
 from .. _io._IO import make_df_obs_adataX
 
 import pandas as pd
@@ -24,20 +25,53 @@ def fit_smf_ols_models_and_summarize_wide(
 
     # Store models and any fit warnings in a dictionary keyed by feature
     models = {}
+    skipped_reasons = {}
     for feature in feature_columns:
         columns2keep = [feature] + predictors
-        df = obs_X_df[columns2keep]
+        df = obs_X_df[columns2keep].replace([np.inf, -np.inf], np.nan)
+        # Coerce numeric-like predictors (e.g. Age loaded as strings/categories) to numeric
+        # so formula terms remain continuous instead of categorical dummies.
+        for predictor in predictors:
+            series = df[predictor]
+            if not series.notna().any():
+                continue
+            numeric_values = pd.to_numeric(series, errors="coerce")
+            if numeric_values.notna().sum() == series.notna().sum():
+                df[predictor] = numeric_values.astype(float)
         predictors_q = [f'Q("{p}")' for p in predictors]
         model_string = f'Q("{feature}") ~ {" + ".join(predictors_q)}'
         model_summary_formula = f'{feature} ~ {" + ".join(predictors)}'
+        complete_case_mask = df.notna().all(axis=1)
+        if not complete_case_mask.any():
+            skipped_reasons[feature] = (
+                f"No complete-case rows after dropping NaN/inf for columns {columns2keep}."
+            )
+            models[feature] = (None, [], model_summary_formula)
+            continue
+        df = df.loc[complete_case_mask]
         with warnings.catch_warnings(record=True) as caught_warnings:
             warnings.simplefilter("always")
-            models[feature] = (smf.ols(model_string, df).fit(), caught_warnings, model_summary_formula)
+            try:
+                models[feature] = (smf.ols(model_string, df).fit(), caught_warnings, model_summary_formula)
+            except Exception as e:
+                skipped_reasons[feature] = f"{type(e).__name__}: {e}"
+                models[feature] = (None, caught_warnings, model_summary_formula)
 
     # make a results dataframe from the dict of models
     summary_rows = []
     for feature_name in feature_columns:
         model, caught_warnings, model_string = models[feature_name]
+        if model is None:
+            summary_rows.append(
+                {
+                    f'{model_name}_Formula': model_string,
+                    f'{model_name}_Converged': False,
+                    f'{model_name}_Warnings': skipped_reasons.get(
+                        feature_name, "Model fit skipped."
+                    ),
+                }
+            )
+            continue
         converged = getattr(model, "converged", None)
         if converged is None and hasattr(model, "mle_retvals"):
             converged = model.mle_retvals.get("converged")
@@ -182,6 +216,15 @@ def fit_smf_mixedlm_models_and_summarize_wide(
                 f"[{model_name}] Missing required columns for feature '{feature}': {missing_cols}."
             )
         df = obs_X_df[columns2keep].replace([np.inf, -np.inf], np.nan)
+        # Coerce numeric-like predictors (e.g. Age loaded as strings/categories) to numeric
+        # so formula terms remain continuous instead of categorical dummies.
+        for predictor in predictors:
+            series = df[predictor]
+            if not series.notna().any():
+                continue
+            numeric_values = pd.to_numeric(series, errors="coerce")
+            if numeric_values.notna().sum() == series.notna().sum():
+                df[predictor] = numeric_values.astype(float)
         complete_case_mask = df.notna().all(axis=1)
         n_complete = int(complete_case_mask.sum())
         if n_complete == 0:
