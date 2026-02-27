@@ -24,6 +24,7 @@ def diff_test(adata, layer=None, use_raw=False,
 
             ):
     """
+    #### update4d 2026-02-24 to add NA / inf handling (for features wh)
     #### update4d 2026-01-20 remove double var_names column in results DataFrame
     #### update4d 2026-01-19 added a gaurd for constant variance  in test calculations to avoid errors
     #### update4d 2025-12-27 added a logging and a save_log option
@@ -451,6 +452,11 @@ def diff_test(adata, layer=None, use_raw=False,
     group2_idx = adata.obs[groupby_key].isin(groupby_key_ref_values)
     data1 = X[group1_idx].copy()
     data2 = X[group2_idx].copy()
+    # Use finite-only copies for summary stats/tests; keep original data1/data2 for optional value exports.
+    data1_stats = data1.astype(float, copy=True)
+    data2_stats = data2.astype(float, copy=True)
+    data1_stats[~np.isfinite(data1_stats)] = np.nan
+    data2_stats[~np.isfinite(data2_stats)] = np.nan
     log.info(
         f"Group sizes for {groupby_key}: target={groupby_key_target_values} n={int(group1_idx.sum())}, "
         f"ref={groupby_key_ref_values} n={int(group2_idx.sum())}"
@@ -463,12 +469,16 @@ def diff_test(adata, layer=None, use_raw=False,
 
         data1 = X[group1_idx].copy()
         data2 = X[group2_idx].copy()
+        data1_stats = data1.astype(float, copy=True)
+        data2_stats = data2.astype(float, copy=True)
+        data1_stats[~np.isfinite(data1_stats)] = np.nan
+        data2_stats[~np.isfinite(data2_stats)] = np.nan
 
         # Compute mean expressions for each group (vectorized) and coefficient of variation
-        mean_data1 = np.mean(data1, axis=0)
-        cv_data1 = (np.std(data1, axis=0,ddof=1)/np.mean(data1, axis=0))*100
-        mean_data2 = np.mean(data2, axis=0)
-        cv_data2 = (np.std(data2, axis=0,ddof=1)/np.mean(data2, axis=0))*100
+        mean_data1 = np.nanmean(data1_stats, axis=0)
+        cv_data1 = (np.nanstd(data1_stats, axis=0,ddof=1)/np.nanmean(data1_stats, axis=0))*100
+        mean_data2 = np.nanmean(data2_stats, axis=0)
+        cv_data2 = (np.nanstd(data2_stats, axis=0,ddof=1)/np.nanmean(data2_stats, axis=0))*100
 
         # Compute  fold change with vectorized operation and handle zeros
         epsilon = 1e-9  # Small constant to avoid log issues
@@ -633,9 +643,11 @@ def diff_test(adata, layer=None, use_raw=False,
     nested_group_sizes_logged = False
     if 'ttest_ind' in tests:
         # Perform vectorized t-tests
-        t_stat, t_test_pvals = stats.ttest_ind(data1, data2, equal_var=False, axis=0)
+        t_stat, t_test_pvals = stats.ttest_ind(
+            data1_stats, data2_stats, equal_var=False, axis=0, nan_policy='omit'
+        )
         # Guard degenerate zero-variance features (both groups constant).
-        const_ind_mask = (np.ptp(data1, axis=0) == 0) & (np.ptp(data2, axis=0) == 0)
+        const_ind_mask = (np.ptp(data1_stats, axis=0) == 0) & (np.ptp(data2_stats, axis=0) == 0)
         if np.any(const_ind_mask):
             t_stat = t_stat.astype(float, copy=False)
             t_test_pvals = t_test_pvals.astype(float, copy=False)
@@ -656,12 +668,14 @@ def diff_test(adata, layer=None, use_raw=False,
         results[f'ttest_ind_pvals_FDR{comparison_col_tag}'] = t_test_pvals_corrected_full
     if 'mannwhitneyu' in tests:
         # Perform Mann-Whitney U tests with continuity correction
-        u_statistic, u_test_pvals = stats.mannwhitneyu(data1, data2, axis=0, alternative='two-sided', use_continuity=True)
+        u_statistic, u_test_pvals = stats.mannwhitneyu(
+            data1_stats, data2_stats, axis=0, alternative='two-sided', use_continuity=True, nan_policy='omit'
+        )
         #u_test_pvals = np.array([
         #    stats.mannwhitneyu(data1[:, i], data2[:, i], alternative='two-sided', use_continuity=True).pvalue
         #    for i in range(data1.shape[1])])
         # Guard degenerate zero-variance features (both groups constant).
-        const_ind_mask = (np.ptp(data1, axis=0) == 0) & (np.ptp(data2, axis=0) == 0)
+        const_ind_mask = (np.ptp(data1_stats, axis=0) == 0) & (np.ptp(data2_stats, axis=0) == 0)
         if np.any(const_ind_mask):
             u_statistic = u_statistic.astype(float, copy=False)
             u_test_pvals = u_test_pvals.astype(float, copy=False)
