@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """script doc string."""
-# /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/scripts/make_volcano_plots.py
+# /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/scripts/make_volcano_plots.py
+# updated: 2026-03-04
 
 import sys
 import os
@@ -76,7 +77,7 @@ class G():
     SAVE_OUTPUT_FIGURES=True
 # ------------- dataclass G()  --------------------------------------------------------
 
-########## import custom code libraries ################################################
+########## import custom code libraries ###############################################
 import sys
 import os
 from pathlib import Path
@@ -88,17 +89,8 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.append(str(REPO_ROOT))
 from code_library import adata_science_tools as adtl
 print(f"Using adata_science_tools / adtl from {adtl.__file__}")
-try:    
-    from code_library import run_GSEApy_wrapper as rgw
-    print(f"Using run_GSEApy_wrapper / rgw from {rgw.__file__}")
-except ImportError as e:
-    print(f"run_GSEApy_wrapper not available: {e}")
-try:    
-    from code_library import RNAseq_analysis as rnaseq
-    print(f"Using RNAseq_analysis / rnaseq from {rnaseq.__file__}")
-except ImportError as e:
-    print(f"RNAseq_analysis not available: {e}")
 ########################################################## import custom code libraries ################################################
+
 
 #### paths and config dictionaries
 ANNOTATED_ADATA_OUTPUT_H5AD_PATH= Path(CFG['make_annotated_adata_params']['annotate_adata_runs']['input']['annotated_adata_output_h5ad_path'])
@@ -145,7 +137,6 @@ if __name__ == "__main__":
         chained_params = ChainMap(plot_params, VOLCANO_PLOT_DEFAULTS)
         if chained_params.get("run", False):
             LOGGER.info(f" run name {plot_key}")
-            plot_params = VOLCANO_PLOT_RUNS_PARAMS[plot_key]
             ####
             if table_csv_path := chained_params.get("table_csv_path", None):
                 LOGGER.info(f"Loading table from path: {table_csv_path}")
@@ -163,7 +154,7 @@ if __name__ == "__main__":
                 LOGGER.info(f"adata loaded  {adata}")
                 LOGGER.info(f"adata.var] columns: {adata.var.columns.values.tolist()}")
                 LOGGER.info(f"PRE filter adata.var.shape: {adata.var.shape}")
-                adata_filtered = adata[:,~(adata.var[plot_params["pvalue_col"]].isnull())].copy()
+                adata_filtered = adata[:,~(adata.var[chained_params["pvalue_col"]].isnull())].copy()
                 LOGGER.info(f"POST filter adata.var.shape: {adata_filtered.var.shape}")
                 var_filtered_df=adata_filtered.var.copy()
                 LOGGER.info(f"var_filtered_df shape: {var_filtered_df.shape}")

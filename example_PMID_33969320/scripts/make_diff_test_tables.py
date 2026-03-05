@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """script doc string."""
-# /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/scripts/make_diff_test_tables.py
+# /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/scripts/make_diff_test_tables.py
+# updated: 2026-03-04 
 
 
 ####################################
@@ -73,7 +74,6 @@ class G():
     SAVE_OUTPUT=True
     SAVE_OUTPUT_FIGURES=True
 # ------------- dataclass G()  --------------------------------------------------------
-
 ########## import custom code libraries ################################################
 import sys
 import os
@@ -97,95 +97,57 @@ try:
 except ImportError as e:
     print(f"RNAseq_analysis not available: {e}")
 ########################################################## import custom code libraries ################################################
+
 # ------------- parameters --------------------------------------------------------
 
-from code_library import adata_science_tools as adtl
-print("adtl: %s", adtl.__file__)
-LOGGER.info("adtl %s:", adtl.__file__)
+
+from collections import ChainMap
 
 
 if __name__ == "__main__":
     LOGGER.info("Starting make_diff_test_tables.py script.")
-    print('test hello')
-# diff_test()_runs ---------------------------------------------------------------------
 
-# SET DEFAULTS FOR diff_test() RUNS
-from collections import ChainMap
-DICTIONARY_OF_DIFF_TEST_RUNS=CFG['make_diff_test_tables_params']['diff_test_runs']
-DEFAULT_PARAMS=CFG['make_diff_test_tables_params']['default_params']
-for run_key, run_values in DICTIONARY_OF_DIFF_TEST_RUNS.items():
-    if run_key == "COVID_over_NOT_D0":
-        LOGGER.info(f"###################################################################################################")
-        LOGGER.info(f"Starting diff_test() run for {run_key} with info: \n {run_values}")
-        LOGGER.info(f'run control set to: {run_values["run"]}')
-        chain_run_values=ChainMap(run_values, DEFAULT_PARAMS)
+    # diff_test()_runs ---------------------------------------------------------------------
+    # SET DEFAULTS FOR diff_test() RUNS
+    DICTIONARY_OF_DIFF_TEST_RUNS = CFG["make_diff_test_tables_params"]["diff_test_runs"]
+    DEFAULT_PARAMS = CFG["make_diff_test_tables_params"]["default_params"]
+
+    for run_key, run_values in DICTIONARY_OF_DIFF_TEST_RUNS.items():
+        LOGGER.info("###################################################################################################")
+        LOGGER.info("run_key: %s  with info: \n %s", run_key, run_values)
+        LOGGER.info("run control set to: %s", run_values["run"])
+        chain_run_values = ChainMap(run_values, DEFAULT_PARAMS)
+
         if chain_run_values["run"]:
-            LOGGER.info(f"Proceeding with diff_test() for {run_key} as per config.")
-            LOGGER.info(f"Loading adata from path: {chain_run_values['adata_path']}")
-            adata=anndata.read_h5ad(Path(chain_run_values['adata_path']) )
-            LOGGER.info(f"laoded adata: \n{adata}")
+            LOGGER.info("Proceeding with diff_test() for %s as per config.", run_key)
+            LOGGER.info("Loading adata from path: %s", chain_run_values["adata_path"])
+            adata = anndata.read_h5ad(Path(chain_run_values["adata_path"]))
+            LOGGER.info("laoded adata: \n%s", adata)
             LOGGER.info(adata.var.head(2))
-            LOGGER.info(adata.obs.head(2)) # display the first 2 rows of the 
-            ############ run diff_test() ############
-            _diff_test_df=adtl.diff_test(
-            adata[adata.obs['Day']=='0', :], # subset adata to only include Day 0 samples for this run
-            layer=chain_run_values.get('layer', None),
-            groupby_key=chain_run_values.get('groupby_key','Treatment'),# 'Treatment',
-            groupby_key_target_values=chain_run_values['groupby_key_target_values'],
-            groupby_key_ref_values=chain_run_values['groupby_key_ref_values'],
-            comparison_col_tag=chain_run_values['comparison_col_tag'],
-            tests=chain_run_values['tests'],
-            pair_by_key=chain_run_values.get('pair_by_key', None),
-            add_values2results= chain_run_values.get('add_values2results', None),
-            sortby=chain_run_values.get('sortby', None),
-            ascending=chain_run_values.get('ascending', True),
-            add_adata_var_column_key_list=chain_run_values.get('add_adata_var_column_key_list', None),
-            save_table=G.SAVE_OUTPUT,
-            logger=LOGGER,
-            save_path=chain_run_values['save_path'],
-            #save_result_to_adata_uns_as_dict=True,
-            )
-            LOGGER.info(_diff_test_df.shape) # print the shape of the results dataframe
-            LOGGER.info(_diff_test_df.head(10)) # display the first 10 rows of the results dataframe
-        else:
-            LOGGER.info(f"Skipping diff_test() for {run_key} as per config.")
+            LOGGER.info(adata.obs.head(2))  # display the first 2 rows
 
-    else:
-        LOGGER.info(f"###################################################################################################")
-        LOGGER.info(f"run_key: {run_key}  with info: \n {run_values}")
-        LOGGER.info(f'run control set to: {run_values["run"]}')
-        chain_run_values=ChainMap(run_values, DEFAULT_PARAMS)
-        if chain_run_values["run"]:
-            LOGGER.info(f"Proceeding with diff_test() for {run_key} as per config.")
-            LOGGER.info(f"Loading adata from path: {chain_run_values['adata_path']}")
-            adata=anndata.read_h5ad(Path(chain_run_values['adata_path']) )
-            LOGGER.info(f"laoded adata: \n{adata}")
-            LOGGER.info(adata.var.head(2))
-            LOGGER.info(adata.obs.head(2)) # display the first 2 rows of the 
-            ############ run diff_test() ############
-            _diff_test_df=adtl.diff_test(
-            adata,
-            layer=chain_run_values.get('layer', None),
-            groupby_key=chain_run_values.get('groupby_key','Treatment'),# 'Treatment',
-            groupby_key_target_values=chain_run_values['groupby_key_target_values'],
-            groupby_key_ref_values=chain_run_values['groupby_key_ref_values'],
-            comparison_col_tag=chain_run_values['comparison_col_tag'],
-            tests=chain_run_values['tests'],
-            pair_by_key=chain_run_values.get('pair_by_key', None),
-            add_values2results= chain_run_values.get('add_values2results', None),
-            sortby=chain_run_values.get('sortby', None),
-            ascending=chain_run_values.get('ascending', True),
-            add_adata_var_column_key_list=chain_run_values.get('add_adata_var_column_key_list', None),
-            save_table=G.SAVE_OUTPUT,
-            logger=LOGGER,
-            save_path=chain_run_values['save_path'],
-            #save_result_to_adata_uns_as_dict=True,
+            _diff_test_df = adtl.diff_test(
+                adata,
+                layer=chain_run_values.get("layer", None),
+                groupby_key=chain_run_values.get("groupby_key", "Treatment"),
+                groupby_key_target_values=chain_run_values["groupby_key_target_values"],
+                groupby_key_ref_values=chain_run_values["groupby_key_ref_values"],
+                comparison_col_tag=chain_run_values["comparison_col_tag"],
+                tests=chain_run_values["tests"],
+                pair_by_key=chain_run_values.get("pair_by_key", None),
+                add_values2results=chain_run_values.get("add_values2results", None),
+                sortby=chain_run_values.get("sortby", None),
+                ascending=chain_run_values.get("ascending", True),
+                add_adata_var_column_key_list=chain_run_values.get("add_adata_var_column_key_list", None),
+                save_table=G.SAVE_OUTPUT,
+                logger=LOGGER,
+                save_path=chain_run_values["save_path"],
+                save_result_to_adata_uns_as_dict=chain_run_values.get("save_result_to_adata_uns_as_dict", False),
             )
-            LOGGER.info(_diff_test_df.shape) # print the shape of the results dataframe
-            LOGGER.info(_diff_test_df.head(10)) # display the first 10 rows of the results dataframe
-
+            LOGGER.info(_diff_test_df.shape)  # print shape of results dataframe
+            LOGGER.info(_diff_test_df.head(10))  # display first 10 rows of results dataframe
         else:
-            LOGGER.info(f"Skipping diff_test() for {run_key} as per config.")
+            LOGGER.info("Skipping diff_test() for %s as per config.", run_key)
 
 
 # ------------- diff_test()_runs  --------------------------------------------------------

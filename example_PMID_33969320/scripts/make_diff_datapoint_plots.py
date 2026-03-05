@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """script doc string."""
-# /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/scripts/make_diff_datapoint_plots.py
+# /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/scripts/make_diff_datapoint_plots.py
+# updated: 2026-03-04 
 import sys
 import os
 from pathlib import Path
 import pandas as pd
+from collections import ChainMap
 from dataclasses import dataclass
 from datetime import datetime
 import logging
 import yaml
+import matplotlib.pyplot as plt
 # CFG Configuration
 ####################################
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -66,7 +69,6 @@ class G():
     SAVE_OUTPUT=True
     SAVE_OUTPUT_FIGURES=True
 # ------------- dataclass G()  --------------------------------------------------------
-
 ########## import custom code libraries ################################################
 import sys
 import os
@@ -90,6 +92,7 @@ try:
 except ImportError as e:
     print(f"RNAseq_analysis not available: {e}")
 ########################################################## import custom code libraries ################################################
+
 
 
 # 
@@ -122,6 +125,11 @@ if __name__ == "__main__":
     # -------------  diff datapoint plots RUNS--------------------------------------------------------
 
     for plot_key, plot_params in BARH_4X_DOTPLOT_COLUMN_CALLS.items():
+        chained_plot_params = ChainMap(plot_params, BARH_4X_DOTPLOT_COLUMN_CALLS_DEFAULTS)
+        if not chained_plot_params.get("run", False):
+            LOGGER.info("Skipping barh_4X_dotplot_column '%s' because run=false", plot_key)
+            continue
+        plot_params = chained_plot_params
         LOGGER.info("starting barh_4X_dotplot_column calls: ")
         LOGGER.info("--------------------------------------------------")
         LOGGER.info(f"Starting diff datapoint plot for plot_key: {plot_key}")
@@ -287,14 +295,20 @@ if __name__ == "__main__":
             dotplot4_annotate_xy=plot_params.get('dotplot4_annotate_xy', BARH_4X_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot4_annotate_xy', (0.8, 1.2))) or (0.8, 1.2),
             dotplot4_annotate_labels=plot_params.get('dotplot4_annotate_labels', BARH_4X_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot4_annotate_labels', ('l2fc: ', 'p:'))) or ('l2fc: ', 'p:'),
             dotplot4_annotate_fontsize=plot_params.get('dotplot4_annotate_fontsize', BARH_4X_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot4_annotate_fontsize', None)) or None,
+            use_single_dotplot_colormap=plot_params.get('use_single_dotplot_colormap', BARH_4X_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('use_single_dotplot_colormap', False)),
         )
+        plt.close("all")
     ##################################################################################
     for plot_key, plot_params in BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS.items():
+        chained_plot_params = ChainMap(plot_params, BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS)
+        if not chained_plot_params.get("run", False):
+            LOGGER.info("Skipping barh_dotplot_dotplot_dotplot_column '%s' because run=false", plot_key)
+            continue
+        plot_params = chained_plot_params
         LOGGER.info("starting barh_dotplot_dotplot_dotplot_column calls: ")
         LOGGER.info("--------------------------------------------------")
         LOGGER.info(f"Starting diff datapoint plot for plot_key: {plot_key}")
         LOGGER.info(f"saving {plot_key} diff datapoint plot to file: {plot_params['file_name']}")
-        BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS=DIFF_DATAPOINT_PLOTS_PARAMS.get('barh_dotplot_dotplot_dotplot_column_calls_defaults', {})
         adata_path=plot_params.get("adata_h5ad_path", )
         lessthan_filterby_col=plot_params.get("lessthan_filterby_col", None)
         lessthan_filterby_threshold=plot_params.get("lessthan_filterby_threshold", None)
@@ -438,6 +452,7 @@ if __name__ == "__main__":
             dotplot3_annotate_labels=plot_params.get('dotplot3_annotate_labels', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_annotate_labels', ('l2fc: ', 'p:'))) or ('l2fc: ', 'p:'),
             dotplot3_annotate_fontsize=plot_params.get('dotplot3_annotate_fontsize', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_annotate_fontsize',None)) or None,
             )
+        plt.close("all")
 ##################################################### barh_l2fc_dotplot_column_calls ##########################
 
     # barh_dotplot_dotplot_column_calls RUNS--------------------------------------------------------
@@ -446,13 +461,17 @@ if __name__ == "__main__":
     
   
     for plot_key, plot_params in BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS.items():
+        chained_plot_params = ChainMap(plot_params, BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS)
+        if not chained_plot_params.get("run", False):
+            LOGGER.info("Skipping barh_dotplot_dotplot_column '%s' because run=false", plot_key)
+            continue
+        plot_params = chained_plot_params
         LOGGER.info("starting barh_dotplot_dotplot_column calls: ")
         LOGGER.info("--------------------------------------------------")
         LOGGER.info(f"Starting diff datapoint plot for plot_key: {plot_key}")
         # ------------- run_key=
         #run_key='Treatment_Drug_CYP_over_Vehicle_CYP'
         LOGGER.info(f" run name {plot_key}")
-        plot_params = BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS[plot_key]
         adata_path=plot_params.get("adata_h5ad_path", ANNOTATED_ADATA_OUTPUT_H5AD_PATH)
         sortby_col=plot_params.get("sortby_col", None)
         ascending=plot_params.get("ascending", True)
@@ -577,6 +596,7 @@ if __name__ == "__main__":
             dotplot2_annotate_labels=plot_params.get('dotplot2_annotate_labels', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_annotate_labels', ('l2fc: ', 'p:'))) or ('l2fc: ', 'p:'),
             dotplot2_annotate_fontsize=plot_params.get('dotplot2_annotate_fontsize', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_annotate_fontsize',None)) or None,
             )
+        plt.close("all")
     ##################################################### barh_dotplot_dotplot_column_calls ##########################
 
 
@@ -588,10 +608,14 @@ if __name__ == "__main__":
     LOGGER.info(f" starting adtl.barh_l2fc_dotplot_column(...) calls for diff datapoint plots")
     
     for plot_key, plot_params in BARH_L2FC_DOTPLOT_COLUMN_CALLS.items():
+        chained_plot_params = ChainMap(plot_params, BARH_L2FC_DOTPLOT_COLUMN_CALLS_DEFAULTS)
+        if not chained_plot_params.get("run", False):
+            LOGGER.info("Skipping barh_l2fc_dotplot_column '%s' because run=false", plot_key)
+            continue
+        plot_params = chained_plot_params
         # ------------- run_key=
         #run_key='Treatment_Drug_CYP_over_Vehicle_CYP'
         LOGGER.info(f" run name {plot_key}")
-        plot_params = BARH_L2FC_DOTPLOT_COLUMN_CALLS[plot_key]
         adata_path=plot_params.get("adata_h5ad_path", ANNOTATED_ADATA_OUTPUT_H5AD_PATH)
         lessthan_filterby_col=plot_params.get("lessthan_filterby_col", None)
         lessthan_filterby_threshold=plot_params.get("lessthan_filterby_threshold", None)
@@ -697,6 +721,7 @@ if __name__ == "__main__":
                 dotplot_annotate_fontsize=plot_params.get('dotplot_annotate_fontsize', BARH_L2FC_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot_annotate_fontsize')) or None,#None,
                 dotplot_annotate_labels=plot_params.get('dotplot_annotate_labels', BARH_L2FC_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot_annotate_labels',('l2fc: ', 'RAW pvalue: '))) or None,#('l2fc: ', 'RAW pvalue: ')
             )
+        plt.close("all")
     ##################################################### barh_l2fc_dotplot_column_calls ##########################
 
     LOGGER.info("Finished make_diff_datapoint_plots.py script.")

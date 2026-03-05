@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/scripts/000_run_everything_else.bash
+# /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/scripts/000_run_everything.bash
 
 #########################################################
 # 0) Activate conda environment that contains the Python deps for POSTPROCESS_ENV
@@ -24,8 +24,8 @@ source ~/miniconda3/etc/profile.d/conda.sh
 #echo "[INFO] Activating conda env: ${NFCORE_ENV}"
 #conda activate "${NFCORE_ENV}"
 echo "[INFO] Activating conda env: ${POSTPROCESS_ENV}"
-conda activate "${POSTPROCESS_ENV}"
-
+#conda activate "${POSTPROCESS_ENV}"
+set +u; conda activate "${POSTPROCESS_ENV}"; set -u
 # Guard: ensure yq exists 
 if ! command -v yq >/dev/null 2>&1; then
   echo "[ERROR] yq is required but not found on PATH." >&2
@@ -58,15 +58,23 @@ echo "[INFO] Changed directory to repo root: $REPO_ROOT"
 
 #########################################################
 # 0) download the data
-"${PYTHON_BIN}" ./scripts/py0_download_and_parse_input_files_PMID_33969320.py
-# 3) run the make_diff_test_tables script
+#"${PYTHON_BIN}" ./scripts/py0_download_and_parse_input_files_PMID_33969320.py
+# 0) download the gene set gmt files data
+#"${PYTHON_BIN}" ./scripts/py0_download_gseapy_gmt_files.py
+# 1) parse the data into comparison specific datasets make_parse_datasets_PMID_33969320
+"${PYTHON_BIN}" ./scripts/make_parse_datasets_PMID_33969320.py
+# 2) run the make_diff_test_tables script
 "${PYTHON_BIN}" ./scripts/make_diff_test_tables.py
-# 5) run the make_annotated_adata.py script
+# 3) run the make_annotated_adata.py script
 "${PYTHON_BIN}" ./scripts/make_annotated_adata.py
-# 8) run the make_volcano_plots.py script
+# 4) run the make_volcano_plots.py script
 "${PYTHON_BIN}" ./scripts/make_volcano_plots.py
-# 9) run the make_diff_datapoint_plots.py script
+# 5) run the make_diff_datapoint_plots.py script
 "${PYTHON_BIN}" ./scripts/make_diff_datapoint_plots.py
+# 6) run the make_gseapy_tables.py script
+"${PYTHON_BIN}" ./scripts/make_gseapy_tables.py
+# 7) run the make_gseapy_dotplots.py script
+"${PYTHON_BIN}" ./scripts/make_gseapy_dotplots.py
 
 ##########################################################
 # 1) run the make_parse_datasets script

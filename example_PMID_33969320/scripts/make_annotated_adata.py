@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """script doc string."""
-# /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/scripts/make_annotated_adata.py
+# /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/scripts/make_annotated_adata.py
+# updated: 2026-03-04
 
 import sys
 import os
@@ -72,7 +73,6 @@ class G():
     SAVE_OUTPUT=True
     SAVE_OUTPUT_FIGURES=True
 # ------------- dataclass G()  --------------------------------------------------------
-
 ########## import custom code libraries ################################################
 import sys
 import os
@@ -96,7 +96,6 @@ try:
 except ImportError as e:
     print(f"RNAseq_analysis not available: {e}")
 ########################################################## import custom code libraries ################################################
-
 
 
 def add_opposite_direction_flag(
@@ -271,7 +270,7 @@ if __name__ == "__main__":
                     table_path,
                 feature_results_index_col=dir_values.get('feature_results_index_col', str(ADATA_VAR_INDEX)),
                 always_add_suffix_result_columns=dir_values['always_add_suffix_result_columns'] or False,
-                merge_suffixes=("", f"_{comparison_tag}"),
+                merge_suffixes=("", f"{comparison_tag}"),
                 how="left",
                 logger=LOGGER,)
                 LOGGER.info(f"adata after merging var results table: {adata}")
@@ -307,10 +306,33 @@ if __name__ == "__main__":
     LOGGER.info(f"make_annotated_adata.py All done!")
 
 
-    #if PARSE_ANNOTATED_ADATA:
-        #from make_parse_datasets import parse_datasets_somascan
-        #PARSE_DATASET_CALLS_DICT= CFG["parse_datasets_params"]["parse_dataset_calls"]
-        #PARSE_DATASET_PARAMS_INPUT=PARSE_DATASET_CALLS_DICT['annotated'] 
+    if PARSE_ANNOTATED_ADATA:
+        LOGGER.info("Starting parsing of annotated adata as per config.")
+        from make_parse_datasets import parse_datasets_filter_obs_boolean_column
 
+        parse_dataset_calls_dict = CFG["make_parse_datasets_params"]["parse_dataset_calls"]
+        parse_dataset_call_key = INPUT_ADATA_RUN_PARAMS.get("parse_dataset_call_key", "annotated")
+        if parse_dataset_call_key not in parse_dataset_calls_dict:
+            raise KeyError(
+                f"parse_dataset_call_key '{parse_dataset_call_key}' not found in "
+                "make_parse_datasets_params.parse_dataset_calls"
+            )
+
+        parse_dataset_params = parse_dataset_calls_dict[parse_dataset_call_key]
+        if parse_dataset_params.get("run", True):
+            LOGGER.info(
+                "Running parse_datasets_filter_obs_boolean_column using parse_dataset_call_key='%s'",
+                parse_dataset_call_key,
+            )
+            parse_datasets_filter_obs_boolean_column(parse_dataset_params)
+            LOGGER.info(
+                "Completed parsing annotated adata for parse_dataset_call_key='%s'",
+                parse_dataset_call_key,
+            )
+        else:
+            LOGGER.info(
+                "Skipping parse_datasets_filter_obs_boolean_column for parse_dataset_call_key='%s' because run=false",
+                parse_dataset_call_key,
+            )
 
 

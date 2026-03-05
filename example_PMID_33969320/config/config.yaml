@@ -2,7 +2,7 @@
 # py0_download_and_parse_input_files_PMID_33969320_params.py configs
 py0_download_and_parse_input_files_PMID_33969320_params:
   download_input_files_params:
-    repo_or_project_dir: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/input_files/
+    repo_or_project_dir: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/input_files/example_dataset_PMID_33969320/
     overwrite_existing_files: false
     observation_metadata_url: https://data.mendeley.com/public-files/datasets/nf853r8xsj/files/e81b51ed-8f29-4f2b-bccc-5b3364341e92/file_downloaded
     observation_metadata_filename: Clinical_Metadata.xlsx
@@ -13,49 +13,110 @@ py0_download_and_parse_input_files_PMID_33969320_params:
     somalogic_data_url: https://data.mendeley.com/public-files/datasets/nf853r8xsj/files/1bc0ffe4-13c1-4809-927d-07dcffe11c15/file_downloaded
     somalogic_data_filename: Somalogic_Proteomics.xlsx
   parse_olink_xlsx_file_2_adata_params:
-    overwrite_existing_files: true
-    adata_parsed_data_output_path: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/input_files/olink_dataset_PMID_33969320
+    overwrite_existing_files: false
+    adata_parsed_data_output_path: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/input_files/example_dataset_PMID_33969320/olink_PMID_33969320
     save_X_obs_var_csv: true
     save_layers_as_csv: true
-    olink_X_data_xlsx_path: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/input_files/Olink_Proteomics.xlsx
+    olink_X_data_xlsx_path: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/input_files/example_dataset_PMID_33969320/Olink_Proteomics.xlsx
     olink_data_adata_X_sheet_name: "Olink Proteomics"
-    olink_obs_data_xlsx_path: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/input_files/Clinical_Metadata.xlsx
+    olink_obs_data_xlsx_path: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/input_files/example_dataset_PMID_33969320/Clinical_Metadata.xlsx
     olink_data_adata_obs_sheet_name: "Subject-level metadata"
-    olink_var_data_xlsx_path: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/input_files/Supplemental-Table-2-Olink-Assays-NPX-values_v2.xlsx
+    olink_var_data_xlsx_path: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/input_files/example_dataset_PMID_33969320/Supplemental-Table-2-Olink-Assays-NPX-values_v2.xlsx
     olink_data_adata_var_sheet_name_1: "2A-Olink-Assay"
     olink_data_adata_var_sheet_name_1_columns_to_use: ["OlinkID","Assay", "UniProt", "Panel", "Panel_Version"]
     olink_data_adata_var_sheet_name_2: "2B Olink proteins"
     run_uniprot_2_gene_name_mapping: true
     save_uniprot_2_gene_name_mapping: true
   parse_somalogic_xlsx_file_2_adata_params:
-    overwrite_existing_files: true
-    adata_parsed_data_output_path: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/input_files/somalogic_dataset_PMID_33969320
+    overwrite_existing_files: false
+    adata_parsed_data_output_path: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/input_files/example_dataset_PMID_33969320/somalogic_PMID_33969320
     save_X_obs_var_csv: true
     save_layers_as_csv: true
-    somalogic_X_data_xlsx_path: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/input_files/Somalogic_Proteomics.xlsx
+    somalogic_X_data_xlsx_path: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/input_files/example_dataset_PMID_33969320/Somalogic_Proteomics.xlsx
     somalogic_data_adata_X_sheet_name: "Sheet1"
-    somalogic_obs_data_xlsx_path: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/input_files/Clinical_Metadata.xlsx
+    somalogic_obs_data_xlsx_path: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/input_files/example_dataset_PMID_33969320/Clinical_Metadata.xlsx
     somalogic_data_adata_obs_sheet_name: "Subject-level metadata"
     run_uniprot_2_gene_name_mapping: true
     save_uniprot_2_gene_name_mapping: true
-    uniprot_2_gene_name_mapping_output_path: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/input_files/uniprot_2_gene_name_mapping.csv
+    uniprot_2_gene_name_mapping_output_path: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/input_files/example_dataset_PMID_33969320/uniprot_2_gene_name_mapping.csv
     merge_var_metadata_from_csv: true
-    somalogic_var_data_csv_path: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/input_files/uniprot_2_gene_name_mapping.csv
+    somalogic_var_data_csv_path: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/input_files/example_dataset_PMID_33969320/uniprot_2_gene_name_mapping.csv
+
+make_parse_datasets_params:
+  repo_results_dir: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/results/datasets/
+  parse_dataset_calls:
+    input:
+      run: true
+      repo_results_dir: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/results/datasets/
+      dataset_input_h5ad_path: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/input_files/example_dataset_PMID_33969320/olink_PMID_33969320.h5ad
+      dataset_alias: olink_PMID_33969320
+      datasets:
+        input: 
+          name: input
+          filter_obs_boolean_column:
+          filter_obs_column_key:
+          filter_obs_column_values_list:
+          output_dir: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/results/datasets/example_dataset_PMID_33969320/input/
+          filename: olink_PMID_33969320.input
+        D0: 
+          name: D0
+          filter_obs_boolean_column:
+          filter_obs_column_key: Day
+          filter_obs_column_values_list: ['0']
+          output_dir: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/results/datasets/example_dataset_PMID_33969320/D0/
+          filename: olink_PMID_33969320.D0
+    annotated:
+      run: true
+      repo_results_dir: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/results/datasets/
+      dataset_input_h5ad_path: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/results/datasets/example_dataset_PMID_33969320/input/olink_PMID_33969320.input.ann.h5ad
+      dataset_alias: olink_PMID_33969320
+      datasets:
+        D0: 
+          name: D0
+          filter_obs_boolean_column:
+          filter_obs_column_key: Day
+          filter_obs_column_values_list: ['0']
+          output_dir: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/results/datasets/example_dataset_PMID_33969320/D0/
+          filename: olink_PMID_33969320.D0.ann
+
+make_annotated_adata_params:
+  repo_results_dir: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/results/datasets/
+  annotate_adata_runs:
+    input:
+      run: true
+      name: input
+      adata_input_h5ad_path: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/results/datasets/example_dataset_PMID_33969320/input/olink_PMID_33969320.input.h5ad
+      annotated_adata_output_h5ad_path: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/results/datasets/example_dataset_PMID_33969320/input/olink_PMID_33969320.input.ann.h5ad
+      sample_metadata_sheet: ./config/nfcore_inputs/samplesheet.csv
+      dirs_with_tables_2_merge_2_adata_var:
+        diff_test:
+          merge: true
+          always_add_suffix_result_columns: false
+          var_results_dir: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/results/diff_test/
+          var_table_filenames_list:
+            - diff_test_COVID_over_NOT_D0.csv
+          suffix_for_adata_var_columns_list:
+            - .src_COVID_over_NOT_D0
+      PCA_analysis_params:
+        add_pca_results_to_adata: false
+        obsm_key_for_pcs: X_pca_custom
+      parse_annotate_adata: false
+      parse_dataset_call_key: annotated
 
 make_diff_test_tables_params:
-  repo_results_dir: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/results/diff_test/
+  repo_results_dir: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/results/diff_test/
   default_params:
     layer: 
     ascending: true
     groupby_key: 
     save_output: true
-    add_adata_var_column_key_list:
+    add_adata_var_column_key_list: ['OlinkID','Assay','UniProt','Panel','Panel_Version','Protein target','Short name','gene_name']
     add_values2results: true
     use_raw: false
   diff_test_runs:
     COVID_over_NOT_D0:
       run: true
-      adata_path:  /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/input_files/olink_dataset_PMID_33969320.h5ad
+      adata_path:  /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/results/datasets/example_dataset_PMID_33969320/D0/olink_PMID_33969320.D0.h5ad
       comparison_col_tag: _COVID_over_NOT_D0
       groupby_key: COVID
       groupby_key_target_values:
@@ -66,35 +127,139 @@ make_diff_test_tables_params:
         - ttest_ind
         - mannwhitneyu
       sortby: ttest_ind_pvals_COVID_over_NOT_D0
-      save_path: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/results/diff_test/diff_test_COVID_over_NOT_D0.csv
+      save_path: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/results/diff_test/diff_test_COVID_over_NOT_D0.csv
       save_result_to_adata_uns_as_dict: false
+############################################
+GSEApy_params:
+  repo_results_dir: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/results/GSEApy/
+  default_params:
+    feature_name_column_name: gene_name
+    gsea_permutation_num: 10000
+    min_size: 10
+    max_size: 3000
+    results_table_min_genes_matched: 3
+    threads: 30
+    seed: 6
+    rank_metric_calc_flavor: signed_neg_log10_pvalue
+    l2fc_column_name: log2FoldChange
+    pvalue_column_name: pvalue
+    GSEA_run_filename_tag: GSEA
+    data_csv_path_sepstr: ","
+    gene_term_collections_gmt_file_directory_list:
+      enrichr_hu: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/data/ref/gmt_files/enrichr_Hu
+      msigdb_Hu: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/data/ref/gmt_files/msigdb_Hu
+    gene_term_collections_2_use:
+      - GO_Biological_Process_2025
+      - GO_Cellular_Component_2025
+      - GO_Molecular_Function_2025
+      - KEGG_2021_Human
+      - Reactome_2022
+      - Reactome_Pathways_2024
+      - WikiPathways_2024_Human
+      - WikiPathways_2024_Mouse
+      - MSigDB_Computational
+      - MSigDB_Hallmark_2020
+      - CellMarker_2024
+      - ARCHS4_TFs_Coexp
+      - ARCHS4_Tissues
+      - Disease_Perturbations_from_GEO_down
+      - Disease_Perturbations_from_GEO_up
+      - ARCHS4_Cell-lines
+      - ARCHS4_IDG_Coexp
+      - ARCHS4_Kinases_Coexp
+      - ARCHS4_TFs_Coexp
+      - ARCHS4_Tissues
+      - Tabula_Sapiens
+      - Tabula_Muris
+      - MGI_Mammalian_Phenotype_Level_4_2021
+      - Human_Phenotype_Ontology
+      - GWAS_Catalog_2025
+      - UK_Biobank_GWAS_v1
+      - OMIM_Disease
+      - MSigDB_Computational
+      - MSigDB_Hallmark_2020
+      - MSigDB_Oncogenic_Signatures
+      - Kinase_Perturbations_from_GEO_down
+      - Kinase_Perturbations_from_GEO_up
+      - Aging_Perturbations_from_GEO_down
+      - Aging_Perturbations_from_GEO_up
+      - Gene_Perturbations_from_GEO_down
+      - Gene_Perturbations_from_GEO_up
+      - TF-LOF_Expression_from_GEO
+      - Drug_Perturbations_from_GEO_down
+      - Drug_Perturbations_from_GEO_up
+      - RNA-Seq_Disease_Gene_and_Drug_Signatures_from_GEO
+      - c1.all
+      - c2.all
+      - c2.cgp
+      - c2.cp.biocarta
+      - c2.cp.kegg_legacy
+      - c2.cp.kegg_medicus
+      - c2.cp.pid
+      - c2.cp.reactome
+      - c2.cp
+      - c2.cp.wikipathways
+      - c3.all
+      - c3.mir.mir_legacy
+      - c3.mir.mirdb
+      - c3.mir
+      - c3.tft.gtrd
+      - c3.tft.tft_legacy
+      - c3.tft
+      - c4.3ca
+      - c4.all
+      - c4.cgn
+      - c4.cm
+      - c5.all
+      - c5.go.bp
+      - c5.go.cc
+      - c5.go.mf
+      - c5.go
+      - c5.hpo
+      - c6.all
+      - c7.all
+      - c7.immunesigdb
+      - c7.vax
+      - c8.all
+      - h.all
+      - msigdb
+  make_gseapy_tables_run_control:
+    run_4_all_nf_differentialabundance_runs: false
+    run_4_selected_nf_differentialabundance_runs: false
+    selected_nf_differentialabundance_runs_2_run: false
+    run_defined_gseapy_runs: true
+  defined_gseapy_runs:
+  ################# l2fc ranking gsea runs ######################################################################
+    diff_test_NHSv1xa_Case_over_Control_l2fc:
+      gseapy_run_name: l2fc_rank
+      DA_run_name: diff_test_COVID_over_NOT_D0
+      rank_metric_calc_flavor: use_column_key
+      existing_rank_metric_column_name: l2fc_COVID_over_NOT_D0
+      data_csv_path: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/results/diff_test/diff_test_COVID_over_NOT_D0.csv
+    ################# signed pvalue ranking below ######################################################################
+    diff_test_NHSv1xa_Case_over_Control_signed_pvalue:
+      gseapy_run_name: signed_pvalue_rank
+      DA_run_name: diff_test_COVID_over_NOT_D0
+      rank_metric_calc_flavor: signed_neg_log10_pvalue
+      pvalue_column_name: ttest_ind_pvals_COVID_over_NOT_D0
+      l2fc_column_name: l2fc_COVID_over_NOT_D0
+      data_csv_path: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/results/diff_test/diff_test_COVID_over_NOT_D0.csv
+  ######################################################################
+  gseapy_dotplot_params:
+    top_terms_2_plot: 20
+    figsize:
+      - 6
+      - 8
+    gseapy_run_dir_list:
+############### l2fc ranking gsea runs ######################################################################
+      - /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/results/GSEApy/diff_test_COVID_over_NOT_D0/l2fc_rank
+############### signed pvalue ranking gsea runs ######################################################################
+      - /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/results/GSEApy/diff_test_COVID_over_NOT_D0/signed_pvalue_rank
 
-make_annotated_adata_params:
-  repo_results_dir: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/results/datasets/
-  annotate_adata_runs:
-    input:
-      run: true
-      name: input
-      adata_input_h5ad_path: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/input_files/olink_dataset_PMID_33969320.h5ad
-      annotated_adata_output_h5ad_path: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/results/datasets/olink_dataset_PMID_33969320.ann.h5ad
-      sample_metadata_sheet: 
-      dirs_with_tables_2_merge_2_adata_var:
-        diff_test:
-          merge: true
-          always_add_suffix_result_columns: false
-          var_results_dir: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/results/diff_test/
-          var_table_filenames_list:
-            - diff_test_COVID_over_NOT_D0.csv
-          suffix_for_adata_var_columns_list:
-            - .src_COVID_over_NOT_D0
-      PCA_analysis_params:
-        add_pca_results_to_adata: false
-        obsm_key_for_pcs: X_pca_custom
-      parse_annotate_adata: true
-      parse_dataset_call_key: annotated
+############################################################################################################################################################################################
 
 diff_datapoint_plots_params:
-  repo_results_dir: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/results/figures/diff_datapoint_plots/
+  repo_results_dir: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/results/figures/diff_datapoint_plots/
   defaults_params:
   barh_l2fc_dotplot_column_calls_defaults:
     figsize:
@@ -106,11 +271,46 @@ diff_datapoint_plots_params:
     barh_subplot_xlabel: OLINK norm units
     dotplot_figure_plot_title: log2FoldChange(OLINK norm units)
     layer:
+  barh_dotplot_dotplot_column_calls_defaults:
+    figsize:
+      - 25
+      - 25
+    feature_label_vars_col: gene_name
+    feature_label_char_limit: 30
+    barh_figure_plot_title: OLINK norm units
+    barh_subplot_xlabel: OLINK norm units
+    dotplot_figure_plot_title: log2FoldChange(OLINK norm units)
+    layer:
+  barh_dotplot_dotplot_dotplot_column_calls_defaults:
+    figsize:
+      - 25
+      - 25
+    feature_label_vars_col: gene_name
+    feature_label_char_limit: 30
+    barh_figure_plot_title: OLINK norm units
+    barh_subplot_xlabel: OLINK norm units
+    dotplot_figure_plot_title: log2FoldChange(OLINK norm units)
+    layer:
+  barh_4X_dotplot_column_calls_defaults:
+    figsize:
+      - 25
+      - 35
+    col_wspace: -0.15
+    row_hspace: 0.9
+    feature_label_vars_col: gene_name
+    feature_label_char_limit: 30
+    barh_figure_plot_title: OLINK norm units
+    barh_subplot_xlabel: OLINK norm units
+    dotplot_figure_plot_title: log2FoldChange(OLINK norm units)
+    layer:
+  barh_4X_dotplot_column_calls:
+  barh_dotplot_dotplot_dotplot_column_calls:
+  barh_dotplot_dotplot_column_calls:
   barh_l2fc_dotplot_column_calls:
     COVID_over_NOT_D0:
       run: true
-      adata_h5ad_path:  /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/results/datasets/olink_dataset_PMID_33969320.ann.h5ad
-      file_name: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/results/figures/diff_datapoint_plots/COVID_over_NOT_D0_barh_l2fc_dotplot.png
+      adata_h5ad_path:  /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/results/datasets/example_dataset_PMID_33969320/input/olink_PMID_33969320.input.ann.h5ad
+      file_name: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/results/figures/diff_datapoint_plots/COVID_over_NOT_D0_barh_l2fc_dotplot.png
       sortby_col: ttest_ind_pvals_COVID_over_NOT_D0
       ascending: true
       top_n_features: 15
@@ -128,10 +328,11 @@ diff_datapoint_plots_params:
       dotplot_annotate_labels:
        - 'l2fc: '
        - 'RAW pvalue: '
+       #
     COVID_over_NOT_D0_FDR:
       run: true
-      adata_h5ad_path:  /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/results/datasets/olink_dataset_PMID_33969320.ann.h5ad
-      file_name: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/results/figures/diff_datapoint_plots/COVID_over_NOT_D0_barh_l2fc_dotplot_FDR.png
+      adata_h5ad_path:  /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/results/datasets/example_dataset_PMID_33969320/input/olink_PMID_33969320.input.ann.h5ad
+      file_name: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/results/figures/diff_datapoint_plots/COVID_over_NOT_D0_barh_l2fc_dotplot_FDR.png
       sortby_col: ttest_ind_pvals_FDR_COVID_over_NOT_D0
       ascending: true
       top_n_features: 15
@@ -150,9 +351,8 @@ diff_datapoint_plots_params:
        - 'l2fc: '
        - 'FDR pvalue: '
 
-  
 volcano_plot_params:
-  repo_results_dir: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/results/figures/volcano_plots/
+  repo_results_dir: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/results/figures/volcano_plots/
   defaults_params:
     dot_size_shrink_factor: 40
     figsize:
@@ -170,8 +370,8 @@ volcano_plot_params:
   volcano_plot_runs:
     COVID_over_NOT_D0_ttest:
       run: true
-      adata_h5ad_path: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/results/datasets/olink_dataset_PMID_33969320.ann.h5ad
-      file_name: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/results/figures/volcano_plots/COVID_over_NOT_D0_volcano.png
+      adata_h5ad_path: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/results/datasets/example_dataset_PMID_33969320/input/olink_PMID_33969320.input.ann.h5ad
+      file_name: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/results/figures/volcano_plots/COVID_over_NOT_D0_volcano.png
       l2fc_col: l2fc_COVID_over_NOT_D0
       set_xlabel: log2fc COVID over NOT D0
       xlimit: 5
@@ -184,8 +384,8 @@ volcano_plot_params:
       comparison_label: "RAW p-value : t-test"
     COVID_over_NOT_D0_ttest_FDR:
       run: true
-      adata_h5ad_path: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/results/datasets/olink_dataset_PMID_33969320.ann.h5ad
-      file_name: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/results/figures/volcano_plots/COVID_over_NOT_D0_volcano_FDR.png
+      adata_h5ad_path: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/results/datasets/example_dataset_PMID_33969320/input/olink_PMID_33969320.input.ann.h5ad
+      file_name: /home/ubuntu/projects/gitbenlewis/general_dataset_template_private/Repo_example_PMID_33969320/results/figures/volcano_plots/COVID_over_NOT_D0_volcano_FDR.png
       l2fc_col: l2fc_COVID_over_NOT_D0
       set_xlabel: log2fc COVID over NOT D0
       xlimit: 5
