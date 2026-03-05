@@ -1,0 +1,2 @@
+TermCollection,Term,name,es,nes,pval,fdr,fwerp,leadhits_total,tag %,gene %,lead_genes,matched_genes,hits,TermCollection_Term
+OMIM_Disease,leukemia,prerank,-0.2556399459998834,-0.5531645517731122,0.9679245283018868,0.9679245283018868,0.9679245283018868,2_13,2/13,16.82%,PDGFRB;KIT,NPM1;TCL1A;ZBTB16;NOTCH1;BAX;STAT5B;ABL1;TCL1B;BCR;FLT3;ARHGEF12;KIT;PDGFRB,"[113, 175, 291, 333, 424, 507, 581, 660, 694, 732, 845, 1148, 1254]",OMIM_Disease__leukemia
