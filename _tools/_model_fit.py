@@ -2,6 +2,8 @@
 # module at : /home/ubuntu/projects/gitbenlewis/adata_science_tools/_tools/_model_fit.py
 ## updated 2026-02-24 added guard to skip features with no complete cases after dropping NaN/inf, and to record the reason for skipping in the model summary dataframe
 ## updated 2026-02-24 added guard to coerce numeric-like predictors to numeric dtype so they are treated as continuous in the formula instead of categorical dummies, and added this coercion step to both OLS and mixedlm functions
+# updated 2026-03-13 add expectation model fit and correction
+
 from .. _io._IO import make_df_obs_adataX
 
 import pandas as pd
@@ -11,6 +13,17 @@ import statsmodels.formula.api as smf
 from scipy.stats import chi2
 from statsmodels.stats.multitest import multipletests
 import warnings
+
+# Helper inside the module (near top)
+def _ensure_list(x, name):
+    if x is None:
+        return []
+    if isinstance(x, (list, tuple)):
+        return list(x)
+    if isinstance(x, str):
+        raise TypeError(f"{name} must be a YAML list (e.g. ['Age','Gender']) not a single string.")
+    raise TypeError(f"{name} must be list/tuple or None, got {type(x).__name__}")
+
 
 
 def fit_smf_ols_models_and_summarize_wide(
@@ -139,7 +152,7 @@ def fit_smf_ols_models_and_summarize_wide(
     return results
 
 
-def fit_smf_ols_models_and_summarize_adata(
+def old_fit_smf_ols_models_and_summarize_adata(
         adata,layer=None,use_raw=False,
         feature_columns=None,
         predictors=None, 
@@ -187,7 +200,120 @@ def fit_smf_ols_models_and_summarize_adata(
         print(f"Saved results  fit_smf_ols_models_and_summarize_wide results to {save_path}")
     return results
 
+def fit_smf_ols_models_and_summarize_adata(
+        adata,
+        layer=None,
+        use_raw=False,
+        feature_columns=None,
+        predictors=None,
+        model_name='OLS_predictors',
+        add_adata_var_column_key_list=None,
+        save_table=False,
+        save_path=None,
+        save_result_to_adata_uns_as_dict=False,
+        include_fdr=True,
+        # --- new filter args ---
+        dataset_cfg=None,
+        filter_obs_boolean_column=None,
+        filter_obs_column_key=None,
+        filter_obs_column_values_list=None,
+        filter_obs_copy=True,
+        # when filtered internally, optionally also write results into the original adata.uns
+        save_results_to_original_adata_uns: bool = False,
+        # whether to return the filtered adata (work_adata) in addition to results
+        return_filtered_adata: bool = False,
+    ):
+    """
+    Fit OLS models for features in an AnnData and return a summary DataFrame.
 
+    New behaviour:
+      - If any of dataset_cfg, filter_obs_boolean_column, filter_obs_column_key,
+        or filter_obs_column_values_list are provided, a filtered AnnData
+        (work_adata) is created via CFG_filter_adata_by_obs and used for the fit.
+      - If save_result_to_adata_uns_as_dict is True results are saved to
+        work_adata.uns['ols_model_results'][f'OLS_model_results_{model_name}'].
+      - If save_results_to_original_adata_uns is True and work_adata is a filtered
+        copy, the same results are also saved into the original adata.uns.
+      - return_filtered_adata=True will return (results, work_adata) instead of results.
+
+    Backwards-compatible defaults preserve previous behaviour when no filter args are given.
+    """
+    # Local imports to avoid changing top-of-file imports and to keep the patch minimal.
+    from .._preprocessing._adata_row_operations import CFG_filter_adata_by_obs
+    from .._io._IO import make_df_obs_adataX
+    import pandas as pd
+    import numpy as np
+
+
+    # If filter args provided, create a filtered work_adata
+    if any([dataset_cfg, filter_obs_boolean_column, filter_obs_column_key, filter_obs_column_values_list]):
+        work_adata = CFG_filter_adata_by_obs(
+            adata,
+            dataset_cfg=dataset_cfg,
+            filter_obs_boolean_column=filter_obs_boolean_column,
+            filter_obs_column_key=filter_obs_column_key,
+            filter_obs_column_values_list=filter_obs_column_values_list,
+            copy=filter_obs_copy,
+        )
+    else:
+        work_adata = adata
+
+    # Validate/normalize list-like inputs coming from YAML
+    predictors = _ensure_list(predictors, "predictors")
+    add_adata_var_column_key_list = _ensure_list(add_adata_var_column_key_list, "add_adata_var_column_key_list")
+
+    # Build the obs_X_df using the (possibly filtered) work_adata
+    obs_X_df = make_df_obs_adataX(work_adata, layer=layer, use_raw=use_raw, include_obs=True,)
+    feature_columns = feature_columns if feature_columns is not None else work_adata.var_names.tolist()
+
+    # Delegate the heavy lifting to the wide-version (unchanged behavior)
+    results = fit_smf_ols_models_and_summarize_wide(obs_X_df, feature_columns, predictors, model_name=model_name, include_fdr=include_fdr)
+
+    # convert numeric columns to numeric dtype where possible
+    num_cols = [
+                col for col in results.columns
+                if pd.to_numeric(results[col], errors="coerce").notna().all()
+            ]
+    if 'var_names' in num_cols:
+        num_cols.remove('var_names')
+    if len(num_cols) > 0:
+        results[num_cols] = results[num_cols].apply(pd.to_numeric)
+
+    # add adata.var columns to the results dataframe if specified
+    if add_adata_var_column_key_list and work_adata is not None:
+        for var_col_key in add_adata_var_column_key_list:
+            if var_col_key in work_adata.var.columns:
+                var_col_values = work_adata.var[var_col_key]
+                # merge on index (var_names expected to match adata.var index)
+                results = results.merge(var_col_values, left_index=True, right_index=True, how='left', suffixes=('', f'_{var_col_key}'))
+            else:
+                print(f"Warning: '{var_col_key}' not found in work_adata.var columns. Skipping this column.")
+
+    # add results to work_adata.uns if specified
+    if save_result_to_adata_uns_as_dict and work_adata is not None:
+        key = f'OLS_model_results_{model_name}'
+        if 'ols_model_results' not in work_adata.uns:
+            work_adata.uns['ols_model_results'] = {}
+        work_adata.uns['ols_model_results'][key] = results
+        print(f"Added fit_smf_ols_models_and_summarize_wide results to work_adata.uns['ols_model_results']['{key}']")
+
+        # optionally also save into the original adata.uns (useful when work_adata is a filtered copy)
+        if save_results_to_original_adata_uns and work_adata is not adata:
+            if 'ols_model_results' not in adata.uns:
+                adata.uns['ols_model_results'] = {}
+            adata.uns['ols_model_results'][key] = results
+            print(f"Also wrote results to original adata.uns['ols_model_results']['{key}']")
+
+    # save the results dataframe to the save_path if requested
+    if save_table and save_path is not None:
+        import csv
+        results.to_csv(save_path, float_format="%.6f", quoting=csv.QUOTE_MINIMAL,)
+        print(f"Saved results fit_smf_ols_models_and_summarize_wide results to {save_path}")
+
+    # return either results or (results, work_adata) if requested and work_adata is a filtered copy
+    if return_filtered_adata and work_adata is not adata:
+        return results, work_adata
+    return results
 
 def fit_smf_mixedlm_models_and_summarize_wide(
         obs_X_df,
@@ -322,7 +448,7 @@ def fit_smf_mixedlm_models_and_summarize_wide(
     return results
 
 
-def fit_smf_mixedlm_models_and_summarize_adata(
+def old_fit_smf_mixedlm_models_and_summarize_adata(
         adata,layer=None,use_raw=False,
         feature_columns=None,
         predictors=None,
@@ -371,4 +497,141 @@ def fit_smf_mixedlm_models_and_summarize_adata(
         results.to_csv(save_path,float_format="%.6f", quoting=csv.QUOTE_MINIMAL,)
         print(f"Saved results  fit_smf_mixedlm_models_and_summarize_wide results to {save_path}")
 
+    return results
+
+def fit_smf_mixedlm_models_and_summarize_adata(
+        adata,
+        layer=None,
+        use_raw=False,
+        feature_columns=None,
+        predictors=None,
+        group=None,
+        model_name='mixedlm_predictors',
+        reml=True,
+        add_adata_var_column_key_list=None,
+        save_table=False,
+        save_path=None,
+        save_result_to_adata_uns_as_dict=False,
+        include_fdr=True,
+        # --- new filter args ---
+        dataset_cfg=None,
+        filter_obs_boolean_column=None,
+        filter_obs_column_key=None,
+        filter_obs_column_values_list=None,
+        filter_obs_copy=True,
+        # when filtered internally, optionally also write results into the original adata.uns
+        save_results_to_original_adata_uns: bool = False,
+        # whether to return the filtered adata (work_adata) in addition to results
+        return_filtered_adata: bool = False,
+    ):
+    """
+    Fit MixedLM models for features in an AnnData and return a summary DataFrame.
+
+    New behaviour:
+      - If any of dataset_cfg, filter_obs_boolean_column, filter_obs_column_key,
+        or filter_obs_column_values_list are provided, a filtered AnnData
+        (work_adata) is created via CFG_filter_adata_by_obs and used for the fit.
+      - If save_result_to_adata_uns_as_dict is True results are saved to
+        work_adata.uns['mixedlm_model_results'][f'mixedlm_model_results_{model_name}'].
+      - If save_results_to_original_adata_uns is True and work_adata is a filtered
+        copy, the same results are also saved into the original adata.uns.
+      - return_filtered_adata=True will return (results, work_adata) instead of results.
+
+    Backwards-compatible defaults preserve previous behaviour when no filter args are given.
+    """
+    # Local imports to avoid changing top-of-file imports and to keep the patch minimal.
+    from .._preprocessing._adata_row_operations import CFG_filter_adata_by_obs
+    from .._io._IO import make_df_obs_adataX
+    import pandas as pd
+    import numpy as np
+
+    # small helper to validate YAML list-like inputs (allows list/tuple or None; disallows single string)
+    def _ensure_list(x, name):
+        if x is None:
+            return []
+        if isinstance(x, (list, tuple)):
+            return list(x)
+        if isinstance(x, str):
+            raise TypeError(f"{name} must be a YAML list (e.g. ['Age','Gender']) not a single string.")
+        raise TypeError(f"{name} must be list/tuple or None, got {type(x).__name__}")
+
+    # If any filter args provided, create a filtered work_adata using the repo helper
+    if any([dataset_cfg, filter_obs_boolean_column, filter_obs_column_key, filter_obs_column_values_list]):
+        work_adata = CFG_filter_adata_by_obs(
+            adata,
+            dataset_cfg=dataset_cfg,
+            filter_obs_boolean_column=filter_obs_boolean_column,
+            filter_obs_column_key=filter_obs_column_key,
+            filter_obs_column_values_list=filter_obs_column_values_list,
+            copy=filter_obs_copy,
+        )
+    else:
+        work_adata = adata
+
+    # Validate/normalize list-like inputs coming from YAML
+    predictors = _ensure_list(predictors, "predictors")
+    add_adata_var_column_key_list = _ensure_list(add_adata_var_column_key_list, "add_adata_var_column_key_list")
+
+    # group is required for mixedlm; validate early with a clear error
+    if group is None:
+        raise ValueError("fit_smf_mixedlm_models_and_summarize_adata requires a 'group' argument (the grouping column name in adata.obs).")
+
+    # Build the obs_X_df using the (possibly filtered) work_adata
+    obs_X_df = make_df_obs_adataX(work_adata, layer=layer, use_raw=use_raw, include_obs=True,)
+    feature_columns = feature_columns if feature_columns is not None else work_adata.var_names.tolist()
+
+    # Delegate to the wide-version which contains the per-feature model-fitting logic
+    results = fit_smf_mixedlm_models_and_summarize_wide(
+        obs_X_df,
+        feature_columns,
+        predictors,
+        group=group,
+        model_name=model_name,
+        reml=reml,
+        include_fdr=include_fdr,
+    )
+
+    # convert numeric columns to numeric dtype where possible
+    num_cols = [
+                col for col in results.columns
+                if pd.to_numeric(results[col], errors="coerce").notna().all()
+            ]
+    if 'var_names' in num_cols:
+        num_cols.remove('var_names')
+    if len(num_cols) > 0:
+        results[num_cols] = results[num_cols].apply(pd.to_numeric)
+
+    # add adata.var columns to the results dataframe if specified
+    if add_adata_var_column_key_list and work_adata is not None:
+        for var_col_key in add_adata_var_column_key_list:
+            if var_col_key in work_adata.var.columns:
+                var_col_values = work_adata.var[var_col_key]
+                results = results.merge(var_col_values, left_index=True, right_index=True, how='left', suffixes=('', f'_{var_col_key}'))
+            else:
+                print(f"Warning: '{var_col_key}' not found in work_adata.var columns. Skipping this column.")
+
+    # add results to work_adata.uns if specified
+    if save_result_to_adata_uns_as_dict and work_adata is not None:
+        key = f'mixedlm_model_results_{model_name}'
+        if 'mixedlm_model_results' not in work_adata.uns:
+            work_adata.uns['mixedlm_model_results'] = {}
+        work_adata.uns['mixedlm_model_results'][key] = results
+        print(f"Added fit_smf_mixedlm_models_and_summarize_wide results to work_adata.uns['mixedlm_model_results']['{key}']")
+
+        # optionally also save into the original adata.uns (useful when work_adata is a filtered copy)
+        if save_results_to_original_adata_uns and work_adata is not adata:
+            if 'mixedlm_model_results' not in adata.uns:
+                adata.uns['mixedlm_model_results'] = {}
+            adata.uns['mixedlm_model_results'][key] = results
+            print(f"Also wrote results to original adata.uns['mixedlm_model_results']['{key}']")
+
+    # save the results dataframe to the save_path if requested
+    if save_table and save_path is not None:
+        import csv
+        results.to_csv(save_path, float_format="%.6f", quoting=csv.QUOTE_MINIMAL,)
+        print(f"Saved results fit_smf_mixedlm_models_and_summarize_wide results to {save_path}")
+
+    # return either results or (results, work_adata) if requested and work_adata is a filtered copy
+    if return_filtered_adata and work_adata is not adata:
+        return results, work_adata
     return results
