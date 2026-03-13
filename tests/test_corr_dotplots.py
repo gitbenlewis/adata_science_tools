@@ -6,6 +6,7 @@ import anndata as ad
 import matplotlib
 import numpy as np
 import pandas as pd
+from matplotlib.legend import Legend
 from scipy import stats
 
 matplotlib.use("Agg")
@@ -74,6 +75,7 @@ class CorrDotplotRegressionTests(unittest.TestCase):
                 axes_title="Custom axes title\nsecond line",
                 dot_size=123,
                 title_fontsize=17,
+                stats_fontsize=10,
                 axes_title_y=1.1,
                 axis_label_fontsize=13,
                 tick_label_fontsize=11,
@@ -101,7 +103,7 @@ class CorrDotplotRegressionTests(unittest.TestCase):
             self.assertEqual(len(fig.texts), 1)
             stats_footer = fig.texts[0]
             self.assertIn("Pearson Corr =", stats_footer.get_text())
-            self.assertAlmostEqual(stats_footer.get_fontsize(), 17)
+            self.assertAlmostEqual(stats_footer.get_fontsize(), 10)
 
             renderer = fig.canvas.get_renderer()
             self.assertLess(
@@ -156,6 +158,164 @@ class CorrDotplotRegressionTests(unittest.TestCase):
         finally:
             if fig is not None:
                 plt.close(fig)
+
+    def test_corr_dotplot_can_hide_stats_text(self):
+        df = pd.DataFrame({"x": [1.0, 2.0, 3.0], "y": [2.0, 3.0, 4.0]})
+
+        fig = None
+        try:
+            fig, axes, fit, corr_value, corr_pvalue = adtl.corr_dotplot(
+                df=df,
+                column_key_x="x",
+                column_key_y="y",
+                show_stats_text=False,
+                show=False,
+            )
+            fig.canvas.draw()
+
+            self.assertEqual(len(fig.texts), 0)
+            self.assertIsNotNone(fit)
+            self.assertAlmostEqual(corr_value, 1.0)
+            self.assertLess(corr_pvalue, 1.0)
+            self.assertEqual(len(axes.lines), 3)
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_corr_dotplot_subset_key_draws_group_and_all_fit_lines(self):
+        df = pd.DataFrame(
+            {
+                "x": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+                "y": [1.0, 2.0, 3.0, 2.0, 4.0, 6.0],
+                "treatment": pd.Categorical(["veh", "veh", "veh", "drug", "drug", "drug"]),
+            }
+        )
+        expected_corr = stats.pearsonr(df["x"], df["y"]).statistic
+
+        fig = None
+        try:
+            fig, axes, _, corr_value, _ = adtl.corr_dotplot(
+                df=df,
+                column_key_x="x",
+                column_key_y="y",
+                subset_key="treatment",
+                show_all_obs_fit=True,
+                show_fit_legend=False,
+                axes_lines=False,
+                show_y_intercept=False,
+                show=False,
+            )
+            fig.canvas.draw()
+
+            self.assertAlmostEqual(corr_value, expected_corr)
+            self.assertEqual(len(axes.lines), 3)
+            self.assertEqual(axes.get_legend(), None)
+            self.assertIn("All data:", fig.texts[0].get_text())
+            self.assertIn("treatment=veh:", fig.texts[0].get_text())
+            self.assertIn("treatment=drug:", fig.texts[0].get_text())
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_corr_dotplot_subset_key_supports_non_categorical_and_unavailable_fit(self):
+        df = pd.DataFrame(
+            {
+                "x": [1.0, 2.0, 3.0, 4.0, 5.0],
+                "y": [2.0, 4.0, 6.0, 8.0, 10.0],
+                "batch": [1, 1, 2, 2, 3],
+            }
+        )
+
+        fig = None
+        try:
+            fig, axes, _, _, _ = adtl.corr_dotplot(
+                df=df,
+                column_key_x="x",
+                column_key_y="y",
+                subset_key="batch",
+                show_fit_legend=False,
+                axes_lines=False,
+                show_y_intercept=False,
+                show=False,
+            )
+            fig.canvas.draw()
+
+            self.assertEqual(len(axes.lines), 2)
+            self.assertEqual(axes.get_legend(), None)
+            self.assertIn("batch=3: fit unavailable", fig.texts[0].get_text())
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_corr_dotplot_legends_can_be_toggled_independently(self):
+        df = pd.DataFrame(
+            {
+                "x": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+                "y": [1.0, 2.0, 3.0, 2.0, 4.0, 6.0],
+                "group": pd.Categorical(["g1", "g1", "g2", "g2", "g1", "g2"]),
+                "treatment": pd.Categorical(["veh", "veh", "veh", "drug", "drug", "drug"]),
+            }
+        )
+
+        fig = None
+        fig_no_hue = None
+        try:
+            fig, axes, _, _, _ = adtl.corr_dotplot(
+                df=df,
+                column_key_x="x",
+                column_key_y="y",
+                hue="group",
+                subset_key="treatment",
+                fit_legend_bbox_to_anchor=[1.2, 0.95],
+                hue_legend_bbox_to_anchor=[1.2, 0.35],
+                show_all_obs_fit=True,
+                show_fit_legend=True,
+                show_hue_legend=True,
+                axes_lines=False,
+                show_y_intercept=False,
+                show=False,
+            )
+            fig.canvas.draw()
+
+            fit_legend = axes.get_legend()
+            extra_legends = [artist for artist in axes.artists if isinstance(artist, Legend)]
+            self.assertIsNotNone(fit_legend)
+            self.assertEqual(fit_legend.get_title().get_text(), "treatment fit")
+            self.assertEqual(len(extra_legends), 1)
+            self.assertEqual(extra_legends[0].get_title().get_text(), "group")
+            fit_anchor = fit_legend.get_bbox_to_anchor().transformed(axes.transAxes.inverted())
+            hue_anchor = extra_legends[0].get_bbox_to_anchor().transformed(axes.transAxes.inverted())
+            self.assertAlmostEqual(fit_anchor.x0, 1.2, places=2)
+            self.assertAlmostEqual(fit_anchor.y0, 0.95, places=2)
+            self.assertAlmostEqual(hue_anchor.x0, 1.2, places=2)
+            self.assertAlmostEqual(hue_anchor.y0, 0.35, places=2)
+
+            fig_no_hue, axes_no_hue, _, _, _ = adtl.corr_dotplot(
+                df=df,
+                column_key_x="x",
+                column_key_y="y",
+                hue="group",
+                subset_key="treatment",
+                show_all_obs_fit=True,
+                show_fit_legend=True,
+                show_hue_legend=False,
+                axes_lines=False,
+                show_y_intercept=False,
+                show=False,
+            )
+            fig_no_hue.canvas.draw()
+
+            self.assertIsNotNone(axes_no_hue.get_legend())
+            self.assertEqual(axes_no_hue.get_legend().get_title().get_text(), "treatment fit")
+            self.assertEqual(
+                len([artist for artist in axes_no_hue.artists if isinstance(artist, Legend)]),
+                0,
+            )
+        finally:
+            if fig is not None:
+                plt.close(fig)
+            if fig_no_hue is not None:
+                plt.close(fig_no_hue)
 
 
 if __name__ == "__main__":
