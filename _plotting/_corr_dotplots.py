@@ -18,7 +18,7 @@ def corr_dotplot(
     *,
     adata: anndata.AnnData | None = None,
     layer: str | None = None,
-    x_df: pd.DataFrame | None = None,
+    x_df: Any | None = None,
     var_df: pd.DataFrame | None = None,
     obs_df: pd.DataFrame | None = None,
     column_key_x: str | None = None,
@@ -27,9 +27,16 @@ def corr_dotplot(
     figsize: tuple[float, float] = (20, 10),
     xlabel: str | None = None,
     ylabel: str | None = None,
+    axes_title: str | None = None,
     axes_lines: bool = True,
     show_y_intercept: bool = True,
     palette: Sequence[Any] | str | None = palettes.godsnot_102,
+    dot_size: float = 200,
+    title_fontsize: int = 20,
+    axes_title_y: float | None = None,
+    axis_label_fontsize: int = 20,
+    tick_label_fontsize: int | None = None,
+    legend_fontsize: int | None = None,
     nas2zeros: bool = False,
     dropna: bool = False,
     dropzeros: bool = False,
@@ -48,9 +55,9 @@ def corr_dotplot(
     layer : str | None
         Name of ``adata.layers`` matrix used instead of ``adata.X`` when pulling
         expression values.
-    x_df : pandas.DataFrame | None
+    x_df : pandas.DataFrame or other 2D matrix-like object, optional
         Expression matrix with observations as rows and features as columns. Overrides
-        AnnData-derived matrices when supplied.
+        AnnData-derived matrices when supplied and is converted to a DataFrame when needed.
     var_df : pandas.DataFrame | None
         Feature metadata used to supply column names when ``x_df`` is not a DataFrame.
     obs_df : pandas.DataFrame | None
@@ -64,10 +71,24 @@ def corr_dotplot(
         Figure size passed to ``plt.subplots``.
     xlabel, ylabel : str | None
         Optional axis labels overriding the default column names.
+    axes_title : str | None
+        Optional axes title applied with ``Axes.set_title``.
     axes_lines : bool
         Draw horizontal and vertical reference lines through the origin when ``True``.
     palette : Sequence | str | None
         Palette forwarded to ``seaborn.scatterplot``.
+    dot_size : float
+        Point size passed to ``seaborn.scatterplot`` as ``s``.
+    title_fontsize : int
+        Font size used for the statistical summary footer and optional ``axes_title``.
+    axes_title_y : float | None
+        Vertical position passed to ``Axes.set_title`` when ``axes_title`` is provided.
+    axis_label_fontsize : int
+        Font size used for explicitly provided ``xlabel`` and ``ylabel`` values.
+    tick_label_fontsize : int | None
+        Tick label font size applied to both axes when provided.
+    legend_fontsize : int | None
+        Legend label and title font size applied when a legend is drawn.
     nas2zeros : bool
         Replace missing x/y values with zeros when ``True``. occurs before / overrides ``dropna``.
     dropna : bool
@@ -78,6 +99,12 @@ def corr_dotplot(
         Correlation statistic to report and place in the title.
     show : bool
         Call ``plt.show()`` before returning when ``True``.
+
+    Notes
+    -----
+    When observation metadata and feature columns share a name in the assembled
+    ``adata`` / ``obs_df`` path, the metadata column is renamed to ``<name>_obs``
+    before concatenation so the bare name continues to refer to the feature column.
     """
 
     if column_key_x is None or column_key_y is None:
@@ -130,6 +157,26 @@ def corr_dotplot(
         if feature_df is not None:
             if feature_df.index is None or not feature_df.index.equals(_obs_df.index):
                 feature_df = feature_df.reindex(_obs_df.index)
+            colliding_obs_cols = sorted(set(_obs_df.columns).intersection(feature_df.columns))
+            if colliding_obs_cols:
+                rename_map = {col: f"{col}_obs" for col in colliding_obs_cols}
+                rename_targets = list(rename_map.values())
+                if len(rename_targets) != len(set(rename_targets)):
+                    raise ValueError("Observation column collision renaming produced duplicate column names.")
+                existing_obs_cols = set(_obs_df.columns) - set(colliding_obs_cols)
+                conflicting_targets = [
+                    new_name
+                    for new_name in rename_targets
+                    if new_name in existing_obs_cols or new_name in feature_df.columns
+                ]
+                if conflicting_targets:
+                    conflicts_str = ", ".join(sorted(conflicting_targets))
+                    raise ValueError(
+                        "Observation column collision renaming would overwrite existing columns: "
+                        f"{conflicts_str}."
+                    )
+                # Keep feature names stable while making colliding obs metadata addressable.
+                _obs_df = _obs_df.rename(columns=rename_map)
             plot_df = pd.concat([_obs_df, feature_df], axis=1)
         else:
             plot_df = _obs_df.copy()
@@ -185,7 +232,7 @@ def corr_dotplot(
         "data": working_df,
         "x": column_key_x,
         "y": column_key_y,
-        "s": 200,
+        "s": dot_size,
         "ax": axes,
     }
     if hue is not None:
@@ -195,7 +242,16 @@ def corr_dotplot(
     sns.scatterplot(**scatter_kwargs)
 
     if hue is not None:
-        axes.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.0).set_title(hue)
+        legend_kwargs: dict[str, Any] = {
+            "bbox_to_anchor": (1.05, 1),
+            "loc": 2,
+            "borderaxespad": 0.0,
+        }
+        if legend_fontsize is not None:
+            legend_kwargs["fontsize"] = legend_fontsize
+            legend_kwargs["title_fontsize"] = legend_fontsize
+        legend = axes.legend(**legend_kwargs)
+        legend.set_title(hue, prop={"size": legend_fontsize} if legend_fontsize is not None else None)
         # add legend name
         #axes.legend().set_title(hue)
 
@@ -215,21 +271,45 @@ def corr_dotplot(
         axes.axvline(0, color="black")
 
     if xlabel is not None:
-        axes.set_xlabel(xlabel, fontsize=20)
+        axes.set_xlabel(xlabel, fontsize=axis_label_fontsize)
     if ylabel is not None:
-        axes.set_ylabel(ylabel, fontsize=20)
+        axes.set_ylabel(ylabel, fontsize=axis_label_fontsize)
+    if axes_title is not None:
+        axes_title_kwargs: dict[str, Any] = {}
+        axes_title_kwargs["fontsize"] = title_fontsize
+        if axes_title_y is not None:
+            axes_title_kwargs["y"] = axes_title_y
+        axes.set_title(axes_title, **axes_title_kwargs)
+    if tick_label_fontsize is not None:
+        axes.tick_params(axis="both", labelsize=tick_label_fontsize)
 
     fig.tight_layout()
 
     corr_label = method.capitalize()
-    fig.suptitle(
-        (
-            f"{corr_label} Corr = {corr_value:.3f} pvalue = {corr_pvalue:.6f}\n"
-            f"y = {fit.intercept:.3f} + {fit.slope:.3f}x R^2: {fit.rvalue ** 2:.3f}"
-        ),
-        y=1.05,
-        fontsize=20
+    stats_text = (
+        f"{corr_label} Corr = {corr_value:.3f} pvalue = {corr_pvalue:.6f}\n"
+        f"y = {fit.intercept:.3f} + {fit.slope:.3f}x R^2: {fit.rvalue ** 2:.3f}"
     )
+    stats_footer = fig.text(
+        0.5,
+        0.01,
+        stats_text,
+        ha="center",
+        va="bottom",
+        fontsize=title_fontsize,
+    )
+
+    if axes_title is not None or stats_text:
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        footer_bbox = stats_footer.get_window_extent(renderer=renderer)
+        axes_bbox = axes.get_tightbbox(renderer=renderer)
+        overlap_pixels = footer_bbox.y1 - axes_bbox.y0
+        if overlap_pixels >= 0:
+            padding_pixels = overlap_pixels + 8
+            padding_fraction = padding_pixels / fig.bbox.height
+            new_bottom = min(0.99, fig.subplotpars.bottom + padding_fraction)
+            fig.subplots_adjust(bottom=new_bottom)
 
     if show:
         plt.show()
