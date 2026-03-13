@@ -17,30 +17,74 @@ import anndata as ad
 
 def CFG_filter_adata_by_obs(
     adata: ad.AnnData,
+    dataset_cfg: Optional[dict] = None,
     filter_obs_boolean_column: Optional[str] = None,
     filter_obs_column_key: Optional[str] = None,
     filter_obs_column_values_list: Optional[Sequence] = None,
+    copy: bool = True,
     logger: Optional[logging.Logger] = None,
     **kwargs,
 ) -> ad.AnnData:
-    '''Filter anndata object by obs column values specified in config dict keys. Returns filtered anndata object. Compatible with yaml file generated config dict.'''
+    """
+    Filter anndata object by obs column values specified in config dict keys
+    or by explicit filter args.
+
+    Accepts either `dataset_cfg` (a dict taken from the YAML dataset block)
+    or explicit args: filter_obs_boolean_column, filter_obs_column_key,
+    filter_obs_column_values_list. If dataset_cfg is provided, explicit args
+    are used as fallbacks.
+
+    Returns filtered AnnData (copy by default).
+    """
     logger = logger or logging.getLogger(__name__)
 
+    # prefer dataset_cfg keys if provided
+    if dataset_cfg:
+        filter_obs_boolean_column = dataset_cfg.get("filter_obs_boolean_column", filter_obs_boolean_column)
+        filter_obs_column_key = dataset_cfg.get("filter_obs_column_key", filter_obs_column_key)
+        filter_obs_column_values_list = dataset_cfg.get("filter_obs_column_values_list", filter_obs_column_values_list)
+
+    # nothing to do
+    if filter_obs_boolean_column is None and (filter_obs_column_key is None or filter_obs_column_values_list is None):
+        logger.info("CFG_filter_adata_by_obs: no filtering keys provided; returning original adata (copy=%s)", copy)
+        return adata.copy() if copy else adata
+
+    # start from the original adata; apply filters in sequence with AND semantics
+    _adata = adata
+
     if filter_obs_boolean_column is not None:
-        adata = adata[adata.obs[filter_obs_boolean_column], :].copy()
-        logger.info(f"Filtered adata by boolean column '{filter_obs_boolean_column}'")
-        logger.info(f"After boolean filter '{filter_obs_boolean_column}', adata has {adata.n_obs} observations and {adata.n_vars} variables.")
-        print(f"Filtered adata by boolean column '{filter_obs_boolean_column}'")
-        print(f"After boolean filter '{filter_obs_boolean_column}', adata has {adata.n_obs} observations and {adata.n_vars} variables.")
+        if filter_obs_boolean_column not in _adata.obs.columns:
+            raise KeyError(f"filter_obs_boolean_column '{filter_obs_boolean_column}' not found in adata.obs")
+        # coerce to boolean
+        mask_bool = _adata.obs[filter_obs_boolean_column].astype(bool)
+        _adata = _adata[mask_bool, :].copy() if copy else _adata[mask_bool, :]
+        logger.info("Filtered adata by boolean column '%s': %d observations remain", filter_obs_boolean_column, _adata.n_obs)
 
     if filter_obs_column_key is not None and filter_obs_column_values_list is not None:
-        adata = adata[adata.obs[filter_obs_column_key].isin(filter_obs_column_values_list), :].copy()
-        logger.info(f"Filtered adata by column '{filter_obs_column_key}' with values in {filter_obs_column_values_list}")
-        logger.info(f"After filtering by column '{filter_obs_column_key}' with values {filter_obs_column_values_list}, adata has {adata.n_obs} observations and {adata.n_vars} variables.")
-        print(f"Filtered adata by column '{filter_obs_column_key}' with values in {filter_obs_column_values_list}")
-        print(f"After filtering by column '{filter_obs_column_key}' with values {filter_obs_column_values_list}, adata has {adata.n_obs} observations and {adata.n_vars} variables.")
+        if filter_obs_column_key not in _adata.obs.columns:
+            raise KeyError(f"filter_obs_column_key '{filter_obs_column_key}' not found in adata.obs")
+        vals = list(filter_obs_column_values_list)
 
-    return adata
+        # Try numeric-aware matching first; fall back to string matching
+        try:
+            vals_num = [float(v) for v in vals]
+            col_num = pd.to_numeric(_adata.obs[filter_obs_column_key], errors="coerce")
+            if not col_num.isna().all():
+                mask_vals = col_num.isin(vals_num)
+                if mask_vals.any():
+                    _adata = _adata[mask_vals, :].copy() if copy else _adata[mask_vals, :]
+                    logger.info("Applied numeric value filter on column '%s' (kept %d obs)", filter_obs_column_key, _adata.n_obs)
+                else:
+                    # no numeric matches -> try string
+                    raise ValueError("No numeric matches found; falling back to string matching")
+            else:
+                raise ValueError("Column numeric conversion yields all NaN; falling back to string matching")
+        except Exception:
+            mask_vals = _adata.obs[filter_obs_column_key].astype(str).isin([str(v) for v in vals])
+            _adata = _adata[mask_vals, :].copy() if copy else _adata[mask_vals, :]
+            logger.info("Applied string value filter on column '%s' (kept %d obs)", filter_obs_column_key, _adata.n_obs)
+
+    return _adata
 
 
 def compute_paired_mean_adata(
