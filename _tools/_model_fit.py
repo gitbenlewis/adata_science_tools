@@ -10,9 +10,11 @@ import pandas as pd
 import numpy as np
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
+from pathlib import Path
 from scipy.stats import chi2
 from statsmodels.stats.multitest import multipletests
 import warnings
+import yaml
 
 # Helper inside the module (near top)
 def _ensure_list(x, name):
@@ -23,6 +25,58 @@ def _ensure_list(x, name):
     if isinstance(x, str):
         raise TypeError(f"{name} must be a YAML list (e.g. ['Age','Gender']) not a single string.")
     raise TypeError(f"{name} must be list/tuple or None, got {type(x).__name__}")
+
+
+def _make_model_formula_rhs(predictors):
+    if not predictors:
+        return ""
+    return " + ".join(f'Q("{predictor}")' for predictor in predictors)
+
+
+def _model_spec_yaml_path(save_path):
+    return Path(save_path).with_suffix(".model_spec.yaml")
+
+
+def _coefficient_columns_from_results(results, model_name):
+    coef_prefix = f"{model_name}_Coef_"
+    return [column for column in results.columns if column.startswith(coef_prefix)]
+
+
+def _build_model_fit_model_spec(
+        results,
+        *,
+        fit_method,
+        model_name,
+        predictors,
+        layer,
+        use_raw,
+        group=None,
+        reml=None,
+    ):
+    coefficient_columns = _coefficient_columns_from_results(results, model_name)
+    coef_prefix = f"{model_name}_Coef_"
+    model_spec = {
+        "fit_method": fit_method,
+        "model_name": model_name,
+        "predictors": list(predictors),
+        "layer": layer,
+        "use_raw": use_raw,
+        "formula_rhs": _make_model_formula_rhs(predictors),
+        "coefficient_terms": [column[len(coef_prefix):] for column in coefficient_columns],
+        "coefficient_columns": coefficient_columns,
+    }
+    if group is not None:
+        model_spec["group"] = group
+    if reml is not None:
+        model_spec["reml"] = bool(reml)
+    return model_spec
+
+
+def _save_model_spec_yaml(model_spec, save_path):
+    model_spec_path = _model_spec_yaml_path(save_path)
+    with model_spec_path.open("w", encoding="utf-8") as handle:
+        yaml.safe_dump(model_spec, handle, sort_keys=False)
+    print(f"Saved model_spec YAML to {model_spec_path}")
 
 
 
@@ -209,6 +263,7 @@ def fit_smf_ols_models_and_summarize_adata(
         model_name='OLS_predictors',
         add_adata_var_column_key_list=None,
         save_table=False,
+        save_model_spec_yaml: bool = False,
         save_path=None,
         save_result_to_adata_uns_as_dict=False,
         include_fdr=True,
@@ -261,6 +316,8 @@ def fit_smf_ols_models_and_summarize_adata(
     # Validate/normalize list-like inputs coming from YAML
     predictors = _ensure_list(predictors, "predictors")
     add_adata_var_column_key_list = _ensure_list(add_adata_var_column_key_list, "add_adata_var_column_key_list")
+    if save_model_spec_yaml and (not save_table or save_path is None):
+        raise ValueError("save_model_spec_yaml=True requires save_table=True and save_path to be set.")
 
     # Build the obs_X_df using the (possibly filtered) work_adata
     obs_X_df = make_df_obs_adataX(work_adata, layer=layer, use_raw=use_raw, include_obs=True,)
@@ -268,6 +325,16 @@ def fit_smf_ols_models_and_summarize_adata(
 
     # Delegate the heavy lifting to the wide-version (unchanged behavior)
     results = fit_smf_ols_models_and_summarize_wide(obs_X_df, feature_columns, predictors, model_name=model_name, include_fdr=include_fdr)
+    model_spec = None
+    if save_model_spec_yaml:
+        model_spec = _build_model_fit_model_spec(
+            results,
+            fit_method="ols",
+            model_name=model_name,
+            predictors=predictors,
+            layer=layer,
+            use_raw=use_raw,
+        )
 
     # convert numeric columns to numeric dtype where possible
     num_cols = [
@@ -296,6 +363,11 @@ def fit_smf_ols_models_and_summarize_adata(
             work_adata.uns['ols_model_results'] = {}
         work_adata.uns['ols_model_results'][key] = results
         print(f"Added fit_smf_ols_models_and_summarize_wide results to work_adata.uns['ols_model_results']['{key}']")
+        if save_model_spec_yaml:
+            if 'ols_model_specs' not in work_adata.uns:
+                work_adata.uns['ols_model_specs'] = {}
+            work_adata.uns['ols_model_specs'][key] = model_spec
+            print(f"Added model_spec to work_adata.uns['ols_model_specs']['{key}']")
 
         # optionally also save into the original adata.uns (useful when work_adata is a filtered copy)
         if save_results_to_original_adata_uns and work_adata is not adata:
@@ -303,12 +375,19 @@ def fit_smf_ols_models_and_summarize_adata(
                 adata.uns['ols_model_results'] = {}
             adata.uns['ols_model_results'][key] = results
             print(f"Also wrote results to original adata.uns['ols_model_results']['{key}']")
+            if save_model_spec_yaml:
+                if 'ols_model_specs' not in adata.uns:
+                    adata.uns['ols_model_specs'] = {}
+                adata.uns['ols_model_specs'][key] = model_spec
+                print(f"Also wrote model_spec to original adata.uns['ols_model_specs']['{key}']")
 
     # save the results dataframe to the save_path if requested
     if save_table and save_path is not None:
         import csv
         results.to_csv(save_path, float_format="%.6f", quoting=csv.QUOTE_MINIMAL,)
         print(f"Saved results fit_smf_ols_models_and_summarize_wide results to {save_path}")
+        if save_model_spec_yaml:
+            _save_model_spec_yaml(model_spec, save_path)
 
     # return either results or (results, work_adata) if requested and work_adata is a filtered copy
     if return_filtered_adata and work_adata is not adata:
@@ -510,6 +589,7 @@ def fit_smf_mixedlm_models_and_summarize_adata(
         reml=True,
         add_adata_var_column_key_list=None,
         save_table=False,
+        save_model_spec_yaml: bool = False,
         save_path=None,
         save_result_to_adata_uns_as_dict=False,
         include_fdr=True,
@@ -561,6 +641,8 @@ def fit_smf_mixedlm_models_and_summarize_adata(
     # Validate/normalize list-like inputs coming from YAML
     predictors = _ensure_list(predictors, "predictors")
     add_adata_var_column_key_list = _ensure_list(add_adata_var_column_key_list, "add_adata_var_column_key_list")
+    if save_model_spec_yaml and (not save_table or save_path is None):
+        raise ValueError("save_model_spec_yaml=True requires save_table=True and save_path to be set.")
 
     # group is required for mixedlm; validate early with a clear error
     if group is None:
@@ -580,6 +662,18 @@ def fit_smf_mixedlm_models_and_summarize_adata(
         reml=reml,
         include_fdr=include_fdr,
     )
+    model_spec = None
+    if save_model_spec_yaml:
+        model_spec = _build_model_fit_model_spec(
+            results,
+            fit_method="mixedlm",
+            model_name=model_name,
+            predictors=predictors,
+            layer=layer,
+            use_raw=use_raw,
+            group=group,
+            reml=reml,
+        )
 
     # convert numeric columns to numeric dtype where possible
     num_cols = [
@@ -607,6 +701,11 @@ def fit_smf_mixedlm_models_and_summarize_adata(
             work_adata.uns['mixedlm_model_results'] = {}
         work_adata.uns['mixedlm_model_results'][key] = results
         print(f"Added fit_smf_mixedlm_models_and_summarize_wide results to work_adata.uns['mixedlm_model_results']['{key}']")
+        if save_model_spec_yaml:
+            if 'mixedlm_model_specs' not in work_adata.uns:
+                work_adata.uns['mixedlm_model_specs'] = {}
+            work_adata.uns['mixedlm_model_specs'][key] = model_spec
+            print(f"Added model_spec to work_adata.uns['mixedlm_model_specs']['{key}']")
 
         # optionally also save into the original adata.uns (useful when work_adata is a filtered copy)
         if save_results_to_original_adata_uns and work_adata is not adata:
@@ -614,12 +713,19 @@ def fit_smf_mixedlm_models_and_summarize_adata(
                 adata.uns['mixedlm_model_results'] = {}
             adata.uns['mixedlm_model_results'][key] = results
             print(f"Also wrote results to original adata.uns['mixedlm_model_results']['{key}']")
+            if save_model_spec_yaml:
+                if 'mixedlm_model_specs' not in adata.uns:
+                    adata.uns['mixedlm_model_specs'] = {}
+                adata.uns['mixedlm_model_specs'][key] = model_spec
+                print(f"Also wrote model_spec to original adata.uns['mixedlm_model_specs']['{key}']")
 
     # save the results dataframe to the save_path if requested
     if save_table and save_path is not None:
         import csv
         results.to_csv(save_path, float_format="%.6f", quoting=csv.QUOTE_MINIMAL,)
         print(f"Saved results fit_smf_mixedlm_models_and_summarize_wide results to {save_path}")
+        if save_model_spec_yaml:
+            _save_model_spec_yaml(model_spec, save_path)
 
     # return either results or (results, work_adata) if requested and work_adata is a filtered copy
     if return_filtered_adata and work_adata is not adata:
