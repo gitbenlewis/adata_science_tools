@@ -71,8 +71,10 @@ class CorrDotplotRegressionTests(unittest.TestCase):
                 column_key_x="x",
                 column_key_y="y",
                 hue="group",
+                axes_title="Custom axes title\nsecond line",
                 dot_size=123,
                 title_fontsize=17,
+                axes_title_y=1.1,
                 axis_label_fontsize=13,
                 tick_label_fontsize=11,
                 legend_fontsize=9,
@@ -88,11 +90,24 @@ class CorrDotplotRegressionTests(unittest.TestCase):
                 for size in collection.get_sizes()
             ]
             self.assertIn(123, sizes)
-            self.assertAlmostEqual(fig._suptitle.get_fontsize(), 17)
+            self.assertEqual(axes.get_title(), "Custom axes title\nsecond line")
+            self.assertAlmostEqual(axes.title.get_fontsize(), 17)
+            self.assertAlmostEqual(axes.title.get_position()[1], 1.1)
             self.assertAlmostEqual(axes.xaxis.label.get_fontsize(), 13)
             self.assertAlmostEqual(axes.yaxis.label.get_fontsize(), 13)
             self.assertAlmostEqual(axes.get_xticklabels()[0].get_fontsize(), 11)
             self.assertAlmostEqual(axes.get_yticklabels()[0].get_fontsize(), 11)
+
+            self.assertEqual(len(fig.texts), 1)
+            stats_footer = fig.texts[0]
+            self.assertIn("Pearson Corr =", stats_footer.get_text())
+            self.assertAlmostEqual(stats_footer.get_fontsize(), 17)
+
+            renderer = fig.canvas.get_renderer()
+            self.assertLess(
+                stats_footer.get_window_extent(renderer=renderer).y1,
+                axes.get_tightbbox(renderer=renderer).y0,
+            )
 
             legend = axes.get_legend()
             self.assertIsNotNone(legend)
@@ -134,7 +149,9 @@ class CorrDotplotRegressionTests(unittest.TestCase):
             ]
             self.assertIn(77, sizes)
             self.assertAlmostEqual(corr_value, 1.0)
-            self.assertAlmostEqual(fig._suptitle.get_fontsize(), 15)
+            self.assertEqual(len(fig.texts), 1)
+            self.assertIn("Spearman Corr =", fig.texts[0].get_text())
+            self.assertAlmostEqual(fig.texts[0].get_fontsize(), 15)
             self.assertAlmostEqual(axes.get_legend().get_title().get_fontsize(), 8)
         finally:
             if fig is not None:
