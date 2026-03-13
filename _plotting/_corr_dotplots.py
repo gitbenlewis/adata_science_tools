@@ -87,6 +87,14 @@ def _format_subset_stats_line(
     )
 
 
+def _format_subset_fit_legend_label(
+    label: str,
+    corr_value: float,
+    corr_pvalue: float,
+) -> str:
+    return f"{label}\nCorr={corr_value:.3f},p={corr_pvalue:.2e}"
+
+
 def _normalize_bbox_to_anchor(
     bbox_to_anchor: Sequence[float] | None,
     *,
@@ -423,7 +431,7 @@ def corr_dotplot(
                     show_y_intercept=show_y_intercept,
                     color="black",
                     linestyle="--",
-                    label="All data",
+                    label=_format_subset_fit_legend_label("All data", corr_value, corr_pvalue),
                 )
             )
             stats_lines.append(
@@ -450,7 +458,11 @@ def corr_dotplot(
                         show_y_intercept=show_y_intercept,
                         color=subset_color_map[subset_value],
                         linestyle="-",
-                        label=group_label,
+                        label=_format_subset_fit_legend_label(
+                            group_label,
+                            group_corr_value,
+                            group_corr_pvalue,
+                        ),
                     )
                 )
             stats_lines.append(
@@ -502,18 +514,22 @@ def corr_dotplot(
             "borderaxespad": 0.0,
         }
         if hue_legend is not None:
-            fit_legend_kwargs["bbox_to_anchor"] = fit_legend_anchor or (1.05, 1)
+            fit_legend_kwargs["bbox_to_anchor"] = fit_legend_anchor or (1.04, 1)
             hue_legend.set_bbox_to_anchor(
-                hue_legend_anchor or (1.05, 0.55),
+                hue_legend_anchor or (1.04, 0.55),
                 transform=axes.transAxes,
             )
             axes.add_artist(hue_legend)
         else:
-            fit_legend_kwargs["bbox_to_anchor"] = fit_legend_anchor or (1.05, 1)
+            fit_legend_kwargs["bbox_to_anchor"] = fit_legend_anchor or (1.04, 1)
         if legend_fontsize is not None:
             fit_legend_kwargs["fontsize"] = legend_fontsize
             fit_legend_kwargs["title_fontsize"] = legend_fontsize
-        axes.legend(handles=fit_handles, title=f"{subset_key} fit", **fit_legend_kwargs)
+        axes.legend(
+            handles=fit_handles,
+            title=f"{subset_key} fit\n{corr_label}_corr",
+            **fit_legend_kwargs,
+        )
 
     if stats_footer is not None:
         fig.canvas.draw()

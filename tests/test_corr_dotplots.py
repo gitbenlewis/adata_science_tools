@@ -233,7 +233,7 @@ class CorrDotplotRegressionTests(unittest.TestCase):
                 column_key_x="x",
                 column_key_y="y",
                 subset_key="batch",
-                show_fit_legend=False,
+                show_fit_legend=True,
                 axes_lines=False,
                 show_y_intercept=False,
                 show=False,
@@ -241,8 +241,12 @@ class CorrDotplotRegressionTests(unittest.TestCase):
             fig.canvas.draw()
 
             self.assertEqual(len(axes.lines), 2)
-            self.assertEqual(axes.get_legend(), None)
             self.assertIn("batch=3: fit unavailable", fig.texts[0].get_text())
+            legend = axes.get_legend()
+            self.assertIsNotNone(legend)
+            legend_labels = [text.get_text() for text in legend.get_texts()]
+            self.assertEqual(legend.get_title().get_text(), "batch fit\nPearson_corr")
+            self.assertNotIn("batch=3", "\n".join(legend_labels))
         finally:
             if fig is not None:
                 plt.close(fig)
@@ -280,9 +284,20 @@ class CorrDotplotRegressionTests(unittest.TestCase):
             fit_legend = axes.get_legend()
             extra_legends = [artist for artist in axes.artists if isinstance(artist, Legend)]
             self.assertIsNotNone(fit_legend)
-            self.assertEqual(fit_legend.get_title().get_text(), "treatment fit")
+            self.assertEqual(fit_legend.get_title().get_text(), "treatment fit\nPearson_corr")
             self.assertEqual(len(extra_legends), 1)
             self.assertEqual(extra_legends[0].get_title().get_text(), "group")
+            fit_legend_labels = [text.get_text() for text in fit_legend.get_texts()]
+            self.assertEqual(len(fit_legend_labels), 3)
+            self.assertRegex(fit_legend_labels[0], r"^All data\nCorr=-?\d+\.\d{3},p=\d+\.\d{2}e[+-]\d{2}$")
+            self.assertRegex(
+                fit_legend_labels[1],
+                r"^treatment=(veh|drug)\nCorr=-?\d+\.\d{3},p=\d+\.\d{2}e[+-]\d{2}$",
+            )
+            self.assertRegex(
+                fit_legend_labels[2],
+                r"^treatment=(veh|drug)\nCorr=-?\d+\.\d{3},p=\d+\.\d{2}e[+-]\d{2}$",
+            )
             fit_anchor = fit_legend.get_bbox_to_anchor().transformed(axes.transAxes.inverted())
             hue_anchor = extra_legends[0].get_bbox_to_anchor().transformed(axes.transAxes.inverted())
             self.assertAlmostEqual(fit_anchor.x0, 1.2, places=2)
@@ -306,7 +321,7 @@ class CorrDotplotRegressionTests(unittest.TestCase):
             fig_no_hue.canvas.draw()
 
             self.assertIsNotNone(axes_no_hue.get_legend())
-            self.assertEqual(axes_no_hue.get_legend().get_title().get_text(), "treatment fit")
+            self.assertEqual(axes_no_hue.get_legend().get_title().get_text(), "treatment fit\nPearson_corr")
             self.assertEqual(
                 len([artist for artist in axes_no_hue.artists if isinstance(artist, Legend)]),
                 0,
@@ -316,6 +331,41 @@ class CorrDotplotRegressionTests(unittest.TestCase):
                 plt.close(fig)
             if fig_no_hue is not None:
                 plt.close(fig_no_hue)
+
+    def test_corr_dotplot_subset_fit_legend_uses_spearman_method_title(self):
+        df = pd.DataFrame(
+            {
+                "x": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+                "y": [6.0, 5.0, 4.0, 3.0, 2.0, 1.0],
+                "treatment": pd.Categorical(["veh", "veh", "veh", "drug", "drug", "drug"]),
+            }
+        )
+
+        fig = None
+        try:
+            fig, axes, _, _, _ = adtl.corr_dotplot(
+                df=df,
+                column_key_x="x",
+                column_key_y="y",
+                subset_key="treatment",
+                method="spearman",
+                show_fit_legend=True,
+                axes_lines=False,
+                show_y_intercept=False,
+                show=False,
+            )
+            fig.canvas.draw()
+
+            legend = axes.get_legend()
+            self.assertIsNotNone(legend)
+            self.assertEqual(legend.get_title().get_text(), "treatment fit\nSpearman_corr")
+            self.assertRegex(
+                legend.get_texts()[0].get_text(),
+                r"^treatment=(veh|drug)\nCorr=-?\d+\.\d{3},p=\d+\.\d{2}e[+-]\d{2}$",
+            )
+        finally:
+            if fig is not None:
+                plt.close(fig)
 
 
 if __name__ == "__main__":
