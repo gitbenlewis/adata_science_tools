@@ -545,16 +545,6 @@ def fit_smf_mixedlm_models_and_summarize_adata(
     import pandas as pd
     import numpy as np
 
-    # small helper to validate YAML list-like inputs (allows list/tuple or None; disallows single string)
-    def _ensure_list(x, name):
-        if x is None:
-            return []
-        if isinstance(x, (list, tuple)):
-            return list(x)
-        if isinstance(x, str):
-            raise TypeError(f"{name} must be a YAML list (e.g. ['Age','Gender']) not a single string.")
-        raise TypeError(f"{name} must be list/tuple or None, got {type(x).__name__}")
-
     # If any filter args provided, create a filtered work_adata using the repo helper
     if any([dataset_cfg, filter_obs_boolean_column, filter_obs_column_key, filter_obs_column_values_list]):
         work_adata = CFG_filter_adata_by_obs(
