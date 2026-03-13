@@ -1,11 +1,46 @@
 # _adata_row_operations.py
-
 # module at adata_science_tools/_preprocessing/_adata_row_operations.py
+'''Functions for performing row-wise operations on AnnData objects, such as computing paired means and differences between groups of observations.'''
+# updated 2026-03-13 added CFG_filter_adata_by_obs() function to filter adata by obs column values specified in config dict keys. Returns filtered adata object. Compatible with yaml file generated config dict.
+#
+
+
 
 # module imports
+import logging
+from typing import Optional, Sequence
+
 import pandas as pd
 import numpy as np
 import anndata as ad
+
+
+def CFG_filter_adata_by_obs(
+    adata: ad.AnnData,
+    filter_obs_boolean_column: Optional[str] = None,
+    filter_obs_column_key: Optional[str] = None,
+    filter_obs_column_values_list: Optional[Sequence] = None,
+    logger: Optional[logging.Logger] = None,
+    **kwargs,
+) -> ad.AnnData:
+    '''Filter anndata object by obs column values specified in config dict keys. Returns filtered anndata object. Compatible with yaml file generated config dict.'''
+    logger = logger or logging.getLogger(__name__)
+
+    if filter_obs_boolean_column is not None:
+        adata = adata[adata.obs[filter_obs_boolean_column], :].copy()
+        logger.info(f"Filtered adata by boolean column '{filter_obs_boolean_column}'")
+        logger.info(f"After boolean filter '{filter_obs_boolean_column}', adata has {adata.n_obs} observations and {adata.n_vars} variables.")
+        print(f"Filtered adata by boolean column '{filter_obs_boolean_column}'")
+        print(f"After boolean filter '{filter_obs_boolean_column}', adata has {adata.n_obs} observations and {adata.n_vars} variables.")
+
+    if filter_obs_column_key is not None and filter_obs_column_values_list is not None:
+        adata = adata[adata.obs[filter_obs_column_key].isin(filter_obs_column_values_list), :].copy()
+        logger.info(f"Filtered adata by column '{filter_obs_column_key}' with values in {filter_obs_column_values_list}")
+        logger.info(f"After filtering by column '{filter_obs_column_key}' with values {filter_obs_column_values_list}, adata has {adata.n_obs} observations and {adata.n_vars} variables.")
+        print(f"Filtered adata by column '{filter_obs_column_key}' with values in {filter_obs_column_values_list}")
+        print(f"After filtering by column '{filter_obs_column_key}' with values {filter_obs_column_values_list}, adata has {adata.n_obs} observations and {adata.n_vars} variables.")
+
+    return adata
 
 
 def compute_paired_mean_adata(
