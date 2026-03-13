@@ -1,7 +1,46 @@
 
+import logging
+from pathlib import Path
+from typing import List, Optional, Union
+
+import anndata as ad
 import pandas as pd
-from anndata import AnnData
-from typing import Optional, Union, List
+
+
+def save_dataset(
+    _adata: ad.AnnData,
+    output_path: str | Path,
+    logger: logging.Logger | None = None,
+) -> None:
+    """Save a parsed dataset as h5ad plus CSV exports."""
+    logger = logger or logging.getLogger(__name__)
+    output_path = Path(output_path)
+    output_base_path = output_path.with_suffix("") if output_path.suffix == ".h5ad" else output_path
+    output_base_path.parent.mkdir(parents=True, exist_ok=True)
+    h5ad_path = Path(f"{output_base_path}.h5ad")
+    obs_csv_path = Path(f"{output_base_path}.obs.csv")
+    var_csv_path = Path(f"{output_base_path}.var.csv")
+    x_csv_path = Path(f"{output_base_path}.X.csv")
+    logger.info("Saving adata to %s", h5ad_path)
+    _adata.write_h5ad(h5ad_path)
+    logger.info("Saving adata.obs to %s", obs_csv_path)
+    _adata.obs.to_csv(obs_csv_path)
+    logger.info("Saving adata.var to %s", var_csv_path)
+    _adata.var.to_csv(var_csv_path)
+    logger.info("Saving adata.X to %s", x_csv_path)
+    x_data = _adata.X.toarray() if hasattr(_adata.X, "toarray") else _adata.X
+    pd.DataFrame(x_data, index=_adata.obs_names, columns=_adata.var_names).to_csv(x_csv_path)
+    for layer_name, layer_data in _adata.layers.items():
+        safe_name = str(layer_name).replace("/", "_")
+        layer_csv_path = Path(f"{output_base_path}.layer.{safe_name}.csv")
+        logger.info("Saving adata.layers['%s'] to %s", layer_name, layer_csv_path)
+        layer_values = layer_data.toarray() if hasattr(layer_data, "toarray") else layer_data
+        pd.DataFrame(layer_values, index=_adata.obs_names, columns=_adata.var_names).to_csv(layer_csv_path)
+    logger.info("Saved dataset to directory: %s", h5ad_path.parent)
+    logger.info("Saved dataset with base filename: %s", h5ad_path.stem)
+
+
+_save_dataset = save_dataset
 
 
 ############  
