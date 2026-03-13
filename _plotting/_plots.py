@@ -786,5 +786,6 @@ def timeseries_paired_datapoints(
                     )
         print(f"Saved plot to {file_name}")
     plt.show()
+    plt.close(fig)
 
 ####### END ############. datapoint plots ###################.###################.###################.###################.
