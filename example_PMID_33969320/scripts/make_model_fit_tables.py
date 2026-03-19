@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """script doc string."""
-# REPO_PARENT/example_dataset_template/scripts/make_model_fit_tables.py
+# example_PMID_33969320/scripts/make_model_fit_tables.py
 # updated: 2026-03-04
 ####################################
 import sys

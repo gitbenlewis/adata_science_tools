@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """script doc string."""
-# REPO_PARENT/example_dataset_template/scripts/make_annotated_adata.py
+# example_PMID_33969320/scripts/make_annotated_adata.py
 # updated: 2026-03-04
 
 import sys
@@ -334,5 +334,4 @@ if __name__ == "__main__":
                 "Skipping parse_datasets_filter_obs_boolean_column for parse_dataset_call_key='%s' because run=false",
                 parse_dataset_call_key,
             )
-
 

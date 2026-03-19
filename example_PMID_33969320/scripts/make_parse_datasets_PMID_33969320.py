@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """script doc string."""
-# REPO_PARENT/example_dataset_template/scripts/make_parse_datasets.py
+#scripts/make_parse_datasets.py
 # updated: 2026-03-04
 # ####################################
 import sys

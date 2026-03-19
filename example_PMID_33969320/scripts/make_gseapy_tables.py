@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """script doc string."""
-# REPO_PARENT/example_dataset_template/scripts/make_gseapy_tables.py
+# example_PMID_33969320/scripts/make_gseapy_tables.py
 # updated: 2026-03-04
 
 
