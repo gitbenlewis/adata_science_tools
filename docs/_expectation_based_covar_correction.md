@@ -244,12 +244,34 @@ ratio = adtl.excess_expectation(
 )
 ```
 
+When the input layer is itself log-transformed but the desired ratio is still on
+the original scale, set `ratio_input_transform`:
+
+```python
+ratio = adtl.excess_expectation(
+    adata,
+    expectation_df,
+    flavor="obs_over_exp",
+    input_layer="ln_pgml",
+    output_layer="ln_pgml_obs_over_exp",
+    ratio_input_transform="ln",
+    inplace=False,
+)
+```
+
+Supported `ratio_input_transform` values:
+
+- `none`: use the input layer values directly
+- `ln`: convert observed and expected values with `exp(...)` before forming the ratio
+- `log1p`: convert observed and expected values with `expm1(...)` before forming the ratio
+
 ### Numeric rules
 
 - `obs_minus_exp_val` subtracts the full expected value, including the intercept.
 - Ratio-based flavors require strictly positive expected values unless `eps` is provided.
 - Log flavors also require strictly positive observed values unless `eps` is provided.
 - When `eps` is set, it is added to both numerator and denominator before ratio or log computation.
+- `ratio_input_transform` is applied before the ratio and any optional `log` or `log2` output.
 
 ## `convert_ols_summary_to_expectation_df`
 
@@ -326,14 +348,12 @@ corrected_adata = adtl.regression_expectation_correction_adata(
 
 ### Wrapper behavior
 
-- `regress_out_params` is required.
+- At least one of `regress_out_params` or `excess_expectation_params` must be active.
 - If `expectation_df` is not supplied, the wrapper runs `calculate_expectations(...)`.
 - The wrapper can save expectation artifacts and the corrected `h5ad`.
 - `predict_expectation_params["baseline"]` is copied into `regress_out_params["baseline"]` when needed.
-
-### Current limitation
-
-`excess_expectation_params` is accepted by the wrapper interface, but active values currently raise `NotImplementedError` instead of executing an excess-expectation pass.
+- When both `regress_out_params` and `excess_expectation_params` are active, the wrapper applies `regress_out(...)` first and then `excess_expectation(...)` on the working AnnData copy.
+- `excess_expectation_params` supports the same `ratio_input_transform` values as the direct helper.
 
 ## Common validation errors
 
@@ -356,5 +376,3 @@ Expect these failure modes when inputs do not match the fitted model:
 3. Run `predict_expectation(...)` when you need the expected matrix itself.
 4. Run `regress_out(...)` for covariate correction layers.
 5. Run `excess_expectation(...)` for residual, ratio, or log-ratio layers.
-
-For now, use the wrapper for regression-style correction workflows, and call `excess_expectation(...)` directly if you need the ratio or residual transforms.
