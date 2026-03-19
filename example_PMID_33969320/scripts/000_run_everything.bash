@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# REPO_PARENT/example_dataset_template/scripts/000_run_everything.bash
+# example_PMID_33969320/scripts/000_run_everything.bash
 
 #########################################################
 # 0) Activate conda environment that contains the Python deps for POSTPROCESS_ENV
@@ -107,4 +107,3 @@ echo "[INFO] Changed directory to repo root: $REPO_ROOT"
 
 
 #########################################################
-

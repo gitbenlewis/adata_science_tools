@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """script doc string."""
-# REPO_PARENT/example_dataset_template/scripts/make_volcano_plots.py
+# example_PMID_33969320/scripts/make_volcano_plots.py
 # updated: 2026-03-04
 
 import sys
@@ -110,8 +110,6 @@ ADATA_H5AD_PATH = Path(adata_h5ad_path) if adata_h5ad_path else None
 adata_ann_h5ad_path = CFG.get('post_process_nfcore_rnaseq_parameters', {}).get('annotated_h5ad_out_path')
 ADATA_ANN_H5AD_PATH = Path(adata_ann_h5ad_path) if adata_ann_h5ad_path else None
 
-# get from config later
-DA_RESULTS_DIR=Path('HOME_PATH')
 
 # ----------------- Configuration ----------------------------------------------------
 # ------------- parameters end --------------------------------------------------------

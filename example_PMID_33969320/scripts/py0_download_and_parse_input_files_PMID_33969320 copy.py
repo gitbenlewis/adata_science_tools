@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """script doc string."""
-# REPO_PARENT/example_dataset_template/scripts/0_download_and_parse_input_files_PMID_33969320.py
+# example_PMID_33969320/scripts/py0_download_and_parse_input_files_PMID_33969320 copy.py
 
 import sys
 import os
