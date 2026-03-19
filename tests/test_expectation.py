@@ -61,6 +61,42 @@ class ExpectationCorrectionTests(unittest.TestCase):
             model_name="expectation_unit",
         )
 
+        cls.positive_coefficient_table = pd.DataFrame(
+            {
+                "feature_pos_a": [15.0, 1.5, 0.3, 0.2],
+                "feature_pos_b": [25.0, 2.0, 0.15, 0.05],
+            },
+            index=cls.term_names,
+        )
+        positive_transformed_matrix = cls.design_matrix.to_numpy() @ cls.positive_coefficient_table.to_numpy()
+        positive_var = pd.DataFrame(index=cls.positive_coefficient_table.columns)
+        cls.positive_ln_adata = ad.AnnData(
+            X=np.exp(positive_transformed_matrix.copy()),
+            obs=obs.copy(),
+            var=positive_var.copy(),
+        )
+        cls.positive_ln_adata.layers["pgml"] = np.exp(positive_transformed_matrix.copy())
+        cls.positive_ln_adata.layers["ln_pgml"] = positive_transformed_matrix.copy()
+        cls.positive_log1p_adata = ad.AnnData(
+            X=np.expm1(positive_transformed_matrix.copy()),
+            obs=obs.copy(),
+            var=positive_var.copy(),
+        )
+        cls.positive_log1p_adata.layers["pgml"] = np.expm1(positive_transformed_matrix.copy())
+        cls.positive_log1p_adata.layers["log1p_pgml"] = positive_transformed_matrix.copy()
+        cls.positive_ln_expectation_df = adtl.calculate_expectations(
+            cls.positive_ln_adata,
+            predictors=cls.predictors,
+            layer="ln_pgml",
+            model_name="expectation_ln_unit",
+        )
+        cls.positive_log1p_expectation_df = adtl.calculate_expectations(
+            cls.positive_log1p_adata,
+            predictors=cls.predictors,
+            layer="log1p_pgml",
+            model_name="expectation_log1p_unit",
+        )
+
     def _write_expectation_artifacts(
         self,
         temp_dir: str,
@@ -458,6 +494,18 @@ class ExpectationCorrectionTests(unittest.TestCase):
         )
         self.assertTrue(np.isfinite(stabilized.layers["obs_over_exp_eps"]).all())
 
+        nan_policy = adtl.excess_expectation(
+            self.adata,
+            bad_expectation,
+            flavor="obs_over_exp",
+            input_layer="pgml",
+            output_layer="obs_over_exp_nan",
+            nonpositive_policy="nan",
+            inplace=False,
+        )
+        self.assertTrue(np.isnan(nan_policy.layers["obs_over_exp_nan"][:, 0]).all())
+        self.assertTrue(np.isfinite(nan_policy.layers["obs_over_exp_nan"][:, 1:]).all())
+
     def test_excess_expectation_accepts_file_backed_expectation_inputs(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             csv_path, _ = self._write_expectation_artifacts(temp_dir)
@@ -470,6 +518,56 @@ class ExpectationCorrectionTests(unittest.TestCase):
                 inplace=False,
             )
         assert_allclose(ratio.layers["obs_over_exp_file"], 1.0, atol=1e-8, rtol=1e-8)
+
+    def test_excess_expectation_ratio_input_transform(self):
+        ln_scaled_adata = self.positive_ln_adata.copy()
+        ln_scaled_adata.layers["ln_pgml_scaled"] = np.log(np.exp(self.positive_ln_adata.layers["ln_pgml"]) * 2.0)
+        ln_ratio = adtl.excess_expectation(
+            ln_scaled_adata,
+            self.positive_ln_expectation_df,
+            flavor="obs_over_exp",
+            input_layer="ln_pgml_scaled",
+            output_layer="ln_obs_over_exp",
+            ratio_input_transform="ln",
+            inplace=False,
+        )
+        assert_allclose(ln_ratio.layers["ln_obs_over_exp"], 2.0, atol=1e-8, rtol=1e-8)
+
+        ln_ratio_naive = adtl.excess_expectation(
+            ln_scaled_adata,
+            self.positive_ln_expectation_df,
+            flavor="obs_over_exp",
+            input_layer="ln_pgml_scaled",
+            output_layer="ln_obs_over_exp_naive",
+            inplace=False,
+        )
+        self.assertFalse(np.allclose(ln_ratio_naive.layers["ln_obs_over_exp_naive"], 2.0))
+
+        log1p_scaled_adata = self.positive_log1p_adata.copy()
+        log1p_scaled_adata.layers["log1p_pgml_scaled"] = np.log1p(
+            np.expm1(self.positive_log1p_adata.layers["log1p_pgml"]) * 3.0
+        )
+        log1p_ratio = adtl.excess_expectation(
+            log1p_scaled_adata,
+            self.positive_log1p_expectation_df,
+            flavor="obs_over_exp",
+            input_layer="log1p_pgml_scaled",
+            output_layer="log1p_obs_over_exp",
+            ratio_input_transform="log1p",
+            inplace=False,
+        )
+        assert_allclose(log1p_ratio.layers["log1p_obs_over_exp"], 3.0, atol=1e-8, rtol=1e-8)
+
+        log_ratio = adtl.excess_expectation(
+            ln_scaled_adata,
+            self.positive_ln_expectation_df,
+            flavor="log_obs_over_exp",
+            input_layer="ln_pgml_scaled",
+            output_layer="ln_log_obs_over_exp",
+            ratio_input_transform="ln",
+            inplace=False,
+        )
+        assert_allclose(log_ratio.layers["ln_log_obs_over_exp"], np.log(2.0), atol=1e-8, rtol=1e-8)
 
     def test_save_expectation_model_files_round_trip(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -586,6 +684,104 @@ class ExpectationCorrectionTests(unittest.TestCase):
         assert_allclose(
             corrected.layers["cfg_corrected"],
             expected.layers["cfg_corrected"],
+            atol=1e-8,
+            rtol=1e-8,
+        )
+
+    def test_regression_expectation_correction_wrapper_with_excess_only(self):
+        excess_expected = adtl.excess_expectation(
+            self.adata,
+            adtl.calculate_expectations(
+                self.adata,
+                predictors=self.predictors,
+                layer="pgml",
+                model_name="wrapper_excess_only",
+            ),
+            flavor="obs_over_exp",
+            input_layer="pgml",
+            output_layer="wrapper_obs_over_exp",
+            inplace=False,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_h5ad_path = Path(temp_dir) / "wrapper_obs_over_exp.h5ad"
+            corrected = adtl.regression_expectation_correction_adata(
+                self.adata,
+                calculate_expectations_params={
+                    "predictors": self.predictors,
+                    "layer": "pgml",
+                    "model_name": "wrapper_excess_only",
+                },
+                regress_out_params=None,
+                excess_expectation_params={
+                    "flavor": "obs_over_exp",
+                    "input_layer": "pgml",
+                    "output_layer": "wrapper_obs_over_exp",
+                },
+                output_h5ad_path=output_h5ad_path,
+            )
+            self.assertTrue(output_h5ad_path.exists())
+            self.assertTrue((Path(temp_dir) / "wrapper_obs_over_exp.layer.wrapper_obs_over_exp.csv").exists())
+        self.assertNotIn("wrapper_obs_over_exp", self.adata.layers)
+        assert_allclose(
+            corrected.layers["wrapper_obs_over_exp"],
+            excess_expected.layers["wrapper_obs_over_exp"],
+            atol=1e-8,
+            rtol=1e-8,
+        )
+
+    def test_regression_expectation_correction_wrapper_with_regress_and_excess(self):
+        baseline = {"NHS_Case": 0.0, "Age": 40.0, "Gender": "Female"}
+        expectation_df = adtl.calculate_expectations(
+            self.adata,
+            predictors=self.predictors,
+            layer="pgml",
+            model_name="wrapper_regress_excess",
+        )
+        expected = adtl.regress_out(
+            self.adata,
+            expectation_df,
+            flavor="obs_minus_exp_covar_baseline",
+            input_layer="pgml",
+            output_layer="wrapper_regressed",
+            baseline=baseline,
+            inplace=False,
+        )
+        expected = adtl.excess_expectation(
+            expected,
+            expectation_df,
+            flavor="obs_over_exp",
+            input_layer="pgml",
+            output_layer="wrapper_obs_over_exp",
+            inplace=False,
+        )
+        corrected = adtl.regression_expectation_correction_adata(
+            self.adata,
+            calculate_expectations_params={
+                "predictors": self.predictors,
+                "layer": "pgml",
+                "model_name": "wrapper_regress_excess",
+            },
+            regress_out_params={
+                "flavor": "obs_minus_exp_covar_baseline",
+                "input_layer": "pgml",
+                "output_layer": "wrapper_regressed",
+                "baseline": baseline,
+            },
+            excess_expectation_params={
+                "flavor": "obs_over_exp",
+                "input_layer": "pgml",
+                "output_layer": "wrapper_obs_over_exp",
+            },
+        )
+        assert_allclose(
+            corrected.layers["wrapper_regressed"],
+            expected.layers["wrapper_regressed"],
+            atol=1e-8,
+            rtol=1e-8,
+        )
+        assert_allclose(
+            corrected.layers["wrapper_obs_over_exp"],
+            expected.layers["wrapper_obs_over_exp"],
             atol=1e-8,
             rtol=1e-8,
         )

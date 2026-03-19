@@ -3,7 +3,7 @@
 ## updated 2026-02-24 added guard to skip features with no complete cases after dropping NaN/inf, and to record the reason for skipping in the model summary dataframe
 ## updated 2026-02-24 added guard to coerce numeric-like predictors to numeric dtype so they are treated as continuous in the formula instead of categorical dummies, and added this coercion step to both OLS and mixedlm functions
 # updated 2026-03-13 add expectation model fit and correction
-
+# updated 2026-03-19 added new _save_model_fit_results_csv(...) helper and switches all OLS and MixedLM CSV writes to index=False
 from .. _io._IO import make_df_obs_adataX
 
 import pandas as pd
@@ -77,6 +77,21 @@ def _save_model_spec_yaml(model_spec, save_path):
     with model_spec_path.open("w", encoding="utf-8") as handle:
         yaml.safe_dump(model_spec, handle, sort_keys=False)
     print(f"Saved model_spec YAML to {model_spec_path}")
+
+
+def _save_model_fit_results_csv(results, save_path):
+    import csv
+
+    if "var_names" not in results.columns:
+        raise ValueError("Model-fit results must include a 'var_names' column before saving.")
+
+    results.to_csv(
+        save_path,
+        index=False,
+        float_format="%.6f",
+        quoting=csv.QUOTE_MINIMAL,
+    )
+    print(f"Saved model-fit results to {save_path}")
 
 
 
@@ -249,9 +264,7 @@ def old_fit_smf_ols_models_and_summarize_adata(
 
     # save the results dataframe to the save_path
     if save_table and save_path is not None:
-        import csv
-        results.to_csv(save_path,float_format="%.6f", quoting=csv.QUOTE_MINIMAL,)
-        print(f"Saved results  fit_smf_ols_models_and_summarize_wide results to {save_path}")
+        _save_model_fit_results_csv(results, save_path)
     return results
 
 def fit_smf_ols_models_and_summarize_adata(
@@ -383,9 +396,7 @@ def fit_smf_ols_models_and_summarize_adata(
 
     # save the results dataframe to the save_path if requested
     if save_table and save_path is not None:
-        import csv
-        results.to_csv(save_path, float_format="%.6f", quoting=csv.QUOTE_MINIMAL,)
-        print(f"Saved results fit_smf_ols_models_and_summarize_wide results to {save_path}")
+        _save_model_fit_results_csv(results, save_path)
         if save_model_spec_yaml:
             _save_model_spec_yaml(model_spec, save_path)
 
@@ -572,9 +583,7 @@ def old_fit_smf_mixedlm_models_and_summarize_adata(
 
     # save the results dataframe to the save_path
     if save_table and save_path is not None:
-        import csv
-        results.to_csv(save_path,float_format="%.6f", quoting=csv.QUOTE_MINIMAL,)
-        print(f"Saved results  fit_smf_mixedlm_models_and_summarize_wide results to {save_path}")
+        _save_model_fit_results_csv(results, save_path)
 
     return results
 
@@ -721,9 +730,7 @@ def fit_smf_mixedlm_models_and_summarize_adata(
 
     # save the results dataframe to the save_path if requested
     if save_table and save_path is not None:
-        import csv
-        results.to_csv(save_path, float_format="%.6f", quoting=csv.QUOTE_MINIMAL,)
-        print(f"Saved results fit_smf_mixedlm_models_and_summarize_wide results to {save_path}")
+        _save_model_fit_results_csv(results, save_path)
         if save_model_spec_yaml:
             _save_model_spec_yaml(model_spec, save_path)
 

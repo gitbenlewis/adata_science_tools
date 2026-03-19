@@ -265,6 +265,10 @@ Supported `ratio_input_transform` values:
 - `ln`: convert observed and expected values with `exp(...)` before forming the ratio
 - `log1p`: convert observed and expected values with `expm1(...)` before forming the ratio
 
+If a ratio run should continue past a small number of undefined cells instead of
+raising, set `nonpositive_policy="nan"` so entries with non-positive expected
+values, or non-positive observed values for log outputs, are written as `NaN`.
+
 ### Numeric rules
 
 - `obs_minus_exp_val` subtracts the full expected value, including the intercept.
@@ -272,6 +276,7 @@ Supported `ratio_input_transform` values:
 - Log flavors also require strictly positive observed values unless `eps` is provided.
 - When `eps` is set, it is added to both numerator and denominator before ratio or log computation.
 - `ratio_input_transform` is applied before the ratio and any optional `log` or `log2` output.
+- `nonpositive_policy="nan"` converts undefined ratio/log-ratio cells to `NaN` instead of raising.
 
 ## `convert_ols_summary_to_expectation_df`
 

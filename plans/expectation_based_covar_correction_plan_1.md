@@ -398,4 +398,3 @@ Both patterns must produce identical `expectation_df` within numerical tolerance
 
 ---
 
-
