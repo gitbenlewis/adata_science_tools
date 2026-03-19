@@ -845,6 +845,8 @@ def excess_expectation(
     output_layer: str | None = None,
     inplace: bool = False,
     eps: float | None = None,
+    ratio_input_transform: str | None = None,
+    nonpositive_policy: str = "raise",
 ) -> ad.AnnData:
     """Apply residual or ratio-based expectation transforms from in-memory or file-backed inputs."""
     valid_flavors = {
@@ -857,6 +859,20 @@ def excess_expectation(
         raise ValueError(f"Unsupported excess_expectation flavor '{flavor}'.")
     if eps is not None and eps <= 0:
         raise ValueError("eps must be positive when provided.")
+    if ratio_input_transform is None:
+        ratio_input_transform = "none"
+    valid_ratio_transforms = {"none", "ln", "log1p"}
+    if ratio_input_transform not in valid_ratio_transforms:
+        raise ValueError(
+            f"Unsupported ratio_input_transform '{ratio_input_transform}'. "
+            f"Expected one of {sorted(valid_ratio_transforms)}."
+        )
+    valid_nonpositive_policies = {"raise", "nan"}
+    if nonpositive_policy not in valid_nonpositive_policies:
+        raise ValueError(
+            f"Unsupported nonpositive_policy '{nonpositive_policy}'. "
+            f"Expected one of {sorted(valid_nonpositive_policies)}."
+        )
 
     target_adata = adata if inplace else adata.copy()
     output_layer = output_layer or flavor
@@ -871,27 +887,50 @@ def excess_expectation(
     if flavor == "obs_minus_exp_val":
         result = observed - expected
     else:
-        if eps is None and np.any(expected <= 0):
+        # Ratio-style outputs can be computed on transformed layers while still
+        # reporting observed/expected on the original abundance scale.
+        if ratio_input_transform == "ln":
+            ratio_observed = np.exp(observed)
+            ratio_expected = np.exp(expected)
+        elif ratio_input_transform == "log1p":
+            ratio_observed = np.expm1(observed)
+            ratio_expected = np.expm1(expected)
+        else:
+            ratio_observed = observed
+            ratio_expected = expected
+
+        invalid_expected = ratio_expected <= 0
+        if eps is None and np.any(invalid_expected) and nonpositive_policy == "raise":
             raise ValueError("Expectation values must be strictly positive for ratio-based transforms.")
-        numerator = observed
-        denominator = expected
+        numerator = ratio_observed
+        denominator = ratio_expected
         if eps is not None:
             numerator = numerator + eps
             denominator = denominator + eps
 
-        ratio = numerator / denominator
+        with np.errstate(divide="ignore", invalid="ignore"):
+            ratio = numerator / denominator
+        if eps is None and np.any(invalid_expected) and nonpositive_policy == "nan":
+            ratio = np.where(invalid_expected, np.nan, ratio)
         if flavor == "obs_over_exp":
             result = ratio
         else:
-            if eps is None and np.any(observed <= 0):
+            invalid_observed = ratio_observed <= 0
+            if eps is None and np.any(invalid_observed) and nonpositive_policy == "raise":
                 raise ValueError("Observed values must be strictly positive for log expectation transforms.")
+            invalid_log_inputs = invalid_expected | invalid_observed
             if flavor == "log_obs_over_exp":
-                result = np.log(ratio)
+                with np.errstate(divide="ignore", invalid="ignore"):
+                    result = np.log(ratio)
             else:
-                result = np.log2(ratio)
+                with np.errstate(divide="ignore", invalid="ignore"):
+                    result = np.log2(ratio)
+            if eps is None and np.any(invalid_log_inputs) and nonpositive_policy == "nan":
+                result = np.where(invalid_log_inputs, np.nan, result)
 
     target_adata.layers[output_layer] = result
     return target_adata
+
 
 def regression_expectation_correction_adata(
     adata: ad.AnnData,
@@ -906,7 +945,7 @@ def regression_expectation_correction_adata(
     logger: logging.Logger | None = None,
     **kwargs: Any,
 ) -> ad.AnnData:
-    """Run expectation fitting plus covariate regression correction on one AnnData."""
+    """Run expectation fitting plus configured regression and/or excess correction on one AnnData."""
     cfg_alias = kwargs.pop("CFG", None)
     cfg_like: dict[str, Any] = {}
     if isinstance(cfg_alias, dict):
@@ -946,11 +985,17 @@ def regression_expectation_correction_adata(
         if run_out_dir is not None and filename is not None:
             resolved_output_h5ad_path = Path(run_out_dir) / str(filename)
 
-    if not regress_params:
-        raise ValueError("regress_out_params is required.")
+    active_regress_params = any(value is not None for value in regress_params.values())
+    active_excess_params = any(value is not None for value in excess_params.values())
+    if not active_regress_params and not active_excess_params:
+        raise ValueError("regress_out_params or excess_expectation_params is required.")
 
     expectation_df = regress_params.get("expectation_df")
     model_spec = regress_params.get("model_spec")
+    if expectation_df is None and excess_params.get("expectation_df") is not None:
+        expectation_df = excess_params.get("expectation_df")
+    if model_spec is None and excess_params.get("model_spec") is not None:
+        model_spec = excess_params.get("model_spec")
     if expectation_df is None and predict_params.get("expectation_df") is not None:
         expectation_df = predict_params.get("expectation_df")
     if model_spec is None and predict_params.get("model_spec") is not None:
@@ -959,7 +1004,8 @@ def regression_expectation_correction_adata(
     if expectation_df is None:
         if not calc_params:
             raise ValueError(
-                "calculate_expectations_params is required when regress_out_params does not provide expectation_df."
+                "calculate_expectations_params is required when no expectation_df is provided "
+                "through regress_out_params, excess_expectation_params, or predict_expectation_params."
             )
         log.info("Fitting expectation model with calculate_expectations_params: %s", calc_params)
         expectation_df = calculate_expectations(adata, **calc_params)
@@ -973,28 +1019,37 @@ def regression_expectation_correction_adata(
             )
             log.info("Saved expectation artifacts to %s and %s", csv_path, model_spec_path)
 
-    regress_params.pop("expectation_df", None)
-    regress_params.pop("model_spec", None)
-    if regress_params.get("baseline") is None and predict_params.get("baseline") is not None:
-        regress_params["baseline"] = copy.deepcopy(predict_params["baseline"])
-
-    active_excess_params = {key: value for key, value in excess_params.items() if value is not None}
-    if active_excess_params:
-        raise NotImplementedError(
-            "excess_expectation_params is accepted by the wrapper but not executed in this first pass."
+    working_adata = adata
+    if active_regress_params:
+        regress_run_params = copy.deepcopy(regress_params)
+        regress_run_params.pop("expectation_df", None)
+        regress_run_params.pop("model_spec", None)
+        if regress_run_params.get("baseline") is None and predict_params.get("baseline") is not None:
+            regress_run_params["baseline"] = copy.deepcopy(predict_params["baseline"])
+        log.info("Applying regress_out with regress_out_params: %s", regress_run_params)
+        working_adata = regress_out(
+            working_adata,
+            expectation_df,
+            model_spec=model_spec,
+            inplace=False,
+            **regress_run_params,
         )
 
-    log.info("Applying regress_out with regress_out_params: %s", regress_params)
-    corrected_adata = regress_out(
-        adata,
-        expectation_df,
-        model_spec=model_spec,
-        inplace=False,
-        **regress_params,
-    )
+    if active_excess_params:
+        excess_run_params = copy.deepcopy(excess_params)
+        excess_run_params.pop("expectation_df", None)
+        excess_run_params.pop("model_spec", None)
+        log.info("Applying excess_expectation with excess_expectation_params: %s", excess_run_params)
+        working_adata = excess_expectation(
+            working_adata,
+            expectation_df,
+            model_spec=model_spec,
+            inplace=False,
+            **excess_run_params,
+        )
 
     if resolved_output_h5ad_path is not None:
         resolved_output_h5ad_path = Path(resolved_output_h5ad_path)
-        save_dataset(corrected_adata, resolved_output_h5ad_path, logger=log)
+        save_dataset(working_adata, resolved_output_h5ad_path, logger=log)
 
-    return corrected_adata
+    return working_adata
