@@ -12,14 +12,13 @@ from dataclasses import dataclass
 from datetime import datetime
 import logging
 import yaml
+from _path_utils import EXAMPLE_ROOT, load_example_config, repo_parent_dir, write_dir
 
 # config
 ####################################
-from pathlib import Path
-import yaml
-REPO_CONFIG_YAML_PATH = Path(__file__).resolve().parent.parent / "config" / "config.yaml"
-with REPO_CONFIG_YAML_PATH.open() as f:
-    CFG = yaml.safe_load(f)
+REPO_ROOT = EXAMPLE_ROOT
+REPO_CONFIG_YAML_PATH = REPO_ROOT / "config" / "config.yaml"
+CFG = load_example_config()
 # out and log path 
 VOLCANO_CFG = CFG.get("volcano_plot_params", {})
 OUTPUT_DIR = Path(
@@ -64,8 +63,8 @@ from dataclasses import dataclass
 @dataclass
 class G():
     '''Class to hold global variables'''
-    WRITE_DIR='WRITE_DIR/'
-    GITBENLEWIS_REPO_PARENT_DIR='REPO_PARENT/'
+    WRITE_DIR=write_dir()
+    GITBENLEWIS_REPO_PARENT_DIR=repo_parent_dir()
     SCRIPTS_DIR='../scripts/'
     CONFIG_DIR='../config/'
     RESULTS_DIR='../results/'

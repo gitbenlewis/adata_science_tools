@@ -12,12 +12,12 @@ from dataclasses import dataclass
 from datetime import datetime
 import logging
 import yaml
+from _path_utils import EXAMPLE_ROOT, load_example_config, repo_parent_dir, write_dir
  # CFG Configuration
 ####################################
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = EXAMPLE_ROOT
 REPO_CONFIG_YAML_PATH = REPO_ROOT / "config" / "config.yaml"
-with REPO_CONFIG_YAML_PATH.open() as f:
-    CFG = yaml.safe_load(f)
+CFG = load_example_config()
 
 # out and log path 
 OUTPUT_DIR = Path(CFG["GSEApy_params"]["repo_results_dir"])
@@ -66,8 +66,8 @@ from dataclasses import dataclass
 @dataclass
 class G():
     '''Class to hold global variables'''
-    WRITE_DIR='WRITE_DIR/'
-    GITBENLEWIS_REPO_PARENT_DIR='REPO_PARENT/'
+    WRITE_DIR=write_dir()
+    GITBENLEWIS_REPO_PARENT_DIR=repo_parent_dir()
     SCRIPTS_DIR='../scripts/'
     CONFIG_DIR='../config/'
     RESULTS_DIR='../results/'
