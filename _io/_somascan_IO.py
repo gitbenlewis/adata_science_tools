@@ -2,9 +2,13 @@
 # module level package imports
 from anndata import AnnData
 from typing import Dict, List, TextIO, Tuple, Union
+import logging
 import numpy as np
 import pandas as pd
 import pandas as pd
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 def read_adat_2_AnnData(path_or_buf: Union[str, TextIO]) -> AnnData:
@@ -268,3 +272,283 @@ def make_df_obs_adataX_soma(adata,layer=None,index=None,varcolumns=None,include_
         return df_obs_adataX
     return df_adataX
 
+
+
+import anndata as ad
+import pandas as pd
+import anndata as ad
+from pathlib import Path
+def somascan_adat_file_2_adata_h5ad_csv(
+    save_raw_h5ad: bool = False,
+    also_raw_save_csvs: bool = False,
+    merge_external_metadata: bool = False,
+    save_plus_metadata_h5ad: bool = False,
+    also_plus_metadata_save_csvs: bool = False,
+    output_dir: str | Path | None = None,
+    dataset_alias: str | None = None,
+    raw_somascan_adat_data_file: str | None = None,
+    new_index_key_from_raw_obs_metadata: str | None = None,
+    remove_mouse_QC_apatmers: bool = False,
+    raw_output_filename: str | None = None,
+    external_obs_metadata_2_merge_file: str | None = None,
+    merge_key_in_external_obs_metadata: str | None = None,
+    merge_key_in_raw_obs_metadata: str | None = None,
+    column_in_metadata_to_set_as_index: str | None = None,
+    external_var_metadata_2_merge_file: str | None = None,
+    merge_key_in_external_var_metadata: str | None = None,
+    merge_key_in_raw_var_metadata: str | None = None,
+    columns_in_external_var_metadata_to_use: list | None = None,
+    plus_metadata_file_name: str | None = None,
+    remove_mouse_QC_apatmers_QC_samples: bool = True,
+    logger: logging.Logger | None = None,
+) -> ad.AnnData | tuple[ad.AnnData, ad.AnnData]:
+    logger = logger or LOGGER
+
+    def _save_dataset(_adata, output_path):
+        """Save dataset helper function."""
+        h5ad_path = Path(f"{output_path}.h5ad")
+        obs_csv_path = Path(f"{output_path}.obs.csv")
+        var_csv_path = Path(f"{output_path}.var.csv")
+        X_csv_path = Path(f"{output_path}.X.csv")
+        logger.info(f"Saving adata to {h5ad_path}")
+        _adata.write_h5ad(h5ad_path)
+        logger.info(f"Saving adata.obs to {obs_csv_path}")
+        _adata.obs.to_csv(obs_csv_path)
+        logger.info(f"Saving adata.var to {var_csv_path}")
+        _adata.var.to_csv(var_csv_path)
+        logger.info(f"Saving adata.X to {X_csv_path}")
+        pd.DataFrame(_adata.X, index=_adata.obs_names, columns=_adata.var_names).to_csv(X_csv_path)
+        output_dir = h5ad_path.parent
+        logger.info(f"Saved dataset to directory: {output_dir}")
+        basename = h5ad_path.stem
+        logger.info(f"Saved dataset with base filename: {basename}")
+
+    logger.info(f"save_raw_h5ad: {save_raw_h5ad}")
+    logger.info(f"also_raw_save_csvs: {also_raw_save_csvs}")
+    logger.info(f"merge_external_metadata: {merge_external_metadata}")
+    logger.info(f"save_plus_metadata_h5ad: {save_plus_metadata_h5ad}")
+    logger.info(f"also_plus_metadata_save_csvs: {also_plus_metadata_save_csvs}")
+    logger.info(f"output_dir: {output_dir}")
+    logger.info(f"dataset_alias: {dataset_alias}")
+    logger.info(f"raw_somascan_adat_data_file: {raw_somascan_adat_data_file}")
+    logger.info(f"new_index_key_from_raw_obs_metadata: {new_index_key_from_raw_obs_metadata}")
+    logger.info(f"remove_mouse_QC_apatmers: {remove_mouse_QC_apatmers}")
+    logger.info(f"raw_output_filename: {raw_output_filename}")
+    logger.info(f"external_obs_metadata_2_merge_file: {external_obs_metadata_2_merge_file}")
+    logger.info(f"merge_key_in_external_obs_metadata: {merge_key_in_external_obs_metadata}")
+    logger.info(f"merge_key_in_raw_obs_metadata: {merge_key_in_raw_obs_metadata}")
+    logger.info(f"column_in_metadata_to_set_as_index: {column_in_metadata_to_set_as_index}")
+    logger.info(f"external_var_metadata_2_merge_file: {external_var_metadata_2_merge_file}")
+    logger.info(f"merge_key_in_external_var_metadata: {merge_key_in_external_var_metadata}")
+    logger.info(f"merge_key_in_raw_var_metadata: {merge_key_in_raw_var_metadata}")
+    logger.info(f"columns_in_external_var_metadata_to_use: {columns_in_external_var_metadata_to_use}")
+    logger.info(f"plus_metadata_file_name: {plus_metadata_file_name}")
+    logger.info(f"remove_mouse_QC_apatmers_QC_samples: {remove_mouse_QC_apatmers_QC_samples}")
+    ## a) load the somascan adat file into anndata
+    logger.info(f"Loading somascan adat file: {raw_somascan_adat_data_file}")
+    adata_raw_from_adat=read_adat_2_AnnData(raw_somascan_adat_data_file)
+    ### general qc here
+    logger.info(f'loaded adata info \n{adata_raw_from_adat}')
+    # better if they are unique, check if unique
+    logger.info(f'adata.obs_names are unique {adata_raw_from_adat.obs_names.is_unique}')
+    logger.info(f'adata.var_names are unique {adata_raw_from_adat.var_names.is_unique}')
+    # show the non unique values in adata.obs_names and adata.var_names
+    logger.info(f'duplicated adata.obs_names \n{adata_raw_from_adat.obs_names[adata_raw_from_adat.obs_names.duplicated()]}')
+    logger.info(f'duplicated adata.var_names \n{adata_raw_from_adat.var_names[adata_raw_from_adat.var_names.duplicated()]}')
+    logger.info(f' info \n')
+    logger.info(f'adata_raw_from_adat.var.head(5)\n{adata_raw_from_adat.var.head(5)}')
+    logger.info(f'adata_raw_from_adat.obs.head(5)\n{adata_raw_from_adat.obs.head(5)}')
+    logger.info(f'adata_raw_from_adat.obs.tail(5)\n{adata_raw_from_adat.obs.tail(5)}')
+    ## b ) make changes to adata object
+    ############ change the obs names / obs index to the merge_key_in_raw_obs_metadata
+    adata_raw_from_adat.obs_names = adata_raw_from_adat.obs[new_index_key_from_raw_obs_metadata]
+    adata_raw_from_adat.obs_names.name = new_index_key_from_raw_obs_metadata+'_index'
+
+    # make the obs index unique by mergeing with another column if needed
+    adata_raw_from_adat=soma_make_adata_index_unique_by_merge(
+    adata_raw_from_adat,
+    donor_obs_column='Barcode2d',
+    mask=adata_raw_from_adat.obs['SampleType'].isin(['QC', 'Buffer', 'Calibrator']),
+    duplicates_index_only=False,
+    #duplicates_index_only=True,
+    ensure_global_unique=True,
+    make_copy=False
+    )
+    soma_fill_sampletype_obs_values(
+    adata_raw_from_adat,
+    donor_obs_column='SampleType',
+    donor_obs_col_values_to_paste=['QC', 'Buffer', 'Calibrator'],
+    obs_columns_toFix = ['AliquotingNotes', 'AssayNotes', 'TimePoint'],
+    make_copy=False
+    )
+    # copy new unieque index to a new column in obs
+    adata_raw_from_adat.obs[new_index_key_from_raw_obs_metadata+'_unique']=adata_raw_from_adat.obs_names
+    # maybe skip this step
+    #adata_raw_from_adat.obs['Human_sample']=adata_raw_from_adat.obs['SampleId']
+    #adata_raw_from_adat.obs['merge_key_in_external_obs_metadata']=adata_raw_from_adat.obs[merge_key_in_raw_obs_metadata]
+    
+    ############ change the var names / var index
+    # make combo var column
+    adata_raw_from_adat.var['SeqIdEntrezGeneSymbol']=adata_raw_from_adat.var['SeqId']+' | '+adata_raw_from_adat.var['EntrezGeneSymbol']
+    adata_raw_from_adat.var['EntrezGeneSymbol_SeqId'] = adata_raw_from_adat.var['EntrezGeneSymbol'] + '_' + adata_raw_from_adat.var['SeqId']
+    # ) select new index from the make combo  var columns
+    adata_raw_from_adat.var_names = adata_raw_from_adat.var['EntrezGeneSymbol_SeqId']
+    # Preserve the historical CSV header expected by downstream repos.
+    adata_raw_from_adat.var_names.name = 'var_names'
+    # remove_mouse_QC_apatmers
+    if remove_mouse_QC_apatmers:
+        logger.info(f"Removing mouse and QC aptamers from adata.var")
+        initial_var_count = adata_raw_from_adat.n_vars
+        adata_raw_from_adat=adata_raw_from_adat[:,
+         (adata_raw_from_adat.var['Type'].str.contains('Protein')
+          &(~adata_raw_from_adat.var['Organism'].str.contains('Mouse')))].copy()
+        final_var_count = adata_raw_from_adat.n_vars
+        logger.info(f"Removed {initial_var_count - final_var_count} aptamers. Remaining aptamers: {final_var_count}")
+    logger.info(f'final adata_raw_from_adat info \n{adata_raw_from_adat}')
+    logger.info(f'adata.obs_names are unique {adata_raw_from_adat.obs_names.is_unique}')
+    logger.info(f'adata.var_names are unique {adata_raw_from_adat.var_names.is_unique}')
+    # show the non unique values in adata.obs_names and adata.var_names
+    logger.info(f'duplicated adata.obs_names \n{adata_raw_from_adat.obs_names[adata_raw_from_adat.obs_names.duplicated()]}')
+    logger.info(f'duplicated adata.var_names \n{adata_raw_from_adat.var_names[adata_raw_from_adat.var_names.duplicated()]}')
+    logger.info(f'adata_raw_from_adat.var.head(5)\n{adata_raw_from_adat.var.head(5)}')
+    logger.info(f'adata_raw_from_adat.obs.head(5)\n{adata_raw_from_adat.obs.head(5)}')
+    logger.info(f'adata_raw_from_adat.obs.tail(5)\n{adata_raw_from_adat.obs.tail(5)}')
+    ##
+    ##### make new layer named 'RFU' from X
+    adata_raw_from_adat.layers['RFU']=adata_raw_from_adat.X.copy()
+    ############
+    # c ) save the raw adata
+    # Output Preparation
+    # make sure object type columns in adata.obs are converted to string
+    for col in adata_raw_from_adat.obs.select_dtypes(include=['object']).columns:
+        adata_raw_from_adat.obs[col] = adata_raw_from_adat.obs[col].astype(str)
+    raw_h5ad_filename = (raw_output_filename + ".h5ad") if raw_output_filename else "raw_adat_2_adata.h5ad"
+    if output_dir:
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+        raw_h5ad_path = Path(output_dir) / raw_h5ad_filename
+        raw_output_path = Path(output_dir) / raw_output_filename if raw_output_filename else raw_h5ad_path.with_suffix("")
+    else:
+        raw_h5ad_path = Path(raw_h5ad_filename).resolve()
+        raw_output_path = raw_h5ad_path.with_suffix("")
+    if save_raw_h5ad:
+        if also_raw_save_csvs:
+            _save_dataset(adata_raw_from_adat, raw_output_path)
+        else:
+            adata_raw_from_adat.write_h5ad(raw_h5ad_path)
+            print(f"Saved AnnData to {raw_h5ad_path}")
+    elif also_raw_save_csvs:
+        obs_csv_path = raw_output_path.with_suffix(".obs.csv")
+        var_csv_path = raw_output_path.with_suffix(".var.csv")
+        X_csv_path = raw_output_path.with_suffix(".X.csv")
+        adata_raw_from_adat.obs.to_csv(obs_csv_path)
+        adata_raw_from_adat.var.to_csv(var_csv_path)
+        pd.DataFrame(
+            adata_raw_from_adat.X,
+            index=adata_raw_from_adat.obs_names,
+            columns=adata_raw_from_adat.var_names,
+        ).to_csv(X_csv_path)
+        print(f"Saved CSV outputs with prefix: {raw_output_path}")
+
+    if merge_external_metadata:
+        # load the external obs metadata if provided
+        if external_obs_metadata_2_merge_file and merge_key_in_external_obs_metadata and merge_key_in_raw_obs_metadata:
+            external_obs_metadata_df = pd.read_csv(external_obs_metadata_2_merge_file,
+                                                   index_col=merge_key_in_external_obs_metadata
+                                                   )
+            logger.info(f"loaded external_obs_metadata_df: \n{external_obs_metadata_df.head(2)}")
+            logger.info(f"external_obs_metadata_dfs columns : \n{external_obs_metadata_df.columns}")
+            # merge
+            logger.info(f"Merging adata.obs with external metadata on keys: \n"
+                        f"adata.obs key: {merge_key_in_raw_obs_metadata} \n"
+                        f"external metadata key: {merge_key_in_external_obs_metadata}")
+            # make a copy of adata to avoid modifying the original
+            logger.info(f"adata_raw_from_adat.obs before merge head(2): \n{adata_raw_from_adat.obs.head(2)}")
+            adata=adata_raw_from_adat.copy()
+            adata.obs = adata.obs.merge(
+                external_obs_metadata_df,
+            left_on=merge_key_in_raw_obs_metadata,#
+            right_index=True,#
+            #right_on=merge_key_in_external_obs_metadata,#
+            #validate='one_to_one',
+                how='left'
+            )
+            logger.info(f"adata.obs after merge head(2): \n{adata.obs.head(2)}")
+            logger.info(f"adata.obs columns after merge: \n{adata.obs.columns}")
+            # set the index to column_in_metadata_to_set_as_index
+            if column_in_metadata_to_set_as_index:
+                logger.info(f"Setting adata.obs index to column: {column_in_metadata_to_set_as_index}")
+                adata.obs.set_index(column_in_metadata_to_set_as_index, inplace=True, drop=False)
+            # rename index to obs_names
+            adata.obs.index.name = 'obs_names'
+            adata.obs_names = adata.obs.index.astype(str)# make sure obs_names are string
+            logger.info(f"adata.obs after merge: \n{adata.obs.head(2)}")
+            logger.info(f"adata.obs columns after merge: \n{adata.obs.columns}")
+            # convert all columns of type object to string
+            for col in adata.obs.select_dtypes(include=['object']).columns:
+                adata.obs[col] = adata.obs[col].astype(str)
+            logger.info(f"adata.obs dtypes after conversion: \n{adata.obs.dtypes}")
+        # merge external var metadata if provided
+        if external_var_metadata_2_merge_file and merge_key_in_external_var_metadata:
+            logger.info(f"before any var merges adata.var.shape {adata.var.shape }")
+            external_var_metadata_df = pd.read_csv(external_var_metadata_2_merge_file
+            , index_col=merge_key_in_external_var_metadata
+            )
+            # select only specified columns if provided
+            if columns_in_external_var_metadata_to_use:
+                external_var_metadata_df = external_var_metadata_df[columns_in_external_var_metadata_to_use]
+            logger.info(f"loaded external_var_metadata_df: \n{external_var_metadata_df.head(2)}")
+            logger.info(f"external_var_metadata_dfs columns : \n{external_var_metadata_df.columns}")
+            # drop any rows with duplicate values in merge_key_in_external_var_metadata
+            external_var_metadata_df = external_var_metadata_df[~external_var_metadata_df.index.duplicated(keep='first')]
+            # merge
+            logger.info(f"Merging adata.var with external var metadata on keys: \n"
+                        f"adata.index key : \n"
+                        f"external var metadata key: {merge_key_in_external_var_metadata}")
+            logger.info(f"adata_raw_from_adat.var before merge head(2): \n{adata.var.head(2)}")
+            new_var = adata.var.merge(
+                external_var_metadata_df,
+            left_on=merge_key_in_external_var_metadata,#
+            right_index=True,#
+            #validate='one_to_one',
+                how='left'
+            )
+            logger.info(f"new_var {new_var.head()}")
+            logger.info(f"new_var.shape {new_var.shape}")
+            adata.var = new_var.copy()
+            # rename index to var_names
+            adata.var.index.name = 'var_names'
+            logger.info(f"after merge adata.var.shape {adata.var.shape }")
+            logger.info(f"adata.var after merge head(2): \n{adata.var.head(2)}")
+            logger.info(f"adata.var columns after merge: \n{adata.var.columns}")
+            # convert all columns of type object to string
+            for col in adata.var.select_dtypes(include=['object']).columns:
+                adata.var[col] = adata.var[col].astype(str)
+            logger.info(f"adata.var dtypes after conversion: \n{adata.var.dtypes}")
+        ########### remove QC samples and QC aptamers if needed 
+        if remove_mouse_QC_apatmers_QC_samples:
+            logger.info(f"Removing mouse and QC aptamers from adata.var")
+            initial_var_count = adata.n_vars
+            adata=adata[:,
+             (adata.var['Type'].str.contains('Protein')
+              &(~adata.var['Organism'].str.contains('Mouse')))].copy()
+            final_var_count = adata.n_vars
+            logger.info(f"Removed {initial_var_count - final_var_count} aptamers. Remaining aptamers: {final_var_count}")
+            logger.info(f"Removing QC samples from adata.obs")
+            initial_obs_count = adata.n_obs
+            adata=adata[~adata.obs['SampleType'].isin(['QC', 'Buffer', 'Calibrator'])].copy()
+            final_obs_count = adata.n_obs
+            logger.info(f"Removed {initial_obs_count - final_obs_count} samples. Remaining samples: {final_obs_count}")
+        # save the updated adata
+        plus_metadata_h5ad_filename = (plus_metadata_file_name + ".h5ad") if plus_metadata_file_name else "raw_adat_2_adata.h5ad"
+        if output_dir:
+            Path(output_dir).mkdir(parents=True, exist_ok=True)
+            plus_metadata_h5ad_path = Path(output_dir) / plus_metadata_h5ad_filename
+            plus_metadata_output_path = Path(output_dir) / plus_metadata_file_name
+        else:
+            plus_metadata_h5ad_path = Path(plus_metadata_h5ad_filename).resolve()
+            plus_metadata_output_path = plus_metadata_h5ad_path.with_suffix("")
+        _save_dataset(adata, plus_metadata_output_path)
+        logger.info(f"Saved updated AnnData with external metadata to {plus_metadata_h5ad_path}")
+        return adata , adata_raw_from_adat
+    else:
+        return adata_raw_from_adat

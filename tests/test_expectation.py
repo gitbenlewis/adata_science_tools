@@ -6,6 +6,7 @@ from pathlib import Path
 import anndata as ad
 import numpy as np
 import pandas as pd
+import yaml
 from numpy.testing import assert_allclose
 from patsy import dmatrix
 
@@ -190,6 +191,37 @@ class ExpectationCorrectionTests(unittest.TestCase):
             atol=1e-8,
             rtol=1e-8,
         )
+
+    def test_calculate_expectations_model_spec_records_filter_provenance(self):
+        adata = self.adata.copy()
+        expectation_df = adtl.calculate_expectations(
+            adata,
+            predictors=["Age"],
+            layer="pgml",
+            model_name="filter_provenance",
+            filter_obs_boolean_column="use_for_expectation",
+            filter_obs_column_key="Gender",
+            filter_obs_column_values_list=["Male"],
+            save_result_to_adata_uns_as_dict=True,
+        )
+        model_spec = expectation_df.attrs["model_spec"]
+        self.assertEqual(model_spec["filter_obs_boolean_column"], "use_for_expectation")
+        self.assertEqual(model_spec["filter_obs_column_key"], "Gender")
+        self.assertEqual(model_spec["filter_obs_column_values_list"], ["Male"])
+        stored_model_spec = adata.uns["expectation_model"]["filter_provenance"]["model_spec"]
+        self.assertEqual(stored_model_spec["filter_obs_boolean_column"], "use_for_expectation")
+        self.assertEqual(stored_model_spec["filter_obs_column_key"], "Gender")
+        self.assertEqual(stored_model_spec["filter_obs_column_values_list"], ["Male"])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            _, model_spec_path = adtl.save_expectation_model_files(
+                expectation_df,
+                Path(temp_dir) / "filter_provenance.csv",
+            )
+            with model_spec_path.open("r", encoding="utf-8") as handle:
+                saved_model_spec = yaml.safe_load(handle)
+        self.assertEqual(saved_model_spec["filter_obs_boolean_column"], "use_for_expectation")
+        self.assertEqual(saved_model_spec["filter_obs_column_key"], "Gender")
+        self.assertEqual(saved_model_spec["filter_obs_column_values_list"], ["Male"])
 
     def test_predict_expectation_matches_known_values_for_seen_categories(self):
         new_obs = pd.DataFrame(
@@ -681,6 +713,11 @@ class ExpectationCorrectionTests(unittest.TestCase):
             self.assertTrue((Path(temp_dir) / "cfg_corrected.layer.cfg_corrected.csv").exists())
             self.assertTrue((Path(temp_dir) / "cfg_expectation.csv").exists())
             self.assertTrue((Path(temp_dir) / "cfg_expectation.model_spec.yaml").exists())
+            with (Path(temp_dir) / "cfg_expectation.model_spec.yaml").open("r", encoding="utf-8") as handle:
+                model_spec = yaml.safe_load(handle)
+            self.assertEqual(model_spec["filter_obs_boolean_column"], "use_for_expectation")
+            self.assertNotIn("filter_obs_column_key", model_spec)
+            self.assertNotIn("filter_obs_column_values_list", model_spec)
         assert_allclose(
             corrected.layers["cfg_corrected"],
             expected.layers["cfg_corrected"],
