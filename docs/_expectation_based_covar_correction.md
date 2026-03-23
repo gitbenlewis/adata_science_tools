@@ -82,6 +82,10 @@ expectation_df = adtl.calculate_expectations(
 )
 ```
 
+When filters are used, the resolved fit-filter inputs are recorded in the
+in-memory `model_spec` and any saved `.model_spec.yaml` sidecar as provenance
+metadata. They do not change prediction behavior.
+
 ## Expectation table schema
 
 `expectation_df` is indexed by `adata.var_names`.
@@ -115,6 +119,13 @@ The prediction contract is stored in `expectation_df.attrs["model_spec"]`. It co
 - `model_name`
 - `layer`
 - `use_raw`
+
+When the model was fit on a filtered observation subset, the same `model_spec`
+also includes the resolved provenance keys:
+
+- `filter_obs_boolean_column`
+- `filter_obs_column_key`
+- `filter_obs_column_values_list`
 
 This matters because a plain CSV reload loses `DataFrame.attrs`. If you reload the table from disk, you must provide the `model_spec` again unless a sibling YAML file is available.
 

@@ -397,8 +397,11 @@ def _build_model_spec(
     model_name: str,
     layer: str | None,
     use_raw: bool,
+    filter_obs_boolean_column: str | None = None,
+    filter_obs_column_key: str | None = None,
+    filter_obs_column_values_list: list[Any] | None = None,
 ) -> dict[str, Any]:
-    return {
+    model_spec = {
         "fit_method": "ols",
         "predictors": list(predictors),
         "formula_rhs": formula_rhs,
@@ -416,6 +419,12 @@ def _build_model_spec(
             for term in design_matrix.columns.tolist()
         },
     }
+    if filter_obs_boolean_column is not None:
+        model_spec["filter_obs_boolean_column"] = filter_obs_boolean_column
+    if filter_obs_column_key is not None and filter_obs_column_values_list is not None:
+        model_spec["filter_obs_column_key"] = filter_obs_column_key
+        model_spec["filter_obs_column_values_list"] = list(filter_obs_column_values_list)
+    return model_spec
 
 
 def reconstruct_expectation_model_spec(
@@ -741,6 +750,9 @@ def calculate_expectations(
         model_name=model_name,
         layer=layer,
         use_raw=use_raw,
+        filter_obs_boolean_column=filter_obs_boolean_column,
+        filter_obs_column_key=filter_obs_column_key,
+        filter_obs_column_values_list=filter_obs_column_values_list,
     )
     expectation_df.attrs["model_spec"] = model_spec
     expectation_df.attrs["model_name"] = model_name
