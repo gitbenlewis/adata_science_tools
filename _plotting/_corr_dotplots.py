@@ -128,6 +128,7 @@ def corr_dotplot(
     axes_lines: bool = True,
     show_y_intercept: bool = True,
     palette: Sequence[Any] | str | None = palettes.godsnot_102,
+    subset_palette: Sequence[Any] | str | None = None,
     dot_size: float = 200,
     title_fontsize: int = 20,
     stats_fontsize: int | None = None,
@@ -182,7 +183,10 @@ def corr_dotplot(
     axes_lines : bool
         Draw horizontal and vertical reference lines through the origin when ``True``.
     palette : Sequence | str | None
-        Palette forwarded to ``seaborn.scatterplot``.
+        Palette forwarded to ``seaborn.scatterplot`` for ``hue``-coloured points.
+    subset_palette : Sequence | str | None
+        Palette used for ``subset_key``-driven subgroup fit lines. When ``None``,
+        subgroup fits fall back to ``palette`` for backward compatibility.
     dot_size : float
         Point size passed to ``seaborn.scatterplot`` as ``s``.
     title_fontsize : int
@@ -352,6 +356,7 @@ def corr_dotplot(
     x_vals = working_df[column_key_x]
     y_vals = working_df[column_key_y]
     fit, corr_value, corr_pvalue = _compute_corr_and_fit(x_vals, y_vals, method)
+    subset_palette_to_use = subset_palette or palette
     stats_fontsize = stats_fontsize or title_fontsize
     fit_legend_anchor = _normalize_bbox_to_anchor(
         fit_legend_bbox_to_anchor,
@@ -418,7 +423,7 @@ def corr_dotplot(
         else:
             subset_values = list(pd.unique(non_null_subset))
 
-        subset_colors = sns.color_palette(palette, n_colors=max(len(subset_values), 1))
+        subset_colors = sns.color_palette(subset_palette_to_use, n_colors=max(len(subset_values), 1))
         subset_color_map = dict(zip(subset_values, subset_colors))
         stats_lines: list[str] = []
 
@@ -512,6 +517,7 @@ def corr_dotplot(
         fit_legend_kwargs: dict[str, Any] = {
             "loc": 2,
             "borderaxespad": 0.0,
+            "handlelength": 2.0,
         }
         if hue_legend is not None:
             fit_legend_kwargs["bbox_to_anchor"] = fit_legend_anchor or (1.04, 1)
@@ -525,11 +531,13 @@ def corr_dotplot(
         if legend_fontsize is not None:
             fit_legend_kwargs["fontsize"] = legend_fontsize
             fit_legend_kwargs["title_fontsize"] = legend_fontsize
-        axes.legend(
+        fit_legend = axes.legend(
             handles=fit_handles,
             title=f"{subset_key} fit\n{corr_label}_corr",
             **fit_legend_kwargs,
         )
+        for legend_handle in fit_legend.legend_handles:
+            legend_handle.set_linewidth(3.0)
 
     if stats_footer is not None:
         fig.canvas.draw()
@@ -551,6 +559,568 @@ def corr_dotplot(
         plt.close(fig)
 
     return fig, axes, fit, corr_value, corr_pvalue
+
+
+def corr_dotplot_dev(
+    df: pd.DataFrame | None = None,
+    *,
+    adata: anndata.AnnData | None = None,
+    layer: str | None = None,
+    x_df: Any | None = None,
+    var_df: pd.DataFrame | None = None,
+    obs_df: pd.DataFrame | None = None,
+    column_key_x: str | None = None,
+    column_key_y: str | None = None,
+    hue: str | None = None,
+    subset_key: str | None = None,
+    figsize: tuple[float, float] = (20, 10),
+    xlabel: str | None = None,
+    ylabel: str | None = None,
+    axes_title: str | None = None,
+    axes_lines: bool = True,
+    show_y_intercept: bool = True,
+    palette: Sequence[Any] | str | None = palettes.godsnot_102,
+    subset_palette: Sequence[Any] | str | None = None,
+    dot_size: float = 200,
+    title_fontsize: int = 20,
+    stats_fontsize: int | None = None,
+    axes_title_y: float | None = None,
+    axis_label_fontsize: int = 20,
+    tick_label_fontsize: int | None = None,
+    legend_fontsize: int | None = None,
+    fit_legend_bbox_to_anchor: Sequence[float] | None = None,
+    hue_legend_bbox_to_anchor: Sequence[float] | None = None,
+    show_all_obs_fit: bool = False,
+    show_fit_legend: bool = True,
+    show_hue_legend: bool = True,
+    show_stats_text: bool = True,
+    nas2zeros: bool = False,
+    dropna: bool = False,
+    dropzeros: bool = False,
+    method: Literal["spearman", "pearson"] = "pearson",
+    show_x_marginal_hist: bool = False,
+    show_y_marginal_hist: bool = False,
+    x_marginal_hist_bins: int | Sequence[float] = 20,
+    y_marginal_hist_bins: int | Sequence[float] = 20,
+    x_marginal_hist_fill: bool = True,
+    x_marginal_hist_KDE: bool = True,
+    y_marginal_hist_fill: bool = True,
+    y_marginal_hist_KDE: bool = True,
+    show_all_obs_x_hist: bool = False,
+    show_all_obs_y_hist: bool = False,
+    x_marginal_hist_height_ratio: float = 0.18,
+    y_marginal_hist_width_ratio: float = 0.18,
+    show: bool = True,
+):
+    """Experimental correlation scatter with optional marginal histograms.
+
+    This variant preserves the current ``corr_dotplot()`` data preparation,
+    filtering, correlation, fit, scatter, legend, and footer behavior while
+    optionally adding top and/or right marginal histograms aligned to the main
+    scatter axes. ``palette`` continues to colour ``hue``-driven scatter layers,
+    while ``subset_palette`` colours ``subset_key``-driven fit and marginal layers.
+    Marginal histograms default to filled plots with KDE overlays and can be
+    controlled independently per axis via ``x_marginal_hist_fill``,
+    ``x_marginal_hist_KDE``, ``y_marginal_hist_fill``, and ``y_marginal_hist_KDE``.
+
+    Returns
+    -------
+    tuple
+        ``(fig, axes_dict, fit, corr_value, corr_pvalue)`` where ``axes_dict``
+        contains ``"main"``, ``"x_marginal"``, and ``"y_marginal"`` keys.
+    """
+
+    if column_key_x is None or column_key_y is None:
+        raise ValueError("Both 'column_key_x' and 'column_key_y' must be provided.")
+
+    method = method.lower()
+    if method not in {"spearman", "pearson"}:
+        raise ValueError("'method' must be either 'spearman' or 'pearson'.")
+
+    if df is not None:
+        plot_df = df.copy()
+    else:
+        if obs_df is not None:
+            _obs_df = obs_df.copy()
+        elif adata is not None:
+            _obs_df = adata.obs.copy()
+        else:
+            raise ValueError("Provide either 'df' or observation information via 'adata'/'obs_df'.")
+
+        if not isinstance(_obs_df, pd.DataFrame):
+            _obs_df = pd.DataFrame(_obs_df)
+
+        feature_df: pd.DataFrame | None
+        if x_df is not None:
+            feature_df = x_df.copy()
+        elif adata is not None:
+            if layer is not None:
+                if layer not in adata.layers:
+                    raise ValueError(f"Layer '{layer}' not found in adata.layers.")
+                matrix = adata.layers[layer]
+            else:
+                matrix = adata.X
+
+            if hasattr(matrix, "toarray"):
+                matrix = matrix.toarray()
+
+            feature_df = pd.DataFrame(matrix, index=adata.obs_names, columns=adata.var_names)
+        else:
+            feature_df = None
+
+        if feature_df is not None and not isinstance(feature_df, pd.DataFrame):
+            if var_df is not None:
+                columns = var_df.index
+            elif adata is not None:
+                columns = adata.var_names
+            else:
+                raise ValueError("Provide 'var_df' so that feature columns can be named.")
+            feature_df = pd.DataFrame(feature_df, index=_obs_df.index, columns=columns)
+
+        if feature_df is not None:
+            if feature_df.index is None or not feature_df.index.equals(_obs_df.index):
+                feature_df = feature_df.reindex(_obs_df.index)
+            colliding_obs_cols = sorted(set(_obs_df.columns).intersection(feature_df.columns))
+            if colliding_obs_cols:
+                rename_map = {col: f"{col}_obs" for col in colliding_obs_cols}
+                rename_targets = list(rename_map.values())
+                if len(rename_targets) != len(set(rename_targets)):
+                    raise ValueError("Observation column collision renaming produced duplicate column names.")
+                existing_obs_cols = set(_obs_df.columns) - set(colliding_obs_cols)
+                conflicting_targets = [
+                    new_name
+                    for new_name in rename_targets
+                    if new_name in existing_obs_cols or new_name in feature_df.columns
+                ]
+                if conflicting_targets:
+                    conflicts_str = ", ".join(sorted(conflicting_targets))
+                    raise ValueError(
+                        "Observation column collision renaming would overwrite existing columns: "
+                        f"{conflicts_str}."
+                    )
+                # Keep feature names stable while making colliding obs metadata addressable.
+                _obs_df = _obs_df.rename(columns=rename_map)
+            plot_df = pd.concat([_obs_df, feature_df], axis=1)
+        else:
+            plot_df = _obs_df.copy()
+
+    required_cols = {column_key_x, column_key_y}
+    if hue is not None:
+        required_cols.add(hue)
+    if subset_key is not None:
+        required_cols.add(subset_key)
+    missing = [col for col in required_cols if col not in plot_df.columns]
+    if missing:
+        missing_str = ", ".join(missing)
+        raise ValueError(f"Column(s) not found in the assembled DataFrame: {missing_str}.")
+
+    selected_cols = [
+        col
+        for col in (column_key_x, column_key_y, hue, subset_key)
+        if col is not None
+    ]
+    selected_cols = list(dict.fromkeys(selected_cols))
+    working_df = plot_df[selected_cols].copy()
+
+    if nas2zeros:
+        working_df[column_key_x].fillna(0, inplace=True)
+        working_df[column_key_y].fillna(0, inplace=True)
+
+    if dropna:
+        working_df = working_df.dropna(subset=[column_key_x, column_key_y])
+
+    if dropzeros:
+        x_numeric = pd.to_numeric(working_df[column_key_x], errors="coerce")
+        y_numeric = pd.to_numeric(working_df[column_key_y], errors="coerce")
+        non_numeric_mask = x_numeric.isna() | y_numeric.isna()
+        working_df = working_df.loc[~non_numeric_mask]
+        x_numeric = x_numeric.loc[working_df.index]
+        y_numeric = y_numeric.loc[working_df.index]
+        zero_mask = (x_numeric == 0) | (y_numeric == 0)
+        working_df = working_df.loc[~zero_mask]
+
+    if working_df.empty:
+        raise ValueError("No data available after filtering missing values.")
+
+    for grouped_col in (hue, subset_key):
+        if grouped_col is not None and _is_categorical_series(working_df[grouped_col]):
+            working_df[grouped_col] = working_df[grouped_col].cat.remove_unused_categories()
+
+    x_vals = working_df[column_key_x]
+    y_vals = working_df[column_key_y]
+    fit, corr_value, corr_pvalue = _compute_corr_and_fit(x_vals, y_vals, method)
+    subset_palette_to_use = subset_palette or palette
+    stats_fontsize = stats_fontsize or title_fontsize
+    fit_legend_anchor = _normalize_bbox_to_anchor(
+        fit_legend_bbox_to_anchor,
+        param_name="fit_legend_bbox_to_anchor",
+    )
+    hue_legend_anchor = _normalize_bbox_to_anchor(
+        hue_legend_bbox_to_anchor,
+        param_name="hue_legend_bbox_to_anchor",
+    )
+
+    fig = plt.figure(figsize=figsize)
+    axes_x_marginal = None
+    axes_y_marginal = None
+
+    if show_x_marginal_hist and show_y_marginal_hist:
+        grid_spec = fig.add_gridspec(
+            2,
+            2,
+            height_ratios=[x_marginal_hist_height_ratio, 1],
+            width_ratios=[1, y_marginal_hist_width_ratio],
+            hspace=0.05,
+            wspace=0.05,
+        )
+        axes_x_marginal = fig.add_subplot(grid_spec[0, 0])
+        axes = fig.add_subplot(grid_spec[1, 0], sharex=axes_x_marginal)
+        axes_y_marginal = fig.add_subplot(grid_spec[1, 1], sharey=axes)
+    elif show_x_marginal_hist:
+        grid_spec = fig.add_gridspec(
+            2,
+            1,
+            height_ratios=[x_marginal_hist_height_ratio, 1],
+            hspace=0.05,
+        )
+        axes_x_marginal = fig.add_subplot(grid_spec[0, 0])
+        axes = fig.add_subplot(grid_spec[1, 0], sharex=axes_x_marginal)
+    elif show_y_marginal_hist:
+        grid_spec = fig.add_gridspec(
+            1,
+            2,
+            width_ratios=[1, y_marginal_hist_width_ratio],
+            wspace=0.05,
+        )
+        axes = fig.add_subplot(grid_spec[0, 0])
+        axes_y_marginal = fig.add_subplot(grid_spec[0, 1], sharey=axes)
+    else:
+        axes = fig.add_subplot(1, 1, 1)
+
+    scatter_kwargs: dict[str, Any] = {
+        "data": working_df,
+        "x": column_key_x,
+        "y": column_key_y,
+        "s": dot_size,
+        "ax": axes,
+    }
+    if hue is not None:
+        scatter_kwargs["hue"] = hue
+        scatter_kwargs["legend"] = "full" if show_hue_legend else False
+        scatter_kwargs["palette"] = palette
+    sns.scatterplot(**scatter_kwargs)
+
+    hue_legend = None
+    if hue is not None:
+        if show_hue_legend:
+            legend_kwargs: dict[str, Any] = {
+                "loc": 2,
+                "borderaxespad": 0.0,
+            }
+            if show_y_marginal_hist and axes_y_marginal is not None and hue_legend_anchor is None:
+                legend_kwargs["bbox_to_anchor"] = (1.04, 1)
+                legend_kwargs["bbox_transform"] = axes_y_marginal.transAxes
+            else:
+                legend_kwargs["bbox_to_anchor"] = hue_legend_anchor or (1.05, 1)
+                if hue_legend_anchor is not None:
+                    legend_kwargs["bbox_transform"] = axes.transAxes
+            if legend_fontsize is not None:
+                legend_kwargs["fontsize"] = legend_fontsize
+                legend_kwargs["title_fontsize"] = legend_fontsize
+            hue_legend = axes.legend(**legend_kwargs)
+            hue_legend.set_title(hue, prop={"size": legend_fontsize} if legend_fontsize is not None else None)
+        else:
+            existing_legend = axes.get_legend()
+            if existing_legend is not None:
+                existing_legend.remove()
+
+    fit_handles: list[Any] = []
+    corr_label = method.capitalize()
+    subset_series = working_df[subset_key] if subset_key is not None else None
+    subset_values: list[Any] = []
+    subset_color_map: dict[Any, Any] = {}
+    if subset_key is None:
+        _plot_fit_line(
+            axes,
+            x_vals,
+            fit,
+            show_y_intercept=show_y_intercept,
+            color="C0",
+            linestyle="-",
+            label=None,
+        )
+        stats_text = (
+            f"{corr_label} Corr = {corr_value:.3f} pvalue = {corr_pvalue:.6f}\n"
+            f"y = {fit.intercept:.3f} + {fit.slope:.3f}x R^2: {fit.rvalue ** 2:.3f}"
+        )
+    else:
+        non_null_subset = subset_series.dropna()
+        if _is_categorical_series(subset_series):
+            subset_values = list(subset_series.cat.categories)
+        else:
+            subset_values = list(pd.unique(non_null_subset))
+
+        subset_colors = sns.color_palette(subset_palette_to_use, n_colors=max(len(subset_values), 1))
+        subset_color_map = dict(zip(subset_values, subset_colors))
+        stats_lines: list[str] = []
+
+        if show_all_obs_fit:
+            fit_handles.append(
+                _plot_fit_line(
+                    axes,
+                    x_vals,
+                    fit,
+                    show_y_intercept=show_y_intercept,
+                    color="black",
+                    linestyle="--",
+                    label=_format_subset_fit_legend_label("All data", corr_value, corr_pvalue),
+                )
+            )
+            stats_lines.append(
+                _format_subset_stats_line("All data", method, fit, corr_value, corr_pvalue)
+            )
+
+        for subset_value in subset_values:
+            group_mask = subset_series == subset_value
+            group_df = working_df.loc[group_mask]
+            group_x = group_df[column_key_x]
+            group_y = group_df[column_key_y]
+            group_fit, group_corr_value, group_corr_pvalue = _try_compute_corr_and_fit(
+                group_x,
+                group_y,
+                method,
+            )
+            group_label = f"{subset_key}={subset_value}"
+            if group_fit is not None:
+                fit_handles.append(
+                    _plot_fit_line(
+                        axes,
+                        group_x,
+                        group_fit,
+                        show_y_intercept=show_y_intercept,
+                        color=subset_color_map[subset_value],
+                        linestyle="-",
+                        label=_format_subset_fit_legend_label(
+                            group_label,
+                            group_corr_value,
+                            group_corr_pvalue,
+                        ),
+                    )
+                )
+            stats_lines.append(
+                _format_subset_stats_line(
+                    group_label,
+                    method,
+                    group_fit,
+                    group_corr_value,
+                    group_corr_pvalue,
+                )
+            )
+
+        if not stats_lines:
+            stats_lines.append(f"No valid {subset_key} groups after filtering.")
+        stats_text = "\n".join(stats_lines)
+
+    if axes_lines:
+        axes.axhline(0, color="black")
+        axes.axvline(0, color="black")
+
+    if xlabel is not None:
+        axes.set_xlabel(xlabel, fontsize=axis_label_fontsize)
+    if ylabel is not None:
+        axes.set_ylabel(ylabel, fontsize=axis_label_fontsize)
+    if axes_title is not None:
+        title_axes = axes_x_marginal if axes_x_marginal is not None else axes
+        axes_title_kwargs: dict[str, Any] = {"fontsize": title_fontsize}
+        if axes_title_y is not None:
+            axes_title_kwargs["y"] = axes_title_y
+        title_axes.set_title(axes_title, **axes_title_kwargs)
+    if tick_label_fontsize is not None:
+        axes.tick_params(axis="both", labelsize=tick_label_fontsize)
+
+    main_xlim = axes.get_xlim()
+    main_ylim = axes.get_ylim()
+    subgroup_hist_alpha = 0.35
+    all_obs_hist_alpha = 0.20
+    all_obs_hist_color = "0.7"
+
+    if axes_x_marginal is not None:
+        x_hist_kwargs: dict[str, Any] = {
+            "bins": x_marginal_hist_bins,
+            "element": "step",
+            "fill": x_marginal_hist_fill,
+            "kde": x_marginal_hist_KDE,
+            "ax": axes_x_marginal,
+        }
+        if isinstance(x_marginal_hist_bins, int):
+            x_hist_kwargs["binrange"] = (x_vals.min(), x_vals.max())
+
+        if subset_key is None:
+            sns.histplot(
+                data=working_df,
+                x=column_key_x,
+                color="C0",
+                alpha=subgroup_hist_alpha,
+                **x_hist_kwargs,
+            )
+        else:
+            if show_all_obs_x_hist:
+                sns.histplot(
+                    data=working_df,
+                    x=column_key_x,
+                    color=all_obs_hist_color,
+                    alpha=all_obs_hist_alpha,
+                    **x_hist_kwargs,
+                )
+            for subset_value in subset_values:
+                group_df = working_df.loc[subset_series == subset_value]
+                if group_df.empty:
+                    continue
+                sns.histplot(
+                    data=group_df,
+                    x=column_key_x,
+                    color=subset_color_map[subset_value],
+                    alpha=subgroup_hist_alpha,
+                    **x_hist_kwargs,
+                )
+
+        axes_x_marginal.tick_params(axis="x", labelbottom=False)
+        axes_x_marginal.tick_params(axis="y", left=False)
+        axes_x_marginal.set_xlabel("")
+        axes_x_marginal.set_ylabel("")
+        axes_x_marginal.set_yticks([])
+        if tick_label_fontsize is not None:
+            axes_x_marginal.tick_params(axis="both", labelsize=tick_label_fontsize)
+
+    if axes_y_marginal is not None:
+        y_hist_kwargs: dict[str, Any] = {
+            "bins": y_marginal_hist_bins,
+            "element": "step",
+            "fill": y_marginal_hist_fill,
+            "kde": y_marginal_hist_KDE,
+            "ax": axes_y_marginal,
+        }
+        if isinstance(y_marginal_hist_bins, int):
+            y_hist_kwargs["binrange"] = (y_vals.min(), y_vals.max())
+
+        if subset_key is None:
+            sns.histplot(
+                data=working_df,
+                y=column_key_y,
+                color="C0",
+                alpha=subgroup_hist_alpha,
+                **y_hist_kwargs,
+            )
+        else:
+            if show_all_obs_y_hist:
+                sns.histplot(
+                    data=working_df,
+                    y=column_key_y,
+                    color=all_obs_hist_color,
+                    alpha=all_obs_hist_alpha,
+                    **y_hist_kwargs,
+                )
+            for subset_value in subset_values:
+                group_df = working_df.loc[subset_series == subset_value]
+                if group_df.empty:
+                    continue
+                sns.histplot(
+                    data=group_df,
+                    y=column_key_y,
+                    color=subset_color_map[subset_value],
+                    alpha=subgroup_hist_alpha,
+                    **y_hist_kwargs,
+                )
+
+        axes_y_marginal.tick_params(axis="y", labelleft=False)
+        axes_y_marginal.set_ylabel("")
+        axes_y_marginal.set_xlabel("Count")
+        if tick_label_fontsize is not None:
+            axes_y_marginal.tick_params(axis="both", labelsize=tick_label_fontsize)
+
+    if axes_x_marginal is not None or axes_y_marginal is not None:
+        axes.set_xlim(main_xlim)
+        axes.set_ylim(main_ylim)
+
+    if axes_x_marginal is None and axes_y_marginal is None:
+        fig.tight_layout()
+
+    stats_footer = None
+    if show_stats_text:
+        stats_footer = fig.text(
+            0.5,
+            0.01,
+            stats_text,
+            ha="center",
+            va="bottom",
+            fontsize=stats_fontsize,
+        )
+
+    if subset_key is not None and show_fit_legend and fit_handles:
+        fit_legend_kwargs: dict[str, Any] = {
+            "loc": 2,
+            "borderaxespad": 0.0,
+            "handlelength": 2.0,
+        }
+        if show_y_marginal_hist and axes_y_marginal is not None and fit_legend_anchor is None:
+            fit_legend_kwargs["bbox_to_anchor"] = (1.04, 1)
+            fit_legend_kwargs["bbox_transform"] = axes_y_marginal.transAxes
+        else:
+            fit_legend_kwargs["bbox_to_anchor"] = fit_legend_anchor or (1.04, 1)
+            if fit_legend_anchor is not None:
+                fit_legend_kwargs["bbox_transform"] = axes.transAxes
+        if hue_legend is not None:
+            if hue_legend_anchor is None and show_y_marginal_hist and axes_y_marginal is not None:
+                hue_legend.set_bbox_to_anchor(
+                    (1.04, 0.55),
+                    transform=axes_y_marginal.transAxes,
+                )
+            else:
+                hue_legend.set_bbox_to_anchor(
+                    hue_legend_anchor or (1.04, 0.55),
+                    transform=axes.transAxes,
+                )
+            axes.add_artist(hue_legend)
+        if legend_fontsize is not None:
+            fit_legend_kwargs["fontsize"] = legend_fontsize
+            fit_legend_kwargs["title_fontsize"] = legend_fontsize
+        fit_legend = axes.legend(
+            handles=fit_handles,
+            title=f"{subset_key} fit\n{corr_label}_corr",
+            **fit_legend_kwargs,
+        )
+        for legend_handle in fit_legend.legend_handles:
+            legend_handle.set_linewidth(3.0)
+
+    if stats_footer is not None:
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        footer_bbox = stats_footer.get_window_extent(renderer=renderer)
+        axes_bbox_y0 = min(
+            axis.get_tightbbox(renderer=renderer).y0
+            for axis in (axes, axes_x_marginal, axes_y_marginal)
+            if axis is not None
+        )
+        overlap_pixels = footer_bbox.y1 - axes_bbox_y0
+        if overlap_pixels >= 0:
+            padding_pixels = overlap_pixels + 8
+            padding_fraction = padding_pixels / fig.bbox.height
+            new_bottom = min(0.99, fig.subplotpars.bottom + padding_fraction)
+            fig.subplots_adjust(bottom=new_bottom)
+
+    if show:
+        plt.show()
+    else:
+        # Prevent notebook backends from auto-rendering and retaining figures
+        # when callers explicitly requested show=False.
+        plt.close(fig)
+
+    axes_dict = {
+        "main": axes,
+        "x_marginal": axes_x_marginal,
+        "y_marginal": axes_y_marginal,
+    }
+    return fig, axes_dict, fit, corr_value, corr_pvalue
 
 
 def spearman_cor_dotplot(*args, **kwargs):

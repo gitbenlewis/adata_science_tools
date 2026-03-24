@@ -7,6 +7,7 @@ This is the most test-backed plotting module in the package. Direct regression t
 ## Main entry points
 
 - `corr_dotplot`
+- `corr_dotplot_dev`
 - `spearman_cor_dotplot`
 - `spearman_cor_dotplot_2`
 - `plot_rank_scatter`
@@ -66,6 +67,7 @@ The returned `fit`, `corr_value`, and `corr_pvalue` always describe the overall 
 
 - `method` must be `"pearson"` or `"spearman"`.
 - `nas2zeros`, `dropna`, and `dropzeros` control x/y cleanup before statistics.
+- `palette` colors `hue`-driven scatter points, while `subset_palette` colors `subset_key`-driven subgroup fit lines.
 - `subset_key` draws one fit line per subgroup when fitting succeeds.
 - `show_all_obs_fit=True` adds the overall fit line in subset mode.
 - `show_fit_legend` and `show_hue_legend` can be toggled independently.
@@ -83,6 +85,38 @@ The current regression tests lock in several details:
 - Non-categorical `subset_key` columns are supported.
 - Subsets that cannot produce a fit are reported as `fit unavailable` in the footer and omitted from the fit legend.
 - The fit legend title changes with method, for example `batch fit\nPearson_corr` versus `batch fit\nSpearman_corr`.
+
+## `corr_dotplot_dev`
+
+`corr_dotplot_dev(...)` is the experimental variant that adds optional top and right marginal histograms while keeping the same filtered-data correlation and fit behavior as `corr_dotplot(...)`.
+
+```python
+fig, axes, fit, corr_value, corr_pvalue = adtl.corr_dotplot_dev(
+    df=df,
+    column_key_x="Age",
+    column_key_y="CRP",
+    hue="Outcome",
+    subset_key="Batch",
+    show_x_marginal_hist=True,
+    show_y_marginal_hist=True,
+    show=False,
+)
+
+main_ax = axes["main"]
+top_hist_ax = axes["x_marginal"]
+right_hist_ax = axes["y_marginal"]
+```
+
+Important behavior:
+
+- It accepts the full `corr_dotplot(...)` keyword API, including `palette` for `hue` layers and `subset_palette` for `subset_key` layers, plus `show_x_marginal_hist`, `show_y_marginal_hist`, `x_marginal_hist_bins`, `y_marginal_hist_bins`, `x_marginal_hist_fill`, `x_marginal_hist_KDE`, `y_marginal_hist_fill`, `y_marginal_hist_KDE`, `show_all_obs_x_hist`, `show_all_obs_y_hist`, `x_marginal_hist_height_ratio`, and `y_marginal_hist_width_ratio`.
+- It returns `(fig, axes_dict, fit, corr_value, corr_pvalue)` instead of a single scatter axes.
+- `axes_dict` always contains `"main"`, `"x_marginal"`, and `"y_marginal"` keys, with disabled marginal panels set to `None`.
+- Marginals use the same filtered `working_df` as the scatter, correlation, and fit layers.
+- When `subset_key` is provided, marginal histograms follow `subset_key` rather than `hue`, so their subgroup colors follow `subset_palette`.
+- Marginals default to `fill=True` and `KDE=True` and can be turned off independently for the x and y panels.
+- When `show_x_marginal_hist=True`, `axes_title` is attached to `axes["x_marginal"]` so the title sits above the full composite plot; otherwise it remains on `axes["main"]`.
+- `corr_dotplot_dev(method="spearman", ...)` is the supported Spearman path for the dev API; there is no separate `spearman_cor_dotplot_dev(...)` wrapper in this change.
 
 ## `spearman_cor_dotplot`
 

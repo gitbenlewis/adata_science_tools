@@ -6,7 +6,9 @@ import anndata as ad
 import matplotlib
 import numpy as np
 import pandas as pd
+from matplotlib.axes import Axes
 from matplotlib.legend import Legend
+from matplotlib.colors import to_hex
 from scipy import stats
 
 matplotlib.use("Agg")
@@ -285,6 +287,8 @@ class CorrDotplotRegressionTests(unittest.TestCase):
             extra_legends = [artist for artist in axes.artists if isinstance(artist, Legend)]
             self.assertIsNotNone(fit_legend)
             self.assertEqual(fit_legend.get_title().get_text(), "treatment fit\nPearson_corr")
+            self.assertAlmostEqual(fit_legend.handlelength, 2.0)
+            self.assertTrue(all(handle.get_linewidth() == 3.0 for handle in fit_legend.legend_handles))
             self.assertEqual(len(extra_legends), 1)
             self.assertEqual(extra_legends[0].get_title().get_text(), "group")
             fit_legend_labels = [text.get_text() for text in fit_legend.get_texts()]
@@ -363,6 +367,415 @@ class CorrDotplotRegressionTests(unittest.TestCase):
                 legend.get_texts()[0].get_text(),
                 r"^treatment=(veh|drug)\nCorr=-?\d+\.\d{3},p=\d+\.\d{2}e[+-]\d{2}$",
             )
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_corr_dotplot_supports_separate_hue_and_subset_palettes(self):
+        df = pd.DataFrame(
+            {
+                "x": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+                "y": [1.0, 2.0, 3.0, 2.0, 4.0, 6.0],
+                "group": pd.Categorical(["g1", "g1", "g2", "g2", "g1", "g2"]),
+                "treatment": pd.Categorical(["veh", "veh", "veh", "drug", "drug", "drug"]),
+            }
+        )
+
+        fig = None
+        fig_fallback = None
+        try:
+            fig, axes, _, _, _ = adtl.corr_dotplot(
+                df=df,
+                column_key_x="x",
+                column_key_y="y",
+                hue="group",
+                subset_key="treatment",
+                palette=["#ff0000", "#00ff00"],
+                subset_palette=["#0000ff", "#ff00ff"],
+                show_all_obs_fit=True,
+                show_fit_legend=True,
+                show_hue_legend=True,
+                axes_lines=False,
+                show_y_intercept=False,
+                show=False,
+            )
+            fig.canvas.draw()
+
+            fit_legend = axes.get_legend()
+            hue_legend = [artist for artist in axes.artists if isinstance(artist, Legend)][0]
+            self.assertEqual(
+                [to_hex(handle.get_color()) for handle in fit_legend.legend_handles],
+                ["#000000", "#0000ff", "#ff00ff"],
+            )
+            self.assertEqual(
+                [to_hex(handle.get_markerfacecolor()) for handle in hue_legend.legend_handles],
+                ["#ff0000", "#00ff00"],
+            )
+
+            fig_fallback, axes_fallback, _, _, _ = adtl.corr_dotplot(
+                df=df,
+                column_key_x="x",
+                column_key_y="y",
+                subset_key="treatment",
+                palette=["#ff0000", "#00ff00"],
+                show_all_obs_fit=True,
+                show_fit_legend=True,
+                axes_lines=False,
+                show_y_intercept=False,
+                show=False,
+            )
+            fig_fallback.canvas.draw()
+
+            self.assertEqual(
+                [to_hex(handle.get_color()) for handle in axes_fallback.get_legend().legend_handles],
+                ["#000000", "#ff0000", "#00ff00"],
+            )
+        finally:
+            if fig is not None:
+                plt.close(fig)
+            if fig_fallback is not None:
+                plt.close(fig_fallback)
+
+    def test_corr_dotplot_dev_returns_axes_dict_for_all_layout_modes(self):
+        df = pd.DataFrame({"x": [1.0, 2.0, 3.0], "y": [3.0, 2.0, 1.0]})
+
+        for show_x_hist, show_y_hist in (
+            (False, False),
+            (True, False),
+            (False, True),
+            (True, True),
+        ):
+            fig = None
+            try:
+                fig, axes, _, _, _ = adtl.corr_dotplot_dev(
+                    df=df,
+                    column_key_x="x",
+                    column_key_y="y",
+                    show_x_marginal_hist=show_x_hist,
+                    show_y_marginal_hist=show_y_hist,
+                    show=False,
+                )
+
+                self.assertIsInstance(axes, dict)
+                self.assertEqual(set(axes), {"main", "x_marginal", "y_marginal"})
+                self.assertIsInstance(axes["main"], Axes)
+                self.assertEqual(axes["x_marginal"] is None, not show_x_hist)
+                self.assertEqual(axes["y_marginal"] is None, not show_y_hist)
+                self.assertFalse(plt.fignum_exists(fig.number))
+                if show_x_hist:
+                    self.assertIsInstance(axes["x_marginal"], Axes)
+                if show_y_hist:
+                    self.assertIsInstance(axes["y_marginal"], Axes)
+            finally:
+                if fig is not None:
+                    plt.close(fig)
+
+    def test_corr_dotplot_dev_grouped_marginals_and_all_obs_overlays(self):
+        df = pd.DataFrame(
+            {
+                "x": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+                "y": [1.0, 2.0, 3.0, 2.0, 4.0, 6.0],
+                "treatment": pd.Categorical(["veh", "veh", "veh", "drug", "drug", "drug"]),
+            }
+        )
+
+        fig = None
+        try:
+            fig, axes, _, _, _ = adtl.corr_dotplot_dev(
+                df=df,
+                column_key_x="x",
+                column_key_y="y",
+                subset_key="treatment",
+                show_x_marginal_hist=True,
+                show_y_marginal_hist=True,
+                show_all_obs_x_hist=True,
+                show_all_obs_y_hist=True,
+                show=False,
+            )
+            fig.canvas.draw()
+
+            self.assertEqual(len(axes["x_marginal"].lines), 3)
+            self.assertEqual(len(axes["y_marginal"].lines), 3)
+            self.assertEqual(len(axes["x_marginal"].collections), 3)
+            self.assertEqual(len(axes["y_marginal"].collections), 3)
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_corr_dotplot_dev_moves_title_to_x_marginal_when_enabled(self):
+        df = pd.DataFrame({"x": [1.0, 2.0, 3.0], "y": [3.0, 2.0, 1.0]})
+
+        fig = None
+        try:
+            fig, axes, _, _, _ = adtl.corr_dotplot_dev(
+                df=df,
+                column_key_x="x",
+                column_key_y="y",
+                axes_title="Top-owned title",
+                show_x_marginal_hist=True,
+                show=False,
+            )
+            fig.canvas.draw()
+
+            self.assertEqual(axes["x_marginal"].get_title(), "Top-owned title")
+            self.assertEqual(axes["main"].get_title(), "")
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_corr_dotplot_dev_applies_axes_title_y_to_x_marginal_title(self):
+        df = pd.DataFrame({"x": [1.0, 2.0, 3.0], "y": [3.0, 2.0, 1.0]})
+
+        fig = None
+        try:
+            fig, axes, _, _, _ = adtl.corr_dotplot_dev(
+                df=df,
+                column_key_x="x",
+                column_key_y="y",
+                axes_title="Shifted title",
+                axes_title_y=1.25,
+                show_x_marginal_hist=True,
+                show=False,
+            )
+            fig.canvas.draw()
+
+            self.assertAlmostEqual(axes["x_marginal"].title.get_position()[1], 1.25)
+            self.assertEqual(axes["main"].get_title(), "")
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_corr_dotplot_dev_keeps_title_on_main_axes_without_x_marginal(self):
+        df = pd.DataFrame({"x": [1.0, 2.0, 3.0], "y": [3.0, 2.0, 1.0]})
+
+        fig = None
+        try:
+            fig, axes, _, _, _ = adtl.corr_dotplot_dev(
+                df=df,
+                column_key_x="x",
+                column_key_y="y",
+                axes_title="Main-owned title",
+                show_y_marginal_hist=True,
+                show=False,
+            )
+            fig.canvas.draw()
+
+            self.assertEqual(axes["main"].get_title(), "Main-owned title")
+            self.assertIsNone(axes["x_marginal"])
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_corr_dotplot_dev_uses_filtered_data_for_scatter_and_marginals(self):
+        df = pd.DataFrame(
+            {
+                "x": [1.0, 2.0, np.nan, 4.0],
+                "y": [2.0, 3.0, 4.0, np.nan],
+            }
+        )
+
+        fig = None
+        try:
+            fig, axes, _, corr_value, _ = adtl.corr_dotplot_dev(
+                df=df,
+                column_key_x="x",
+                column_key_y="y",
+                dropna=True,
+                show_x_marginal_hist=True,
+                show_y_marginal_hist=True,
+                x_marginal_hist_bins=1,
+                y_marginal_hist_bins=1,
+                x_marginal_hist_fill=False,
+                x_marginal_hist_KDE=False,
+                y_marginal_hist_fill=False,
+                y_marginal_hist_KDE=False,
+                show=False,
+            )
+            fig.canvas.draw()
+
+            scatter_points = axes["main"].collections[0].get_offsets()
+            self.assertEqual(len(scatter_points), 2)
+            self.assertAlmostEqual(corr_value, 1.0)
+            self.assertEqual(axes["x_marginal"].lines[0].get_ydata()[0], 2)
+            self.assertEqual(axes["y_marginal"].lines[0].get_xdata()[0], 2)
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_corr_dotplot_dev_custom_bins_and_footer_spacing(self):
+        df = pd.DataFrame(
+            {
+                "x": [1.0, 2.0, 3.0, 4.0],
+                "y": [4.0, 1.0, 3.0, 2.0],
+            }
+        )
+
+        fig = None
+        try:
+            fig, axes, _, _, _ = adtl.corr_dotplot_dev(
+                df=df,
+                column_key_x="x",
+                column_key_y="y",
+                show_x_marginal_hist=True,
+                show_y_marginal_hist=True,
+                x_marginal_hist_bins=3,
+                y_marginal_hist_bins=4,
+                x_marginal_hist_fill=False,
+                x_marginal_hist_KDE=False,
+                y_marginal_hist_fill=False,
+                y_marginal_hist_KDE=False,
+                show=False,
+            )
+            fig.canvas.draw()
+
+            self.assertEqual(len(axes["x_marginal"].lines[0].get_xdata()), 4)
+            self.assertEqual(len(axes["y_marginal"].lines[0].get_ydata()), 5)
+            self.assertEqual(axes["x_marginal"].get_ylabel(), "")
+            self.assertEqual(axes["y_marginal"].get_xlabel(), "Count")
+
+            stats_footer = fig.texts[0]
+            renderer = fig.canvas.get_renderer()
+            axes_bbox_y0 = min(
+                axis.get_tightbbox(renderer=renderer).y0
+                for axis in axes.values()
+                if axis is not None
+            )
+            self.assertLess(
+                stats_footer.get_window_extent(renderer=renderer).y1,
+                axes_bbox_y0,
+            )
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_corr_dotplot_dev_legends_can_coexist_with_y_marginal_and_custom_anchors(self):
+        df = pd.DataFrame(
+            {
+                "x": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+                "y": [1.0, 2.0, 3.0, 2.0, 4.0, 6.0],
+                "group": pd.Categorical(["g1", "g1", "g2", "g2", "g1", "g2"]),
+                "treatment": pd.Categorical(["veh", "veh", "veh", "drug", "drug", "drug"]),
+            }
+        )
+
+        fig = None
+        try:
+            fig, axes, _, _, _ = adtl.corr_dotplot_dev(
+                df=df,
+                column_key_x="x",
+                column_key_y="y",
+                hue="group",
+                subset_key="treatment",
+                show_y_marginal_hist=True,
+                show_all_obs_fit=True,
+                fit_legend_bbox_to_anchor=[1.2, 0.95],
+                hue_legend_bbox_to_anchor=[1.2, 0.35],
+                show_fit_legend=True,
+                show_hue_legend=True,
+                axes_lines=False,
+                show_y_intercept=False,
+                show=False,
+            )
+            fig.canvas.draw()
+
+            fit_legend = axes["main"].get_legend()
+            extra_legends = [artist for artist in axes["main"].artists if isinstance(artist, Legend)]
+            self.assertIsNotNone(fit_legend)
+            self.assertEqual(fit_legend.get_title().get_text(), "treatment fit\nPearson_corr")
+            self.assertAlmostEqual(fit_legend.handlelength, 2.0)
+            self.assertTrue(all(handle.get_linewidth() == 3.0 for handle in fit_legend.legend_handles))
+            self.assertEqual(len(extra_legends), 1)
+            self.assertEqual(extra_legends[0].get_title().get_text(), "group")
+            fit_anchor = fit_legend.get_bbox_to_anchor().transformed(axes["main"].transAxes.inverted())
+            hue_anchor = extra_legends[0].get_bbox_to_anchor().transformed(axes["main"].transAxes.inverted())
+            self.assertAlmostEqual(fit_anchor.x0, 1.2, places=2)
+            self.assertAlmostEqual(fit_anchor.y0, 0.95, places=2)
+            self.assertAlmostEqual(hue_anchor.x0, 1.2, places=2)
+            self.assertAlmostEqual(hue_anchor.y0, 0.35, places=2)
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_corr_dotplot_dev_supports_separate_hue_and_subset_palettes(self):
+        df = pd.DataFrame(
+            {
+                "x": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+                "y": [1.0, 2.0, 3.0, 2.0, 4.0, 6.0],
+                "group": pd.Categorical(["g1", "g1", "g2", "g2", "g1", "g2"]),
+                "treatment": pd.Categorical(["veh", "veh", "veh", "drug", "drug", "drug"]),
+            }
+        )
+
+        fig = None
+        try:
+            fig, axes, _, _, _ = adtl.corr_dotplot_dev(
+                df=df,
+                column_key_x="x",
+                column_key_y="y",
+                hue="group",
+                subset_key="treatment",
+                palette=["#ff0000", "#00ff00"],
+                subset_palette=["#0000ff", "#ff00ff"],
+                show_x_marginal_hist=True,
+                show_y_marginal_hist=True,
+                x_marginal_hist_fill=False,
+                x_marginal_hist_KDE=False,
+                y_marginal_hist_fill=False,
+                y_marginal_hist_KDE=False,
+                show_all_obs_fit=True,
+                show_all_obs_x_hist=True,
+                show_all_obs_y_hist=True,
+                show_fit_legend=True,
+                show_hue_legend=True,
+                axes_lines=False,
+                show_y_intercept=False,
+                show=False,
+            )
+            fig.canvas.draw()
+
+            fit_legend = axes["main"].get_legend()
+            hue_legend = [artist for artist in axes["main"].artists if isinstance(artist, Legend)][0]
+            self.assertEqual(
+                [to_hex(handle.get_color()) for handle in fit_legend.legend_handles],
+                ["#000000", "#0000ff", "#ff00ff"],
+            )
+            self.assertEqual(
+                [to_hex(handle.get_markerfacecolor()) for handle in hue_legend.legend_handles],
+                ["#ff0000", "#00ff00"],
+            )
+            self.assertEqual(
+                [to_hex(line.get_color()) for line in axes["x_marginal"].lines],
+                ["#b2b2b2", "#0000ff", "#ff00ff"],
+            )
+            self.assertEqual(
+                [to_hex(line.get_color()) for line in axes["y_marginal"].lines],
+                ["#b2b2b2", "#0000ff", "#ff00ff"],
+            )
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_corr_dotplot_still_returns_single_axes_object(self):
+        df = pd.DataFrame(
+            {
+                "x": [1.0, 2.0, 3.0],
+                "y": [2.0, 3.0, 4.0],
+                "group": pd.Categorical(["a", "b", "a"]),
+            }
+        )
+
+        fig = None
+        try:
+            fig, axes, _, _, _ = adtl.corr_dotplot(
+                df=df,
+                column_key_x="x",
+                column_key_y="y",
+                hue="group",
+                show=False,
+            )
+
+            self.assertIsInstance(axes, Axes)
+            self.assertEqual(axes.get_legend().get_title().get_text(), "group")
         finally:
             if fig is not None:
                 plt.close(fig)
