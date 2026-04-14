@@ -1,0 +1,2 @@
+export NFCORE_ENV=env_nextflow
+export POSTPROCESS_ENV=not_base

@@ -1,0 +1,62 @@
+########################################## template_repo specific configs ##########################################
+
+parse_datasets_params:
+  repo_results_dir: /home/ubuntu/projects/template_repo/results/datasets/
+  parse_dataset_calls:
+    input:
+      run: true
+      repo_results_dir: /home/ubuntu/projects/template_repo/results/datasets/
+      dataset_input_h5ad_path: /efs/general/blewis/projects/template_repo/results/rnaseq/Template_dataset_name.h5ad
+      dataset_alias: Template_dataset_name
+      datasets:
+        input:
+          name: input
+          output_dir: /home/ubuntu/projects/template_repo/results/datasets/input/
+          filename: Template_dataset_name.input
+        Vehicle:
+          name: Vehicle
+          output_dir: /home/ubuntu/projects/template_repo/results/datasets/Vehicle/
+          filename: Template_dataset_name.Vehicle
+    annotated:
+      run: true
+      repo_results_dir: /home/ubuntu/projects/template_repo/results/datasets/
+      dataset_input_h5ad_path: /home/ubuntu/projects/template_repo/results/datasets/input/Template_dataset_name.annotated.h5ad
+      dataset_alias: Template_dataset_name
+      datasets:
+        input:
+          name: input
+          output_dir: /home/ubuntu/projects/template_repo/results/datasets/input/
+          filename: Template_dataset_name.input.ann
+        Vehicle:
+          name: Vehicle
+          output_dir: /home/ubuntu/projects/template_repo/results/datasets/Vehicle/
+          filename: Template_dataset_name.Vehicle.ann
+diff_test_params:
+  repo_results_dir: /home/ubuntu/projects/template_repo/results/diff_test/
+  default_params:
+    layer: salmon_effective_TPM
+    ascending: true
+    groupby_key: Treatment
+    save_output: true
+    add_adata_var_column_key_list:
+      - gene_id
+      - gene_name
+    add_values2results: true
+    use_raw: false
+  diff_test_runs:
+    Drug_over_Vehicle:
+      run: true
+      adata_path: /efs/general/blewis/projects/template_repo/results/rnaseq/Template_dataset_name.h5ad
+      comparison_col_tag: _Drug_over_Vehicle
+      groupby_key: Treatment
+      groupby_key_target_values:
+        - Drug
+      groupby_key_ref_values:
+        - Vehicle
+      tests:
+        - ttest_ind
+        - mannwhitneyu
+      sortby: ttest_ind_pvals_Drug_over_Vehicle
+      save_path: /home/ubuntu/projects/template_repo/results/diff_test/diff_test_Drug_over_Vehicle.csv
+      save_result_to_adata_uns_as_dict: false
+    

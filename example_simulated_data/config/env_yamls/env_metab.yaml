@@ -1,0 +1,31 @@
+name: metab
+channels:
+  - conda
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.10
+  - biopython
+  - click
+  - gseapy
+  - h5py
+  - ipykernel
+  - ipywidgets
+  - leidenalg
+  - louvain
+  - matplotlib
+  - matplotlib-venn
+  - networkx
+  - numpy
+  - openpyxl
+  - pandas
+  - pydeseq2
+  - pynndescent
+  - python-igraph
+  - scanpy
+  - scikit-learn
+  - scikit-misc
+  - scipy
+  - seaborn
+  - statsmodels
+  - yq
