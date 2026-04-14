@@ -118,6 +118,16 @@ Important behavior:
 - When `show_x_marginal_hist=True`, `axes_title` is attached to `axes["x_marginal"]` so the title sits above the full composite plot; otherwise it remains on `axes["main"]`.
 - `corr_dotplot_dev(method="spearman", ...)` is the supported Spearman path for the dev API; there is no separate `spearman_cor_dotplot_dev(...)` wrapper in this change.
 
+### Repo example with simulated data
+
+The repository now includes a config-driven example that uses `corr_dotplot_dev(...)` end to end:
+
+- [`example_simulated_data/scripts/simulate_1_var_covar_age.py`](../example_simulated_data/scripts/simulate_1_var_covar_age.py) creates a baseline `AnnData` object with `obs` columns `Age` and `case_control` and one feature, `simulated_feature`.
+- [`example_simulated_data/scripts/plot_dotplot_simulate_1_var_covar_age.py`](../example_simulated_data/scripts/plot_dotplot_simulate_1_var_covar_age.py) loads that `.h5ad` file and calls `corr_dotplot_dev(...)` with `column_key_x="Age"`, `column_key_y="simulated_feature"`, `hue="case_control"`, and `subset_key="case_control"`.
+- The default example uses the explicit palette `['#AA4499', '#332288', '#1f77b4', '#661100', '#117733', '#ff7f0e']` from the YAML config rather than `adtl.palettes`.
+
+The generated example figure is available at [`baseline.png`](../example_simulated_data/results/plot_dotplot_simulate_1_var_covar_age/baseline/baseline.png).
+
 ## `spearman_cor_dotplot`
 
 `spearman_cor_dotplot(...)` is a backward-compatible wrapper around `corr_dotplot(...)`.

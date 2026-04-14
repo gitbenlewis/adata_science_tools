@@ -1,0 +1,69 @@
+########################################## directory specific configs ##########################################
+
+
+simulate_1_var_covar_age_params:
+  repo_results_dir: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_simulated_data/results/simulate_1_var_covar_age/
+  default_params:
+    n_obs: 100
+    obs_names_prefix: obs_
+    random_seed: 7
+    age_mean: 50.0
+    age_stdev: 10.0
+    beta: 0.05
+    case_control_prob: 0.5
+    beta_case_control: 2.0
+    yint: 10.0
+    residual_mean: 0.0
+    residual_stdev: 1.0
+    var_name: simulated_feature
+    save_obs_df: false
+    save_adata_dataset: true
+    also_return_adata: true
+
+  simulate_1_var_covar_age__runs:
+    baseline:
+      run: true
+    older_shift:
+      run: false
+      age_mean: 65.0
+      beta: 0.10
+    stronger_case_effect:
+      run: false
+      beta_case_control: 1.0
+
+    
+plot_dotplot_simulate_1_var_covar_age_params:
+  repo_results_dir: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_simulated_data/results/plot_dotplot_simulate_1_var_covar_age/
+  default_params:
+    layer: null
+    column_key_x: Age
+    column_key_y: simulated_feature
+    hue: case_control
+    subset_key: case_control
+    axes_title: simulated_feature vs Age
+    show: false
+    save_plot: true
+    axes_lines: false
+    figsize: [12, 8]
+    dropna: true
+    show_y_intercept: false
+    palette: ['#AA4499', '#332288', '#1f77b4', '#661100', '#117733', '#ff7f0e']
+    subset_palette: ['#AA4499', '#332288', '#1f77b4', '#661100', '#117733', '#ff7f0e']
+    dot_size: 200
+    title_fontsize: 16
+    axis_label_fontsize: 12
+    legend_fontsize: 12
+    show_all_obs_fit: true
+    show_stats_text: false
+    show_x_marginal_hist: true
+    show_y_marginal_hist: true
+    x_marginal_hist_bins: 10
+    y_marginal_hist_bins: 10
+    x_marginal_hist_height_ratio: 0.3
+    y_marginal_hist_width_ratio: 0.3
+    dpi: 300
+    bbox_inches: tight
+
+  plot_dotplot_simulate_1_var_covar_age__runs:
+    baseline:
+      run: true
