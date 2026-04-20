@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """script doc string."""
-# /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_PMID_33969320/scripts/make_diff_datapoint_plots.py
+# example_PMID_33969320/scripts/make_diff_datapoint_plots.py
+# updated: 2026-03-04 
 import sys
 import os
 from pathlib import Path
@@ -11,12 +12,12 @@ from datetime import datetime
 import logging
 import yaml
 import matplotlib.pyplot as plt
+from _path_utils import EXAMPLE_ROOT, load_example_config, repo_parent_dir, write_dir
 # CFG Configuration
 ####################################
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = EXAMPLE_ROOT
 REPO_CONFIG_YAML_PATH = REPO_ROOT / "config" / "config.yaml"
-with REPO_CONFIG_YAML_PATH.open() as f:
-    CFG = yaml.safe_load(f)
+CFG = load_example_config()
 
 # out and log path 
 OUTPUT_DIR = Path(CFG["diff_datapoint_plots_params"]["repo_results_dir"])
@@ -56,8 +57,8 @@ from dataclasses import dataclass
 @dataclass
 class G():
     '''Class to hold global variables'''
-    WRITE_DIR='/home/ubuntu/write/'
-    GITBENLEWIS_REPO_PARENT_DIR='/home/ubuntu/projects/gitbenlewis/'
+    WRITE_DIR=write_dir()
+    GITBENLEWIS_REPO_PARENT_DIR=repo_parent_dir()
     SCRIPTS_DIR='../scripts/'
     CONFIG_DIR='../config/'
     RESULTS_DIR='../results/'
@@ -366,92 +367,90 @@ if __name__ == "__main__":
         adtl.barh_dotplot_dotplot_dotplot_column(
             # shared parameters
             adata=adata,
-            layer=plot_params.get('layer', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('layer',None)) or None,
+            layer=plot_params.get('layer', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('layer',None)) or None,
             feature_list=feature_list,
-            feature_label_vars_col=plot_params.get('feature_label_vars_col', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('feature_label_vars_col')) or None,
-            feature_label_char_limit=plot_params.get('feature_label_char_limit', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('feature_label_char_limit')) or None,
-            feature_label_x=plot_params.get('feature_label_x', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('feature_label_x')) or -0.02,
-            figsize=plot_params.get('figsize', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('figsize', (25, 25))) or (25, 25),
-            fig_title=plot_params.get('fig_title', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('fig_title','fig_title\n')) or None,
-            fig_title_y=plot_params.get('fig_title_y', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('fig_title_y',.96)) or .99,
-            subfig_title_y=plot_params.get('subfig_title_y', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('subfig_title_y',0.91)) or 0.94,
-            fig_title_fontsize=plot_params.get('fig_title_fontsize', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('fig_title_fontsize',30)) or 30,
-            subfig_title_fontsize=plot_params.get('subfig_title_fontsize', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('subfig_title_fontsize',24)) or 24,
-            feature_label_fontsize=plot_params.get('feature_label_fontsize', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('feature_label_fontsize',24)) or 24,
-            tick_label_fontsize=plot_params.get('tick_label_fontsize', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('tick_label_fontsize',16)) or 16,
-            legend_fontsize=plot_params.get('legend_fontsize', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('legend_fontsize',20)) or 20,
-            row_hspace=plot_params.get('row_hspace', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('row_hspace',0.4)) or None,
-            col_wspace=plot_params.get('col_wspace', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('col_wspace',-0.1)) or -0.1,
-            bar_dotplot_width_ratios=plot_params.get(
-                'bar_dotplot_width_ratios',
-                BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('bar_dotplot_width_ratios', [1.5, 1.0, 1.0, 1.0])
-            ) or [1.5, 1.0, 1.0, 1.0],
-            tight_layout_rect_arg=plot_params.get('tight_layout_rect_arg', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('tight_layout_rect_arg')) or [0, 0, 1, 1], # [left, bottom, right, top]
-            use_tight_layout=plot_params.get('use_tight_layout', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('use_tight_layout', False)) or False,
+            feature_label_vars_col=plot_params.get('feature_label_vars_col', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('feature_label_vars_col')) or None,
+            feature_label_char_limit=plot_params.get('feature_label_char_limit', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('feature_label_char_limit')) or None,
+            feature_label_x=plot_params.get('feature_label_x', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('feature_label_x')) or -0.02,
+            figsize=plot_params.get('figsize', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('figsize', (20, 25))) or (20, 25),
+            fig_title=plot_params.get('fig_title', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('fig_title','fig_title\n')) or None,
+            fig_title_y=plot_params.get('fig_title_y', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('fig_title_y',.96)) or .99,
+            subfig_title_y=plot_params.get('subfig_title_y', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('subfig_title_y',0.91)) or 0.94,
+            fig_title_fontsize=plot_params.get('fig_title_fontsize', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('fig_title_fontsize',30)) or 30,
+            subfig_title_fontsize=plot_params.get('subfig_title_fontsize', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('subfig_title_fontsize',24)) or 24,
+            feature_label_fontsize=plot_params.get('feature_label_fontsize', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('feature_label_fontsize',24)) or 24,
+            tick_label_fontsize=plot_params.get('tick_label_fontsize', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('tick_label_fontsize',16)) or 16,
+            legend_fontsize=plot_params.get('legend_fontsize', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('legend_fontsize',20)) or 20,
+            row_hspace=plot_params.get('row_hspace', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('row_hspace',0.4)) or None,
+            col_wspace=plot_params.get('col_wspace', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('col_wspace',-0.1)) or -0.1,
+            bar_dotplot_width_ratios= [1.5, 1.0, 1.0, 1.0],
+            #bar_dotplot_width_ratios=plot_params.get('bar_dotplot_width_ratios', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('bar_dotplot_width_ratios',[1.5, 1.0, 1.0])) or [1.5, 1.0, 1.0],
+            tight_layout_rect_arg=plot_params.get('tight_layout_rect_arg', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('tight_layout_rect_arg')) or [0, 0, 1, 1], # [left, bottom, right, top]
+            use_tight_layout=plot_params.get('use_tight_layout', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('use_tight_layout', False)) or False,
             savefig=G.SAVE_OUTPUT_FIGURES,
-            file_name=plot_params.get('file_name', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('file_name','barh_dotplot_dotplot_dotplot.png')) or 'barh_dotplot_dotplot_dotplot.png',
+            file_name=plot_params.get('file_name', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('file_name','barh_dotplot_dotplot.png')) or 'barh_dotplot_dotplot.png',
             # barh specific parameters
-            comparison_col=plot_params.get('comparison_col', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('comparison_col','Treatment')) or 'Treatment',
-            barh_remove_yticklabels=plot_params.get('barh_remove_yticklabels', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('barh_remove_yticklabels',True)) or True,
-            comparison_order=plot_params.get('comparison_order', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('comparison_order',None)) or None,
-            hue_palette_color_list=plot_params.get('hue_palette_color_list', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('hue_palette_color_list', None)) or None,
-            barh_figure_plot_title=plot_params.get('barh_figure_plot_title', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('barh_figure_plot_title','barh_figure_plot_title')) or 'Expression (TPM)',
-            barh_subplot_xlabel=plot_params.get('barh_subplot_xlabel', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('barh_subplot_xlabel','barh_subplot_xlabel')) or 'Expression (TPM)',
-            barh_sharex=plot_params.get('barh_sharex', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('barh_sharex',False)) or False,
-            barh_set_xaxis_lims=plot_params.get('barh_set_xaxis_lims', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('barh_set_xaxis_lims',None)) or None,
-            barh_legend=plot_params.get('barh_legend', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('barh_legend',True)) or True,
-            barh_legend_bbox_to_anchor=plot_params.get('barh_legend_bbox_to_anchor', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('barh_legend_bbox_to_anchor',(0.5, .01))) or (0.5, .01),
+            comparison_col=plot_params.get('comparison_col', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('comparison_col','Treatment')) or 'Treatment',
+            barh_remove_yticklabels=plot_params.get('barh_remove_yticklabels', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('barh_remove_yticklabels',True)) or True,
+            comparison_order=plot_params.get('comparison_order', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('comparison_order',None)) or None,
+            hue_palette_color_list=plot_params.get('hue_palette_color_list', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('hue_palette_color_list', None)) or None,
+            barh_figure_plot_title=plot_params.get('barh_figure_plot_title', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('barh_figure_plot_title','barh_figure_plot_title')) or 'Expression (TPM)',
+            barh_subplot_xlabel=plot_params.get('barh_subplot_xlabel', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('barh_subplot_xlabel','barh_subplot_xlabel')) or 'Expression (TPM)',
+            barh_sharex=plot_params.get('barh_sharex', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('barh_sharex',False)) or False,
+            barh_set_xaxis_lims=plot_params.get('barh_set_xaxis_lims', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('barh_set_xaxis_lims',None)) or None,
+            barh_legend=plot_params.get('barh_legend', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('barh_legend',True)) or True,
+            barh_legend_bbox_to_anchor=plot_params.get('barh_legend_bbox_to_anchor', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('barh_legend_bbox_to_anchor',(0.5, .01))) or (0.5, .01),
             # dotplot1 parameters (match barh_l2fc_dotplot_column)
-            dotplot_figure_plot_title=plot_params.get('dotplot_figure_plot_title', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot_figure_plot_title','log2fc')) or 'log2fc',
-            dotplot_pval_vars_col_label=plot_params.get('dotplot_pval_vars_col_label', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot_pval_vars_col_label','pvalue')) or 'pvalue',
-            dotplot_l2fc_vars_col_label=plot_params.get('dotplot_l2fc_vars_col_label', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot_l2fc_vars_col_label','log2FoldChange')) or 'log2FoldChange',
-            dotplot_subplot_xlabel=plot_params.get('dotplot_subplot_xlabel', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot_subplot_xlabel','log2fc ((target)/(ref))')) or 'log2fc ((target)/(ref))',
-            pval_label=plot_params.get('pval_label', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('pval_label','p-value')) or 'p-value',
-            pvalue_cutoff_ring=plot_params.get('pvalue_cutoff_ring', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('pvalue_cutoff_ring',0.1)) or 0.1,
-            sizes=plot_params.get('sizes', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('sizes',(20, 2000))) or (20, 2000),
-            dotplot_sharex=plot_params.get('dotplot_sharex', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot_sharex',True)) or True,
-            dotplot_set_xaxis_lims=plot_params.get('dotplot_set_xaxis_lims', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot_set_xaxis_lims',None)) or None,
-            dotplot_legend=plot_params.get('dotplot_legend', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot_legend',True)) or True,
-            dotplot_legend_bins=plot_params.get('dotplot_legend_bins', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot_legend_bins',3)) or 3,
-            dotplot_legend_bbox_to_anchor=plot_params.get('dotplot_legend_bbox_to_anchor', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot_legend_bbox_to_anchor',(0.5, .02))) or (0.5, .02),
-            dotplot_annotate=plot_params.get('dotplot_annotate', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot_annotate',True)) or True,
-            dotplot_annotate_xy=plot_params.get('dotplot_annotate_xy', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot_annotate_xy',(0.8, 1.2))) or (0.8, 1.2),
-            dotplot_annotate_labels=plot_params.get('dotplot_annotate_labels', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot_annotate_labels', ('l2fc: ', 'p:'))) or ('l2fc: ', 'p:'),
-            dotplot_annotate_fontsize=plot_params.get('dotplot_annotate_fontsize', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot_annotate_fontsize',None)) or None,
+            dotplot_figure_plot_title=plot_params.get('dotplot_figure_plot_title', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot_figure_plot_title','log2fc')) or 'log2fc',
+            dotplot_pval_vars_col_label=plot_params.get('dotplot_pval_vars_col_label', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot_pval_vars_col_label','pvalue')) or 'pvalue',
+            dotplot_l2fc_vars_col_label=plot_params.get('dotplot_l2fc_vars_col_label', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot_l2fc_vars_col_label','log2FoldChange')) or 'log2FoldChange',
+            dotplot_subplot_xlabel=plot_params.get('dotplot_subplot_xlabel', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot_subplot_xlabel','log2fc ((target)/(ref))')) or 'log2fc ((target)/(ref))',
+            pval_label=plot_params.get('pval_label', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('pval_label','p-value')) or 'p-value',
+            pvalue_cutoff_ring=plot_params.get('pvalue_cutoff_ring', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('pvalue_cutoff_ring',0.1)) or 0.1,
+            sizes=plot_params.get('sizes', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('sizes',(20, 2000))) or (20, 2000),
+            dotplot_sharex=plot_params.get('dotplot_sharex', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot_sharex',True)) or True,
+            dotplot_set_xaxis_lims=plot_params.get('dotplot_set_xaxis_lims', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot_set_xaxis_lims',None)) or None,
+            dotplot_legend=plot_params.get('dotplot_legend', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot_legend',True)) or True,
+            dotplot_legend_bins=plot_params.get('dotplot_legend_bins', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot_legend_bins',3)) or 3,
+            dotplot_legend_bbox_to_anchor=plot_params.get('dotplot_legend_bbox_to_anchor', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot_legend_bbox_to_anchor',(0.5, .02))) or (0.5, .02),
+            dotplot_annotate=plot_params.get('dotplot_annotate', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot_annotate',True)) or True,
+            dotplot_annotate_xy=plot_params.get('dotplot_annotate_xy', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot_annotate_xy',(0.8, 1.2))) or (0.8, 1.2),
+            dotplot_annotate_labels=plot_params.get('dotplot_annotate_labels', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot_annotate_labels', ('l2fc: ', 'p:'))) or ('l2fc: ', 'p:'),
+            dotplot_annotate_fontsize=plot_params.get('dotplot_annotate_fontsize', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot_annotate_fontsize',None)) or None,
             # dotplot2 parameters (alt)
-            dotplot2_figure_plot_title=plot_params.get('dotplot2_figure_plot_title', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_figure_plot_title','log2fc (2)')) or 'log2fc (2)',
-            dotplot2_pval_vars_col_label=plot_params.get('dotplot2_pval_vars_col_label', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_pval_vars_col_label','pvalue_alt')) or 'pvalue_alt',
-            dotplot2_l2fc_vars_col_label=plot_params.get('dotplot2_l2fc_vars_col_label', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_l2fc_vars_col_label','log2FoldChange_alt')) or 'log2FoldChange_alt',
-            dotplot2_subplot_xlabel=plot_params.get('dotplot2_subplot_xlabel', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_subplot_xlabel','log2fc ((target)/(ref))')) or 'log2fc ((target)/(ref))',
-            dotplot2_pval_label=plot_params.get('dotplot2_pval_label', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_pval_label','p-value')) or 'p-value',
-            dotplot2_pvalue_cutoff_ring=plot_params.get('dotplot2_pvalue_cutoff_ring', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_pvalue_cutoff_ring',0.1)) or 0.1,
-            dotplot2_sizes=plot_params.get('dotplot2_sizes', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_sizes',(20, 2000))) or (20, 2000),
-            dotplot2_sharex=plot_params.get('dotplot2_sharex', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_sharex',True)) or True,
-            dotplot2_set_xaxis_lims=plot_params.get('dotplot2_set_xaxis_lims', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_set_xaxis_lims',None)) or None,
-            dotplot2_legend=plot_params.get('dotplot2_legend', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_legend',True)) or True,
-            dotplot2_legend_bins=plot_params.get('dotplot2_legend_bins', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_legend_bins',3)) or 3,
-            dotplot2_legend_bbox_to_anchor=plot_params.get('dotplot2_legend_bbox_to_anchor', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_legend_bbox_to_anchor',(0.5, -.01))) or (0.5, -.01),
-            dotplot2_annotate=plot_params.get('dotplot2_annotate', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_annotate',True)) or True,
-            dotplot2_annotate_xy=plot_params.get('dotplot2_annotate_xy', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_annotate_xy',(0.8, 1.2))) or (0.8, 1.2),
-            dotplot2_annotate_labels=plot_params.get('dotplot2_annotate_labels', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_annotate_labels', ('l2fc: ', 'p:'))) or ('l2fc: ', 'p:'),
-            dotplot2_annotate_fontsize=plot_params.get('dotplot2_annotate_fontsize', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_annotate_fontsize',None)) or None,
+            dotplot2_figure_plot_title=plot_params.get('dotplot2_figure_plot_title', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_figure_plot_title','log2fc (2)')) or 'log2fc (2)',
+            dotplot2_pval_vars_col_label=plot_params.get('dotplot2_pval_vars_col_label', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_pval_vars_col_label','pvalue_alt')) or 'pvalue_alt',
+            dotplot2_l2fc_vars_col_label=plot_params.get('dotplot2_l2fc_vars_col_label', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_l2fc_vars_col_label','log2FoldChange_alt')) or 'log2FoldChange_alt',
+            dotplot2_subplot_xlabel=plot_params.get('dotplot2_subplot_xlabel', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_subplot_xlabel','log2fc ((target)/(ref))')) or 'log2fc ((target)/(ref))',
+            dotplot2_pval_label=plot_params.get('dotplot2_pval_label', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_pval_label','p-value')) or 'p-value',
+            dotplot2_pvalue_cutoff_ring=plot_params.get('dotplot2_pvalue_cutoff_ring', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_pvalue_cutoff_ring',0.1)) or 0.1,
+            dotplot2_sizes=plot_params.get('dotplot2_sizes', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_sizes',(20, 2000))) or (20, 2000),
+            dotplot2_sharex=plot_params.get('dotplot2_sharex', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_sharex',True)) or True,
+            dotplot2_set_xaxis_lims=plot_params.get('dotplot2_set_xaxis_lims', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_set_xaxis_lims',None)) or None,
+            dotplot2_legend=plot_params.get('dotplot2_legend', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_legend',True)) or True,
+            dotplot2_legend_bins=plot_params.get('dotplot2_legend_bins', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_legend_bins',3)) or 3,
+            dotplot2_legend_bbox_to_anchor=plot_params.get('dotplot2_legend_bbox_to_anchor', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_legend_bbox_to_anchor',(0.5, -.01))) or (0.5, -.01),
+            dotplot2_annotate=plot_params.get('dotplot2_annotate', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_annotate',True)) or True,
+            dotplot2_annotate_xy=plot_params.get('dotplot2_annotate_xy', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_annotate_xy',(0.8, 1.2))) or (0.8, 1.2),
+            dotplot2_annotate_labels=plot_params.get('dotplot2_annotate_labels', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_annotate_labels', ('l2fc: ', 'p:'))) or ('l2fc: ', 'p:'),
+            dotplot2_annotate_fontsize=plot_params.get('dotplot2_annotate_fontsize', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_annotate_fontsize',None)) or None,
             # dotplot3 parameters (alt)
-            dotplot3_figure_plot_title=plot_params.get('dotplot3_figure_plot_title', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot3_figure_plot_title','log2fc (3)')) or 'log2fc (3)',
-            dotplot3_pval_vars_col_label=plot_params.get('dotplot3_pval_vars_col_label', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot3_pval_vars_col_label','pvalue_alt2')) or 'pvalue_alt2',
-            dotplot3_l2fc_vars_col_label=plot_params.get('dotplot3_l2fc_vars_col_label', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot3_l2fc_vars_col_label','log2FoldChange_alt2')) or 'log2FoldChange_alt2',
-            dotplot3_subplot_xlabel=plot_params.get('dotplot3_subplot_xlabel', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot3_subplot_xlabel','log2fc ((target)/(ref))')) or 'log2fc ((target)/(ref))',
-            dotplot3_pval_label=plot_params.get('dotplot3_pval_label', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot3_pval_label','p-value')) or 'p-value',
-            dotplot3_pvalue_cutoff_ring=plot_params.get('dotplot3_pvalue_cutoff_ring', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot3_pvalue_cutoff_ring',0.1)) or 0.1,
-            dotplot3_sizes=plot_params.get('dotplot3_sizes', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot3_sizes',(20, 2000))) or (20, 2000),
-            dotplot3_sharex=plot_params.get('dotplot3_sharex', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot3_sharex',True)) or True,
-            dotplot3_set_xaxis_lims=plot_params.get('dotplot3_set_xaxis_lims', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot3_set_xaxis_lims',None)) or None,
-            dotplot3_legend=plot_params.get('dotplot3_legend', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot3_legend',True)) or True,
-            dotplot3_legend_bins=plot_params.get('dotplot3_legend_bins', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot3_legend_bins',3)) or 3,
-            dotplot3_legend_bbox_to_anchor=plot_params.get('dotplot3_legend_bbox_to_anchor', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot3_legend_bbox_to_anchor',(0.5, -.01))) or (0.5, -.01),
-            dotplot3_annotate=plot_params.get('dotplot3_annotate', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot3_annotate',True)) or True,
-            dotplot3_annotate_xy=plot_params.get('dotplot3_annotate_xy', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot3_annotate_xy',(0.8, 1.2))) or (0.8, 1.2),
-            dotplot3_annotate_labels=plot_params.get('dotplot3_annotate_labels', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot3_annotate_labels', ('l2fc: ', 'p:'))) or ('l2fc: ', 'p:'),
-            dotplot3_annotate_fontsize=plot_params.get('dotplot3_annotate_fontsize', BARH_DOTPLOT_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot3_annotate_fontsize',None)) or None,
+            dotplot3_figure_plot_title=plot_params.get('dotplot3_figure_plot_title', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_figure_plot_title','log2fc (2)')) or 'log2fc (2)',
+            dotplot3_pval_vars_col_label=plot_params.get('dotplot3_pval_vars_col_label', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_pval_vars_col_label','pvalue_alt')) or 'pvalue_alt',
+            dotplot3_l2fc_vars_col_label=plot_params.get('dotplot3_l2fc_vars_col_label', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_l2fc_vars_col_label','log2FoldChange_alt')) or 'log2FoldChange_alt',
+            dotplot3_subplot_xlabel=plot_params.get('dotplot3_subplot_xlabel', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_subplot_xlabel','log2fc ((target)/(ref))')) or 'log2fc ((target)/(ref))',
+            dotplot3_pval_label=plot_params.get('dotplot3_pval_label', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_pval_label','p-value')) or 'p-value',
+            dotplot3_pvalue_cutoff_ring=plot_params.get('dotplot3_pvalue_cutoff_ring', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_pvalue_cutoff_ring',0.1)) or 0.1,
+            dotplot3_sizes=plot_params.get('dotplot3_sizes', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_sizes',(20, 2000))) or (20, 2000),
+            dotplot3_sharex=plot_params.get('dotplot3_sharex', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_sharex',True)) or True,
+            dotplot3_set_xaxis_lims=plot_params.get('dotplot3_set_xaxis_lims', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_set_xaxis_lims',None)) or None,
+            dotplot3_legend=plot_params.get('dotplot3_legend', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_legend',True)) or True,
+            dotplot3_legend_bins=plot_params.get('dotplot3_legend_bins', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_legend_bins',3)) or 3,
+            dotplot3_legend_bbox_to_anchor=plot_params.get('dotplot3_legend_bbox_to_anchor', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_legend_bbox_to_anchor',(0.5, -.01))) or (0.5, -.01),
+            dotplot3_annotate=plot_params.get('dotplot3_annotate', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_annotate',True)) or True,
+            dotplot3_annotate_xy=plot_params.get('dotplot3_annotate_xy', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_annotate_xy',(0.8, 1.2))) or (0.8, 1.2),
+            dotplot3_annotate_labels=plot_params.get('dotplot3_annotate_labels', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_annotate_labels', ('l2fc: ', 'p:'))) or ('l2fc: ', 'p:'),
+            dotplot3_annotate_fontsize=plot_params.get('dotplot3_annotate_fontsize', BARH_DOTPLOT_DOTPLOT_COLUMN_CALLS_DEFAULTS.get('dotplot2_annotate_fontsize',None)) or None,
             )
         plt.close("all")
 ##################################################### barh_l2fc_dotplot_column_calls ##########################
