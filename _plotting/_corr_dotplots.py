@@ -839,6 +839,8 @@ def corr_dotplot_dev(
     subset_series = working_df[subset_key] if subset_key is not None else None
     subset_values: list[Any] = []
     subset_color_map: dict[Any, Any] = {}
+    fallback_to_all_data = False
+    fit_legend_title: str | None = None
     if subset_key is None:
         _plot_fit_line(
             axes,
@@ -862,9 +864,18 @@ def corr_dotplot_dev(
 
         subset_colors = sns.color_palette(subset_palette_to_use, n_colors=max(len(subset_values), 1))
         subset_color_map = dict(zip(subset_values, subset_colors))
+        fallback_to_all_data = not subset_values
+        fit_legend_title = f"{subset_key} fit\n{corr_label}_corr"
         stats_lines: list[str] = []
 
-        if show_all_obs_fit:
+        if fallback_to_all_data:
+            # Dev mode falls back to overall overlays when subset filtering removes every group.
+            fit_legend_title = f"All data fit\n{corr_label}_corr"
+            stats_lines.append(
+                f"No valid {subset_key} groups after filtering; showing All data fit."
+            )
+
+        if show_all_obs_fit or fallback_to_all_data:
             fit_handles.append(
                 _plot_fit_line(
                     axes,
@@ -964,7 +975,7 @@ def corr_dotplot_dev(
                 **x_hist_kwargs,
             )
         else:
-            if show_all_obs_x_hist:
+            if show_all_obs_x_hist or fallback_to_all_data:
                 sns.histplot(
                     data=working_df,
                     x=column_key_x,
@@ -1012,7 +1023,7 @@ def corr_dotplot_dev(
                 **y_hist_kwargs,
             )
         else:
-            if show_all_obs_y_hist:
+            if show_all_obs_y_hist or fallback_to_all_data:
                 sns.histplot(
                     data=working_df,
                     y=column_key_y,
@@ -1086,7 +1097,7 @@ def corr_dotplot_dev(
             fit_legend_kwargs["title_fontsize"] = legend_fontsize
         fit_legend = axes.legend(
             handles=fit_handles,
-            title=f"{subset_key} fit\n{corr_label}_corr",
+            title=fit_legend_title,
             **fit_legend_kwargs,
         )
         for legend_handle in fit_legend.legend_handles:

@@ -88,7 +88,7 @@ The current regression tests lock in several details:
 
 ## `corr_dotplot_dev`
 
-`corr_dotplot_dev(...)` is the experimental variant that adds optional top and right marginal histograms while keeping the same filtered-data correlation and fit behavior as `corr_dotplot(...)`.
+`corr_dotplot_dev(...)` is the experimental variant that adds optional top and right marginal histograms while mostly keeping the same filtered-data correlation and fit behavior as `corr_dotplot(...)`.
 
 ```python
 fig, axes, fit, corr_value, corr_pvalue = adtl.corr_dotplot_dev(
@@ -114,6 +114,8 @@ Important behavior:
 - `axes_dict` always contains `"main"`, `"x_marginal"`, and `"y_marginal"` keys, with disabled marginal panels set to `None`.
 - Marginals use the same filtered `working_df` as the scatter, correlation, and fit layers.
 - When `subset_key` is provided, marginal histograms follow `subset_key` rather than `hue`, so their subgroup colors follow `subset_palette`.
+- When `subset_key` is provided but no valid subgroup values remain after filtering, `corr_dotplot_dev(...)` falls back to the overall fit, footer stats, and all-observation marginals even if `show_all_obs_fit`, `show_all_obs_x_hist`, or `show_all_obs_y_hist` were `False`.
+- `corr_dotplot(...)` keeps its current behavior in that edge case and does not apply this dev-only fallback.
 - Marginals default to `fill=True` and `KDE=True` and can be turned off independently for the x and y panels.
 - When `show_x_marginal_hist=True`, `axes_title` is attached to `axes["x_marginal"]` so the title sits above the full composite plot; otherwise it remains on `axes["main"]`.
 - `corr_dotplot_dev(method="spearman", ...)` is the supported Spearman path for the dev API; there is no separate `spearman_cor_dotplot_dev(...)` wrapper in this change.

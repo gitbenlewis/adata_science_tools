@@ -502,6 +502,89 @@ class CorrDotplotRegressionTests(unittest.TestCase):
             if fig is not None:
                 plt.close(fig)
 
+    def test_corr_dotplot_dev_falls_back_to_all_data_when_subset_values_missing(self):
+        df = pd.DataFrame(
+            {
+                "x": [1.0, 2.0, 3.0, 4.0],
+                "y": [2.0, 3.0, 4.0, 5.0],
+                "treatment": pd.Categorical([np.nan, np.nan, np.nan, np.nan], categories=["veh", "drug"]),
+            }
+        )
+
+        fig = None
+        fig_no_text = None
+        try:
+            fig, axes, _, corr_value, _ = adtl.corr_dotplot_dev(
+                df=df,
+                column_key_x="x",
+                column_key_y="y",
+                subset_key="treatment",
+                show_all_obs_fit=False,
+                show_x_marginal_hist=True,
+                show_y_marginal_hist=True,
+                show_all_obs_x_hist=False,
+                show_all_obs_y_hist=False,
+                show_fit_legend=True,
+                show_stats_text=True,
+                axes_lines=False,
+                show_y_intercept=False,
+                show=False,
+            )
+            fig.canvas.draw()
+
+            self.assertAlmostEqual(corr_value, 1.0)
+            self.assertEqual(len(axes["main"].lines), 1)
+            fit_legend = axes["main"].get_legend()
+            self.assertIsNotNone(fit_legend)
+            self.assertEqual(fit_legend.get_title().get_text(), "All data fit\nPearson_corr")
+            fit_legend_labels = [text.get_text() for text in fit_legend.get_texts()]
+            self.assertEqual(len(fit_legend_labels), 1)
+            self.assertRegex(
+                fit_legend_labels[0],
+                r"^All data\nCorr=-?\d+\.\d{3},p=\d+\.\d{2}e[+-]\d{2}$",
+            )
+            self.assertEqual(len(fig.texts), 1)
+            self.assertIn(
+                "No valid treatment groups after filtering; showing All data fit.",
+                fig.texts[0].get_text(),
+            )
+            self.assertIn("All data: Pearson Corr =", fig.texts[0].get_text())
+            self.assertEqual(len(axes["x_marginal"].lines), 1)
+            self.assertEqual(len(axes["x_marginal"].collections), 1)
+            self.assertEqual(len(axes["y_marginal"].lines), 1)
+            self.assertEqual(len(axes["y_marginal"].collections), 1)
+
+            fig_no_text, axes_no_text, _, _, _ = adtl.corr_dotplot_dev(
+                df=df,
+                column_key_x="x",
+                column_key_y="y",
+                subset_key="treatment",
+                show_all_obs_fit=False,
+                show_x_marginal_hist=True,
+                show_y_marginal_hist=True,
+                show_all_obs_x_hist=False,
+                show_all_obs_y_hist=False,
+                show_fit_legend=False,
+                show_stats_text=False,
+                axes_lines=False,
+                show_y_intercept=False,
+                show=False,
+            )
+            fig_no_text.canvas.draw()
+
+            self.assertEqual(len(axes_no_text["main"].lines), 1)
+            self.assertIsNone(axes_no_text["main"].get_legend())
+            self.assertEqual(len(fig_no_text.texts), 0)
+            self.assertEqual(len(axes_no_text["x_marginal"].lines), 1)
+            self.assertEqual(len(axes_no_text["x_marginal"].collections), 1)
+            self.assertEqual(len(axes_no_text["y_marginal"].lines), 1)
+            self.assertEqual(len(axes_no_text["y_marginal"].collections), 1)
+        finally:
+            if fig is not None:
+                plt.close(fig)
+            if fig_no_text is not None:
+                plt.close(fig_no_text)
+
     def test_corr_dotplot_dev_moves_title_to_x_marginal_when_enabled(self):
         df = pd.DataFrame({"x": [1.0, 2.0, 3.0], "y": [3.0, 2.0, 1.0]})
 
