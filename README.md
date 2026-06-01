@@ -1,4 +1,11 @@
 # adata_science_tools
+
+## Documentation
+
+- Published docs: [gitbenlewis.github.io/adata_science_tools](https://gitbenlewis.github.io/adata_science_tools/)
+- Source docs: [docs/README.md](docs/README.md)
+- Start with [simulation helpers](docs/_simulate_data.md) and [correlation dotplots](docs/_corr_dotplots.md).
+
 data science tools that operate on anndata objects
 
 ### Set up
@@ -20,12 +27,6 @@ bash example_PMID_33969320/scripts/000_run_everything.bash
 python example_simulated_data/scripts/simulate_1_var_covar_age.py
 python example_simulated_data/scripts/plot_dotplot_simulate_1_var_covar_age.py
 ```
-
-## Docs
-
-- [Docs index](docs/README.md)
-- [Simulation helpers](docs/_simulate_data.md)
-- [Correlation dotplots](docs/_corr_dotplots.md)
 
 ## Simulated data example
 
