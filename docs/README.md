@@ -13,6 +13,7 @@ This directory holds module-level documentation for public `adata_science_tools`
 - [`_model_fit.md`](_model_fit.md): OLS and MixedLM model-fitting APIs, summary-table schemas, filtering support, and model-spec sidecar behavior.
 - [`_plots.md`](_plots.md): volcano plots, QQ plots for p-values, and paired time-series datapoint plots.
 - [`_plots_depreciated.md`](_plots_depreciated.md): legacy plotting APIs kept for backward compatibility, with preferred modern replacements.
+- [`_preprocessing.md`](_preprocessing.md): row-wise AnnData preprocessing helpers, including paired target-vs-reference transforms.
 - [`_row_plots.md`](_row_plots.md): grouped bar-plus-swarm row layouts from plain `DataFrame` input.
 - [`_simulate_data.md`](_simulate_data.md): covariate-driven dataset simulation helpers plus the config-driven example workflow used in `example_simulated_data/`.
 - [`_somascan_IO.md`](_somascan_IO.md): SomaScan `.adat` ingestion, sample-type cleanup, index normalization, and SomaScan-specific DataFrame export helpers.
