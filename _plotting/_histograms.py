@@ -43,7 +43,7 @@ def adata_histograms(
     filter_obs_by_isin_lists: Mapping[str, Sequence[Any]] | None = None,
     subset_obs_key: str | None = None,
     subset_order: Sequence[Any] | None = None,
-    subset_palette: Sequence[Any] | str | None = palettes.godsnot_102,
+    subset_palette: Sequence[Any] | str | None = palettes.tol_colors,
     show_all_obs_hist: bool = False,
     all_obs_color: Any = "0.7",
     all_obs_alpha: float = 0.20,
@@ -52,11 +52,11 @@ def adata_histograms(
     bins: int | str | Sequence[float] = "auto",
     binwidth: float | None = None,
     binrange: tuple[float, float] | None = None,
-    stat: Literal["count", "frequency", "probability", "percent", "density"] = "count",
+    stat: Literal["count", "frequency", "probability", "percent", "density"] = "density",
     multiple: Literal["layer", "dodge", "stack", "fill"] | None = None,
     element: Literal["bars", "step", "poly"] | None = None,
-    fill: bool | None = None,
-    kde: bool = False,
+    fill: bool | None = True,
+    kde: bool = True,
     common_bins: bool = True,
     common_norm: bool = False,
     discrete: bool | None = None,
@@ -185,7 +185,7 @@ def adata_histograms(
     grouped = subset_obs_key is not None
     multiple_to_use = multiple if multiple is not None else ("layer" if grouped else None)
     element_to_use = element if element is not None else ("step" if grouped else None)
-    fill_to_use = fill if fill is not None else (False if grouped else None)
+    fill_to_use = fill if fill is not None else True
     alpha_to_use = alpha if alpha is not None else (0.45 if grouped else None)
     if multiple_to_use is not None:
         hist_kwargs["multiple"] = multiple_to_use
@@ -200,6 +200,38 @@ def adata_histograms(
 
     if title is not None:
         fig.suptitle(title, fontsize=title_fontsize)
+
+    subset_hue_order: list[Any] = []
+    subset_palette_map: dict[Any, Any] | str | None = None
+    if grouped:
+        subset_values = filtered_obs_df[subset_obs_key].dropna()
+        if subset_order is not None:
+            observed_subset_values = set(subset_values)
+            subset_hue_order = [
+                value
+                for value in subset_order
+                if value in observed_subset_values
+            ]
+        elif isinstance(filtered_obs_df[subset_obs_key].dtype, pd.CategoricalDtype):
+            subset_hue_order = list(
+                filtered_obs_df[subset_obs_key]
+                .cat.remove_unused_categories()
+                .cat.categories
+            )
+        else:
+            subset_hue_order = list(pd.unique(subset_values))
+
+        if subset_palette is None:
+            subset_palette_map = None
+        elif isinstance(subset_palette, str):
+            subset_colors = sns.color_palette(subset_palette, n_colors=max(len(subset_hue_order), 1))
+            subset_palette_map = dict(zip(subset_hue_order, subset_colors))
+        else:
+            subset_colors = list(subset_palette)
+            subset_palette_map = {
+                subset_value: subset_colors[idx % len(subset_colors)]
+                for idx, subset_value in enumerate(subset_hue_order)
+            }
 
     for plot_idx, var_name in enumerate(selected_var_names):
         axes = axes_flat[plot_idx]
@@ -243,21 +275,6 @@ def adata_histograms(
 
         if grouped:
             grouped_plot_df = plot_df.dropna(subset=[subset_obs_key])
-            if subset_order is not None:
-                subset_hue_order = [
-                    value
-                    for value in subset_order
-                    if value in set(grouped_plot_df[subset_obs_key])
-                ]
-            elif isinstance(filtered_obs_df[subset_obs_key].dtype, pd.CategoricalDtype):
-                subset_hue_order = list(
-                    grouped_plot_df[subset_obs_key]
-                    .cat.remove_unused_categories()
-                    .cat.categories
-                )
-            else:
-                subset_hue_order = list(pd.unique(grouped_plot_df[subset_obs_key].dropna()))
-
             if grouped_plot_df.empty or not subset_hue_order:
                 axes.text(
                     0.5,
@@ -268,15 +285,12 @@ def adata_histograms(
                     transform=axes.transAxes,
                 )
             else:
-                subset_palette_to_use = subset_palette
-                if subset_palette is not None and not isinstance(subset_palette, str):
-                    subset_palette_to_use = list(subset_palette)[:len(subset_hue_order)]
                 sns.histplot(
                     data=grouped_plot_df,
                     x="value",
                     hue=subset_obs_key,
                     hue_order=subset_hue_order,
-                    palette=subset_palette_to_use,
+                    palette=subset_palette_map,
                     ax=axes,
                     legend=legend,
                     **plot_hist_kwargs,

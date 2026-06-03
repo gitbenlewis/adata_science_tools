@@ -7,6 +7,7 @@ import matplotlib
 import numpy as np
 import pandas as pd
 import scipy.sparse as sp
+from matplotlib.colors import to_hex
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -50,6 +51,19 @@ class AdataHistogramsTests(unittest.TestCase):
     def test_exported_from_package_root(self):
         self.assertTrue(hasattr(adtl, "adata_histograms"))
         self.assertTrue(hasattr(adtl.pl, "adata_histograms"))
+
+    def test_default_histogram_style_is_density_filled_kde_with_tol_palette(self):
+        import inspect
+
+        signature = inspect.signature(adtl.adata_histograms)
+
+        self.assertEqual(signature.parameters["stat"].default, "density")
+        self.assertIs(signature.parameters["kde"].default, True)
+        self.assertIs(signature.parameters["fill"].default, True)
+        self.assertEqual(
+            signature.parameters["subset_palette"].default,
+            adtl.palettes.tol_colors,
+        )
 
     def test_adata_filters_obs_and_vars(self):
         fig = None
@@ -145,6 +159,7 @@ class AdataHistogramsTests(unittest.TestCase):
                 var_names=["geneA"],
                 bins=[100.0, 102.0, 104.0, 106.0],
                 kde=False,
+                stat="count",
                 show=False,
             )
             layer_heights = [patch.get_height() for patch in layer_axes["geneA"].patches]
@@ -163,6 +178,93 @@ class AdataHistogramsTests(unittest.TestCase):
                 plt.close(fig_layer)
             if fig_sparse is not None:
                 plt.close(fig_sparse)
+
+    def test_subset_palette_is_stable_across_panels_with_different_groups(self):
+        obs = pd.DataFrame(
+            {"Treatment": ["A", "B", "C", "A", "B", "C"]},
+            index=[f"s{i}" for i in range(6)],
+        )
+        var = pd.DataFrame(index=["geneA", "geneB"])
+        x_matrix = np.array(
+            [
+                [1.0, np.nan],
+                [2.0, 10.0],
+                [np.nan, 11.0],
+                [3.0, np.nan],
+                [4.0, 12.0],
+                [np.nan, 13.0],
+            ]
+        )
+        adata = ad.AnnData(X=x_matrix, obs=obs, var=var)
+
+        fig = None
+        try:
+            fig, axes = adtl.adata_histograms(
+                adata=adata,
+                var_names=["geneA", "geneB"],
+                subset_obs_key="Treatment",
+                bins=2,
+                kde=False,
+                show=False,
+            )
+            fig.canvas.draw()
+
+            for axes_obj in (axes["geneA"], axes["geneB"]):
+                legend = axes_obj.get_legend()
+                self.assertIsNotNone(legend)
+                labels = [text.get_text() for text in legend.get_texts()]
+                colors = []
+                for handle in legend.legend_handles:
+                    if hasattr(handle, "get_facecolor"):
+                        colors.append(to_hex(handle.get_facecolor()))
+                    else:
+                        colors.append(to_hex(handle.get_color()))
+                color_map = dict(zip(labels, colors))
+                self.assertEqual(color_map["A"], to_hex(adtl.palettes.tol_colors[0]))
+                self.assertEqual(color_map["B"], to_hex(adtl.palettes.tol_colors[1]))
+                self.assertEqual(color_map["C"], to_hex(adtl.palettes.tol_colors[2]))
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_show_all_obs_hist_adds_non_subset_overlay(self):
+        adata = self.make_adata()
+
+        fig_overlay = None
+        fig_grouped = None
+        try:
+            fig_overlay, axes_overlay = adtl.adata_histograms(
+                adata=adata,
+                var_names=["geneA"],
+                subset_obs_key="condition",
+                show_all_obs_hist=True,
+                bins=2,
+                kde=False,
+                stat="count",
+                element="bars",
+                show=False,
+            )
+            fig_grouped, axes_grouped = adtl.adata_histograms(
+                adata=adata,
+                var_names=["geneA"],
+                subset_obs_key="condition",
+                show_all_obs_hist=False,
+                bins=2,
+                kde=False,
+                stat="count",
+                element="bars",
+                show=False,
+            )
+
+            self.assertGreater(
+                len(axes_overlay["geneA"].patches),
+                len(axes_grouped["geneA"].patches),
+            )
+        finally:
+            if fig_overlay is not None:
+                plt.close(fig_overlay)
+            if fig_grouped is not None:
+                plt.close(fig_grouped)
 
     def test_missing_filter_columns_raise_clear_errors(self):
         with self.assertRaisesRegex(ValueError, "filter_obs_by_isin_lists"):
