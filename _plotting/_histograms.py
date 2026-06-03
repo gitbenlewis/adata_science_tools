@@ -46,7 +46,8 @@ def adata_histograms(
     filter_obs_by_isin_lists: Mapping[str, Sequence[Any]] | None = None,
     subset_obs_key: str | None = None,
     subset_order: Sequence[Any] | None = None,
-    subset_palette: Sequence[Any] | str | None = palettes.tol_colors,
+    palette: Sequence[Any] | str | None = palettes.tol_colors,
+    subset_palette: Sequence[Any] | str | None = None,
     show_all_obs_hist: bool = False,
     all_obs_color: Any = "0.7",
     all_obs_alpha: float = 0.20,
@@ -265,6 +266,7 @@ def adata_histograms(
     subset_hue_order: list[Any] = []
     subset_palette_map: dict[Any, Any] | str | None = None
     if has_obs_groups:
+        subset_palette_to_use = subset_palette or palette
         subset_values = filtered_obs_df[subset_obs_key].dropna()
         if subset_order is not None:
             observed_subset_values = set(subset_values)
@@ -282,13 +284,13 @@ def adata_histograms(
         else:
             subset_hue_order = list(pd.unique(subset_values))
 
-        if subset_palette is None:
+        if subset_palette_to_use is None:
             subset_palette_map = None
-        elif isinstance(subset_palette, str):
-            subset_colors = sns.color_palette(subset_palette, n_colors=max(len(subset_hue_order), 1))
+        elif isinstance(subset_palette_to_use, str):
+            subset_colors = sns.color_palette(subset_palette_to_use, n_colors=max(len(subset_hue_order), 1))
             subset_palette_map = dict(zip(subset_hue_order, subset_colors))
         else:
-            subset_colors = list(subset_palette)
+            subset_colors = list(subset_palette_to_use)
             subset_palette_map = {
                 subset_value: subset_colors[idx % len(subset_colors)]
                 for idx, subset_value in enumerate(subset_hue_order)
