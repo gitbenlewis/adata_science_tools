@@ -28,7 +28,8 @@ def adata_histograms(
     var_names: Sequence[str] | None = None,
     var_groupby_key: str | None = None,
     collapse_mode: Literal["stack", "aggregate", "all"] = "aggregate",
-    collapse_func: Literal["mean", "median", "sum", "min", "max", "count"] = "mean",
+    collapse_func: Literal["mean", "median", "sum", "min", "max", "count", "select_max_ref_value"] = "mean",
+    ref_values_obsm_key: str = "ref_values",
     layer: str | None = None,
     use_raw: bool = False,
     filter_vars_by_isin_lists: Mapping[str, Sequence[Any]] | None = None,
@@ -137,7 +138,13 @@ adtl.adata_histograms(
 
 6. Missing values are handled after stacking or aggregation. `sum` preserves all-missing observations as missing, while `count` returns `0` for observations with no non-missing variants.
 
-7. DataFrame input with `var_groupby_key` requires `var_df` because group metadata must come from variable metadata.
+7. `collapse_func="select_max_ref_value"` selects one variant per observation and group using the largest non-missing reference value from `adata.obsm[ref_values_obsm_key]`, then plots that selected variant's value from `.X`, `layer`, or `.raw.X`.
+
+8. Reference values may be a DataFrame with observation index and variant columns, or an array-like value with rows aligned to `adata.obs_names` and columns aligned to the active plotting variable axis.
+
+9. Tied maximum reference values are resolved by the first variant in filtered variable order and logged as warnings. Observations with all reference values missing produce missing collapsed values before `nas2zeros`, `dropna`, and `dropzeros` are applied.
+
+10. DataFrame input with `var_groupby_key` requires `var_df` because group metadata must come from variable metadata. `select_max_ref_value` is only supported for AnnData input.
 
 ```python
 adtl.adata_histograms(
@@ -145,6 +152,27 @@ adtl.adata_histograms(
     var_groupby_key="Gene",
     var_names=["GENE_A"],
     collapse_mode="stack",
+    subset_obs_key="Treatment",
+    sharex=True,
+    xlims=[-2, 2],
+)
+```
+
+```python
+post_minus_pre = adtl.ref_vs_target_adata(
+    adata,
+    pair_by_key="SubjectID",
+    opperation_flavor="relative_change_l2fc",
+    save_source_values_obsm=True,
+)
+
+adtl.adata_histograms(
+    adata=post_minus_pre,
+    var_groupby_key="Gene",
+    var_names=["GENE_A"],
+    collapse_mode="aggregate",
+    collapse_func="select_max_ref_value",
+    ref_values_obsm_key="ref_values",
     subset_obs_key="Treatment",
     sharex=True,
     xlims=[-2, 2],

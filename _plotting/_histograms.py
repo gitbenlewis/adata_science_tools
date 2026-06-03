@@ -1,8 +1,9 @@
 """Histogram plotting helpers for AnnData-like matrices."""
 
+import logging
+import math
 from collections.abc import Mapping, Sequence
 from typing import Any, Literal
-import math
 
 import anndata
 import matplotlib.pyplot as plt
@@ -11,6 +12,9 @@ import pandas as pd
 import seaborn as sns
 
 from . import palettes
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 def _apply_isin_filters(
@@ -39,7 +43,16 @@ def adata_histograms(
     var_names: Sequence[str] | None = None,
     var_groupby_key: str | None = None,
     collapse_mode: Literal["stack", "aggregate", "all"] = "aggregate",
-    collapse_func: Literal["mean", "median", "sum", "min", "max", "count"] = "mean",
+    collapse_func: Literal[
+        "mean",
+        "median",
+        "sum",
+        "min",
+        "max",
+        "count",
+        "select_max_ref_value",
+    ] = "mean",
+    ref_values_obsm_key: str = "ref_values",
     layer: str | None = None,
     use_raw: bool = False,
     filter_vars_by_isin_lists: Mapping[str, Sequence[Any]] | None = None,
@@ -101,10 +114,18 @@ def adata_histograms(
         raise ValueError("'collapse_mode' must be one of 'stack', 'aggregate', or 'all'.")
     if collapse_mode == "all" and var_groupby_key is not None:
         raise ValueError("'collapse_mode=\"all\"' is only supported when 'var_groupby_key' is None.")
-    if collapse_func not in {"mean", "median", "sum", "min", "max", "count"}:
+    if collapse_func not in {"mean", "median", "sum", "min", "max", "count", "select_max_ref_value"}:
         raise ValueError(
-            "'collapse_func' must be one of 'mean', 'median', 'sum', 'min', 'max', or 'count'."
+            "'collapse_func' must be one of 'mean', 'median', 'sum', 'min', 'max', 'count', "
+            "or 'select_max_ref_value'."
         )
+    if collapse_func == "select_max_ref_value":
+        if adata is None:
+            raise ValueError("'collapse_func=\"select_max_ref_value\"' requires AnnData input.")
+        if var_groupby_key is None:
+            raise ValueError("'collapse_func=\"select_max_ref_value\"' requires 'var_groupby_key'.")
+        if collapse_mode != "aggregate":
+            raise ValueError("'collapse_func=\"select_max_ref_value\"' requires collapse_mode=\"aggregate\".")
     if ncols < 1:
         raise ValueError("'ncols' must be at least 1.")
     if xlims is not None:
@@ -237,6 +258,48 @@ def adata_histograms(
     else:
         obs_positions = np.flatnonzero(obs_mask.to_numpy()) if adata is not None else None
         selected_matrix = None
+
+    ref_values_source = None
+    ref_values_is_dataframe = False
+    if collapse_func == "select_max_ref_value":
+        if ref_values_obsm_key not in adata.obsm:
+            raise ValueError(f"Reference values obsm '{ref_values_obsm_key}' not found in adata.obsm.")
+        ref_values = adata.obsm[ref_values_obsm_key]
+        selected_group_variant_names = [
+            variant_name
+            for group_name in selected_var_names
+            for variant_name in group_to_variant_names[group_name]
+        ]
+        if isinstance(ref_values, pd.DataFrame):
+            missing_ref_obs = [
+                obs_name
+                for obs_name in filtered_obs_df.index
+                if obs_name not in ref_values.index
+            ]
+            if missing_ref_obs:
+                raise ValueError(
+                    f"Reference values obsm '{ref_values_obsm_key}' is missing observation(s): {missing_ref_obs}."
+                )
+            missing_ref_vars = [
+                variant_name
+                for variant_name in selected_group_variant_names
+                if variant_name not in ref_values.columns
+            ]
+            if missing_ref_vars:
+                raise ValueError(
+                    f"Reference values obsm '{ref_values_obsm_key}' is missing variable(s): {missing_ref_vars}."
+                )
+            ref_values_source = ref_values
+            ref_values_is_dataframe = True
+        else:
+            ref_values_source = ref_values if hasattr(ref_values, "shape") else np.asarray(ref_values)
+            ref_values_shape = ref_values_source.shape
+            expected_shape = (adata.n_obs, len(matrix_var_names))
+            if len(ref_values_shape) != 2 or ref_values_shape != expected_shape:
+                raise ValueError(
+                    f"Reference values obsm '{ref_values_obsm_key}' must have shape "
+                    f"{expected_shape} when it is not a DataFrame."
+                )
 
     hist_kwargs: dict[str, Any] = {
         "bins": bins,
@@ -371,8 +434,53 @@ def adata_histograms(
                     values = group_values_df.min(axis=1, skipna=True)
                 elif collapse_func == "max":
                     values = group_values_df.max(axis=1, skipna=True)
-                else:
+                elif collapse_func == "count":
                     values = group_values_df.count(axis=1)
+                else:
+                    if ref_values_is_dataframe:
+                        ref_group_values = ref_values_source.loc[filtered_obs_df.index, group_variant_names]
+                    else:
+                        ref_var_positions = matrix_var_names.get_indexer(group_variant_names)
+                        ref_group_values = ref_values_source[obs_positions, :][:, ref_var_positions]
+                        ref_group_values = (
+                            ref_group_values.toarray()
+                            if hasattr(ref_group_values, "toarray")
+                            else np.asarray(ref_group_values)
+                        )
+                    ref_group_values_df = pd.DataFrame(
+                        ref_group_values,
+                        index=filtered_obs_df.index,
+                        columns=group_variant_names,
+                    ).apply(pd.to_numeric, errors="coerce")
+                    ref_values_matrix = ref_group_values_df.to_numpy(dtype=float, copy=True)
+                    group_values_matrix = group_values_df.to_numpy(dtype=float, copy=False)
+                    valid_ref_values = ~np.isnan(ref_values_matrix)
+                    has_ref_value = valid_ref_values.any(axis=1)
+                    ref_selection_matrix = np.where(valid_ref_values, ref_values_matrix, -np.inf)
+                    selected_variant_positions = np.argmax(ref_selection_matrix, axis=1)
+                    max_ref_values = ref_selection_matrix[
+                        np.arange(ref_selection_matrix.shape[0]),
+                        selected_variant_positions,
+                    ]
+                    tie_counts = (
+                        (ref_selection_matrix == max_ref_values[:, None])
+                        & valid_ref_values
+                    ).sum(axis=1)
+                    tied_obs_count = int(((tie_counts > 1) & has_ref_value).sum())
+                    if tied_obs_count:
+                        LOGGER.warning(
+                            "select_max_ref_value found tied maximum ref values for %d observation(s) "
+                            "in panel '%s'; using the first variant in filtered variable order.",
+                            tied_obs_count,
+                            var_name,
+                        )
+                    values_array = np.full(len(filtered_obs_df), np.nan, dtype=float)
+                    selected_rows = np.flatnonzero(has_ref_value)
+                    values_array[selected_rows] = group_values_matrix[
+                        selected_rows,
+                        selected_variant_positions[selected_rows],
+                    ]
+                    values = pd.Series(values_array, index=filtered_obs_df.index)
                 plot_df = pd.DataFrame({"value": values}, index=filtered_obs_df.index)
                 if has_obs_groups:
                     plot_df[subset_obs_key] = filtered_obs_df[subset_obs_key]
