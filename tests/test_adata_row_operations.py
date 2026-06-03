@@ -1,5 +1,6 @@
 import sys
 import unittest
+import warnings
 from pathlib import Path
 
 import anndata as ad
@@ -93,6 +94,30 @@ class RefVsTargetAdataTests(unittest.TestCase):
         keep_target = ref_vs_target_adata(self.make_adata(), pair_by_key="pair_id", obs_dfs="keep_target")
         self.assertEqual(keep_target.obs.loc["A", "Pre_or_Post_obs_col"], "Post")
         self.assertEqual(keep_target.obs.loc["A", "target_obs_name"], "post_A")
+
+    def test_wide_obs_merge_does_not_emit_fragmentation_warning(self):
+        adata = self.make_adata()
+        wide_obs = pd.DataFrame(
+            {
+                f"wide_col_{idx}": [f"{obs_name}_{idx}" for obs_name in adata.obs_names]
+                for idx in range(150)
+            },
+            index=adata.obs_names,
+        )
+        adata.obs = pd.concat([adata.obs, wide_obs], axis=1)
+
+        with warnings.catch_warnings(record=True) as caught_warnings:
+            warnings.simplefilter("always", pd.errors.PerformanceWarning)
+            result = ref_vs_target_adata(adata, pair_by_key="pair_id")
+
+        performance_warnings = [
+            warning
+            for warning in caught_warnings
+            if issubclass(warning.category, pd.errors.PerformanceWarning)
+        ]
+        self.assertEqual(performance_warnings, [])
+        self.assertIn("wide_col_149.src_pre", result.obs.columns)
+        self.assertIn("wide_col_149.src_post", result.obs.columns)
 
     def test_var_metadata_modes(self):
         keep_var = ref_vs_target_adata(self.make_adata(), pair_by_key="pair_id")
