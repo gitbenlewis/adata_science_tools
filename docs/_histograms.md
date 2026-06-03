@@ -9,6 +9,8 @@ Histogram plotting helpers from `_plotting/_histograms.py`.
 ## `adata_histograms`
 
 `adata_histograms(...)` draws one histogram per selected variable from either an `AnnData` object or a wide `pandas.DataFrame`.
+It can also draw one histogram per variable metadata group, such as one panel
+per gene when multiple variant columns map to the same gene.
 By default, histograms are filled density plots with KDE overlays. Subgroup
 histograms use `palettes.tol_colors` and keep the same subgroup-to-color mapping
 across every panel.
@@ -37,6 +39,47 @@ fig, axes = adtl.adata_histograms(
 2. `df=...` expects rows to be observations and selected feature columns to contain the values to plot. Provide `var_names` or `var_df.index` so metadata columns are not guessed as features.
 
 3. `var_df=...` is feature metadata for DataFrame input. It is used for `filter_vars_by_isin_lists` and optional subplot labels, not as the numeric values being plotted.
+
+## Variable-grouped histograms
+
+1. `var_groupby_key="column"` groups raw variable columns by a variable metadata column after `filter_vars_by_isin_lists` is applied.
+
+2. In grouped mode, `var_names=[...]` selects group names, not raw variable names, and returned axes are keyed by group name strings.
+
+3. `collapse_mode="stack"` pools all non-missing observation-by-variant values in each group into one variant-level distribution. Observations with more measured variants contribute more values.
+
+4. `collapse_mode="aggregate"` applies `collapse_func` across variants within each observation, producing one observation-level value per group before plotting.
+
+5. Grouped mode defaults to `collapse_mode="aggregate"` with `collapse_func="mean"` so each observation contributes at most one value per group.
+
+6. Missing values are handled after stacking or aggregation. `sum` preserves all-missing observations as missing, while `count` returns `0` for observations with no non-missing variants.
+
+7. DataFrame input with `var_groupby_key` requires `var_df` because group metadata must come from variable metadata.
+
+```python
+adtl.adata_histograms(
+    adata=adata,
+    var_groupby_key="Gene",
+    var_names=["GENE_A"],
+    collapse_mode="stack",
+    subset_obs_key="Treatment",
+    sharex=True,
+    xlims=[-2, 2],
+)
+```
+
+```python
+adtl.adata_histograms(
+    adata=adata,
+    var_groupby_key="Gene",
+    var_names=["GENE_A"],
+    collapse_mode="aggregate",
+    collapse_func="mean",
+    subset_obs_key="Treatment",
+    sharex=True,
+    xlims=[-2, 2],
+)
+```
 
 ## Filtering and Subsets
 
