@@ -301,19 +301,20 @@ def ref_vs_target_adata(
     ref_aligned_obs.index = matched_index
 
     if obs_dfs == "merge":
-        result_obs = pd.DataFrame(index=matched_index)
+        result_obs_data = {}
         for column in ref_aligned_obs.columns:
             ref_values = ref_aligned_obs[column]
             target_values = target_aligned_obs[column]
             if merge_shared_obs_cols and ref_values.equals(target_values):
-                result_obs[column] = ref_values.to_numpy()
+                result_obs_data[column] = ref_values.to_numpy()
             else:
-                result_obs[f"{column}{ref_obs_suffix}"] = ref_values.to_numpy()
-                result_obs[f"{column}{target_obs_suffix}"] = target_values.to_numpy()
-        if pair_by_key not in result_obs.columns:
-            result_obs.insert(0, pair_by_key, matched_pair_ids)
+                result_obs_data[f"{column}{ref_obs_suffix}"] = ref_values.to_numpy()
+                result_obs_data[f"{column}{target_obs_suffix}"] = target_values.to_numpy()
+        if pair_by_key not in result_obs_data:
+            result_obs_data = {pair_by_key: matched_pair_ids, **result_obs_data}
         else:
-            result_obs[pair_by_key] = matched_pair_ids
+            result_obs_data[pair_by_key] = matched_pair_ids
+        result_obs = pd.DataFrame(result_obs_data, index=matched_index)
     elif obs_dfs == "keep_ref":
         result_obs = ref_aligned_obs.copy()
         result_obs[pair_by_key] = matched_pair_ids
