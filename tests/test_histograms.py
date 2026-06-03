@@ -833,6 +833,127 @@ class AdataHistogramsTests(unittest.TestCase):
             if fig is not None:
                 plt.close(fig)
 
+    def test_var_groupby_select_max_ref_value_plots_values_from_selected_ref_variant(self):
+        adata = self.make_grouped_adata()
+        adata.obsm["ref_values"] = pd.DataFrame(
+            [
+                [50.0, 20.0, 0.0, 0.0],
+                [1.0, 99.0, 0.0, 0.0],
+                [10.0, 11.0, 0.0, 0.0],
+                [np.nan, np.nan, 0.0, 0.0],
+            ],
+            index=adata.obs_names,
+            columns=adata.var_names,
+        )
+        captured_calls = []
+
+        def fake_histplot(*args, **kwargs):
+            captured_calls.append(kwargs)
+            return kwargs.get("ax")
+
+        fig = None
+        try:
+            with patch.object(histograms_module.sns, "histplot", side_effect=fake_histplot):
+                fig, axes = adtl.adata_histograms(
+                    adata=adata,
+                    var_groupby_key="Gene",
+                    var_names=["GENE_A"],
+                    collapse_mode="aggregate",
+                    collapse_func="select_max_ref_value",
+                    kde=False,
+                    show=False,
+                )
+
+            self.assertEqual(list(axes), ["GENE_A"])
+            plot_df = captured_calls[0]["data"]
+            self.assertEqual(plot_df.index.tolist(), ["s1", "s2", "s3"])
+            self.assertEqual(plot_df["value"].tolist(), [1.0, 4.0, 6.0])
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_var_groupby_select_max_ref_value_accepts_array_like_ref_values(self):
+        adata = self.make_grouped_adata()
+        adata.obsm["ref_values"] = np.array(
+            [
+                [50.0, 20.0, 0.0, 0.0],
+                [1.0, 99.0, 0.0, 0.0],
+                [10.0, 11.0, 0.0, 0.0],
+                [np.nan, np.nan, 0.0, 0.0],
+            ]
+        )
+        captured_calls = []
+
+        def fake_histplot(*args, **kwargs):
+            captured_calls.append(kwargs)
+            return kwargs.get("ax")
+
+        fig = None
+        try:
+            with patch.object(histograms_module.sns, "histplot", side_effect=fake_histplot):
+                fig, axes = adtl.adata_histograms(
+                    adata=adata,
+                    var_groupby_key="Gene",
+                    var_names=["GENE_A"],
+                    collapse_mode="aggregate",
+                    collapse_func="select_max_ref_value",
+                    kde=False,
+                    show=False,
+                )
+
+            self.assertEqual(list(axes), ["GENE_A"])
+            plot_df = captured_calls[0]["data"]
+            self.assertEqual(plot_df["value"].tolist(), [1.0, 4.0, 6.0])
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_var_groupby_select_max_ref_value_logs_ties_and_preserves_all_missing_refs(self):
+        adata = self.make_grouped_adata()
+        adata.obsm["ref_values"] = pd.DataFrame(
+            [
+                [5.0, 5.0, 0.0, 0.0],
+                [np.nan, 7.0, 0.0, 0.0],
+                [np.nan, np.nan, 0.0, 0.0],
+                [np.nan, np.nan, 0.0, 0.0],
+            ],
+            index=adata.obs_names,
+            columns=adata.var_names,
+        )
+        captured_calls = []
+
+        def fake_histplot(*args, **kwargs):
+            captured_calls.append(kwargs)
+            return kwargs.get("ax")
+
+        fig = None
+        try:
+            with self.assertLogs(histograms_module.LOGGER, level="WARNING") as warning_logs:
+                with patch.object(histograms_module.sns, "histplot", side_effect=fake_histplot):
+                    fig, axes = adtl.adata_histograms(
+                        adata=adata,
+                        var_groupby_key="Gene",
+                        var_names=["GENE_A"],
+                        collapse_mode="aggregate",
+                        collapse_func="select_max_ref_value",
+                        dropna=False,
+                        kde=False,
+                        show=False,
+                    )
+
+            self.assertEqual(list(axes), ["GENE_A"])
+            plot_df = captured_calls[0]["data"]
+            self.assertEqual(plot_df["value"].iloc[:2].tolist(), [1.0, 4.0])
+            self.assertTrue(np.isnan(plot_df.loc["s3", "value"]))
+            self.assertTrue(np.isnan(plot_df.loc["s4", "value"]))
+            self.assertEqual(len(warning_logs.output), 1)
+            self.assertIn("GENE_A", warning_logs.output[0])
+            self.assertIn("1 observation(s)", warning_logs.output[0])
+            self.assertIn("first variant", warning_logs.output[0])
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
     def test_var_groupby_subset_obs_key_draws_grouped_histograms_in_both_modes(self):
         for collapse_mode in ("stack", "aggregate"):
             captured_calls = []
@@ -948,6 +1069,41 @@ class AdataHistogramsTests(unittest.TestCase):
                 adata=self.make_grouped_adata(),
                 var_groupby_key="Gene",
                 collapse_func="bad",
+                show=False,
+            )
+
+        with self.assertRaisesRegex(ValueError, "AnnData input"):
+            df = pd.DataFrame(
+                {
+                    "A_v1": [1.0, 2.0],
+                    "A_v2": [3.0, 4.0],
+                },
+                index=["s1", "s2"],
+            )
+            var_df = pd.DataFrame({"Gene": ["GENE_A", "GENE_A"]}, index=["A_v1", "A_v2"])
+            adtl.adata_histograms(
+                df=df,
+                var_df=var_df,
+                var_names=["GENE_A"],
+                var_groupby_key="Gene",
+                collapse_func="select_max_ref_value",
+                show=False,
+            )
+
+        with self.assertRaisesRegex(ValueError, "collapse_mode=\"aggregate\""):
+            adtl.adata_histograms(
+                adata=self.make_grouped_adata(),
+                var_groupby_key="Gene",
+                collapse_mode="stack",
+                collapse_func="select_max_ref_value",
+                show=False,
+            )
+
+        with self.assertRaisesRegex(ValueError, "ref_values"):
+            adtl.adata_histograms(
+                adata=self.make_grouped_adata(),
+                var_groupby_key="Gene",
+                collapse_func="select_max_ref_value",
                 show=False,
             )
 
