@@ -1,6 +1,7 @@
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import anndata as ad
 import matplotlib
@@ -18,6 +19,7 @@ if str(REPO_PARENT) not in sys.path:
     sys.path.insert(0, str(REPO_PARENT))
 
 import adata_science_tools as adtl
+from adata_science_tools._plotting import _histograms as histograms_module
 
 
 class AdataHistogramsTests(unittest.TestCase):
@@ -47,6 +49,31 @@ class AdataHistogramsTests(unittest.TestCase):
         adata = ad.AnnData(X=x_matrix, obs=obs, var=var)
         adata.layers["scaled"] = x_matrix + 100.0
         return adata
+
+    def make_grouped_adata(self):
+        obs = pd.DataFrame(
+            {
+                "Treatment": pd.Categorical(["drug", "control", "drug", "control"]),
+                "batch": ["A", "A", "B", "B"],
+            },
+            index=["s1", "s2", "s3", "s4"],
+        )
+        var = pd.DataFrame(
+            {
+                "Gene": ["GENE_A", "GENE_A", "GENE_B", np.nan],
+                "variant_class": ["keep", "drop", "keep", "keep"],
+            },
+            index=["A_v1", "A_v2", "B_v1", "unknown_v"],
+        )
+        x_matrix = np.array(
+            [
+                [1.0, np.nan, 10.0, 100.0],
+                [2.0, 4.0, np.nan, 101.0],
+                [np.nan, 6.0, 30.0, 102.0],
+                [np.nan, np.nan, 40.0, 103.0],
+            ]
+        )
+        return ad.AnnData(X=x_matrix, obs=obs, var=var)
 
     def test_exported_from_package_root(self):
         self.assertTrue(hasattr(adtl, "adata_histograms"))
@@ -413,6 +440,257 @@ class AdataHistogramsTests(unittest.TestCase):
         finally:
             if fig is not None:
                 plt.close(fig)
+
+    def test_var_groupby_stack_mode_pools_non_missing_variant_values(self):
+        captured_calls = []
+
+        def fake_histplot(*args, **kwargs):
+            captured_calls.append(kwargs)
+            return kwargs.get("ax")
+
+        fig = None
+        try:
+            with patch.object(histograms_module.sns, "histplot", side_effect=fake_histplot):
+                fig, axes = adtl.adata_histograms(
+                    adata=self.make_grouped_adata(),
+                    var_groupby_key="Gene",
+                    var_names=["GENE_A"],
+                    collapse_mode="stack",
+                    kde=False,
+                    show=False,
+                )
+
+            self.assertEqual(list(axes), ["GENE_A"])
+            plot_df = captured_calls[0]["data"]
+            self.assertEqual(plot_df["value"].tolist(), [1.0, 2.0, 4.0, 6.0])
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_var_groupby_aggregate_mean_produces_one_value_per_observation(self):
+        captured_calls = []
+
+        def fake_histplot(*args, **kwargs):
+            captured_calls.append(kwargs)
+            return kwargs.get("ax")
+
+        fig = None
+        try:
+            with patch.object(histograms_module.sns, "histplot", side_effect=fake_histplot):
+                fig, axes = adtl.adata_histograms(
+                    adata=self.make_grouped_adata(),
+                    var_groupby_key="Gene",
+                    var_names=["GENE_A"],
+                    collapse_mode="aggregate",
+                    collapse_func="mean",
+                    kde=False,
+                    show=False,
+                )
+
+            self.assertEqual(list(axes), ["GENE_A"])
+            plot_df = captured_calls[0]["data"]
+            self.assertEqual(plot_df.index.tolist(), ["s1", "s2", "s3"])
+            self.assertEqual(plot_df["value"].tolist(), [1.0, 3.0, 6.0])
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_var_groupby_aggregate_sum_preserves_all_missing_rows_as_nan(self):
+        captured_calls = []
+
+        def fake_histplot(*args, **kwargs):
+            captured_calls.append(kwargs)
+            return kwargs.get("ax")
+
+        fig = None
+        try:
+            with patch.object(histograms_module.sns, "histplot", side_effect=fake_histplot):
+                fig, axes = adtl.adata_histograms(
+                    adata=self.make_grouped_adata(),
+                    var_groupby_key="Gene",
+                    var_names=["GENE_A"],
+                    collapse_mode="aggregate",
+                    collapse_func="sum",
+                    dropna=False,
+                    kde=False,
+                    show=False,
+                )
+
+            self.assertEqual(list(axes), ["GENE_A"])
+            plot_df = captured_calls[0]["data"]
+            self.assertEqual(plot_df["value"].iloc[:3].tolist(), [1.0, 6.0, 6.0])
+            self.assertTrue(np.isnan(plot_df.loc["s4", "value"]))
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_var_groupby_aggregate_count_returns_zero_for_all_missing_rows(self):
+        captured_calls = []
+
+        def fake_histplot(*args, **kwargs):
+            captured_calls.append(kwargs)
+            return kwargs.get("ax")
+
+        fig = None
+        try:
+            with patch.object(histograms_module.sns, "histplot", side_effect=fake_histplot):
+                fig, axes = adtl.adata_histograms(
+                    adata=self.make_grouped_adata(),
+                    var_groupby_key="Gene",
+                    var_names=["GENE_A"],
+                    collapse_mode="aggregate",
+                    collapse_func="count",
+                    kde=False,
+                    show=False,
+                )
+
+            self.assertEqual(list(axes), ["GENE_A"])
+            plot_df = captured_calls[0]["data"]
+            self.assertEqual(plot_df["value"].tolist(), [1, 2, 1, 0])
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_var_groupby_subset_obs_key_draws_grouped_histograms_in_both_modes(self):
+        for collapse_mode in ("stack", "aggregate"):
+            captured_calls = []
+
+            def fake_histplot(*args, **kwargs):
+                captured_calls.append(kwargs)
+                return kwargs.get("ax")
+
+            fig = None
+            try:
+                with patch.object(histograms_module.sns, "histplot", side_effect=fake_histplot):
+                    fig, axes = adtl.adata_histograms(
+                        adata=self.make_grouped_adata(),
+                        var_groupby_key="Gene",
+                        var_names=["GENE_A"],
+                        collapse_mode=collapse_mode,
+                        subset_obs_key="Treatment",
+                        subset_order=["drug", "control"],
+                        kde=False,
+                        show=False,
+                    )
+
+                self.assertEqual(list(axes), ["GENE_A"])
+                self.assertEqual(captured_calls[0]["hue"], "Treatment")
+                self.assertEqual(captured_calls[0]["hue_order"], ["drug", "control"])
+                self.assertIn("Treatment", captured_calls[0]["data"].columns)
+            finally:
+                if fig is not None:
+                    plt.close(fig)
+
+    def test_var_groupby_filters_variants_before_grouping(self):
+        captured_calls = []
+
+        def fake_histplot(*args, **kwargs):
+            captured_calls.append(kwargs)
+            return kwargs.get("ax")
+
+        fig = None
+        try:
+            with patch.object(histograms_module.sns, "histplot", side_effect=fake_histplot):
+                fig, axes = adtl.adata_histograms(
+                    adata=self.make_grouped_adata(),
+                    var_groupby_key="Gene",
+                    var_names=["GENE_A"],
+                    collapse_mode="stack",
+                    filter_vars_by_isin_lists={"variant_class": ["keep"]},
+                    kde=False,
+                    show=False,
+                )
+
+            self.assertEqual(list(axes), ["GENE_A"])
+            plot_df = captured_calls[0]["data"]
+            self.assertEqual(plot_df["value"].tolist(), [1.0, 2.0])
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_var_groupby_var_names_select_group_names(self):
+        captured_calls = []
+
+        def fake_histplot(*args, **kwargs):
+            captured_calls.append(kwargs)
+            return kwargs.get("ax")
+
+        fig = None
+        try:
+            with patch.object(histograms_module.sns, "histplot", side_effect=fake_histplot):
+                fig, axes = adtl.adata_histograms(
+                    adata=self.make_grouped_adata(),
+                    var_groupby_key="Gene",
+                    var_names=["GENE_B"],
+                    collapse_mode="stack",
+                    kde=False,
+                    show=False,
+                )
+
+            self.assertEqual(list(axes), ["GENE_B"])
+            plot_df = captured_calls[0]["data"]
+            self.assertEqual(plot_df["value"].tolist(), [10.0, 30.0, 40.0])
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_var_groupby_dataframe_input_requires_var_df(self):
+        df = pd.DataFrame(
+            {
+                "Treatment": ["drug", "control"],
+                "A_v1": [1.0, 2.0],
+                "A_v2": [3.0, 4.0],
+            },
+            index=["s1", "s2"],
+        )
+
+        with self.assertRaisesRegex(ValueError, "var_df"):
+            adtl.adata_histograms(
+                df=df,
+                var_names=["GENE_A"],
+                var_groupby_key="Gene",
+                show=False,
+            )
+
+    def test_var_groupby_invalid_arguments_raise_clear_errors(self):
+        with self.assertRaisesRegex(ValueError, "collapse_mode"):
+            adtl.adata_histograms(
+                adata=self.make_grouped_adata(),
+                var_groupby_key="Gene",
+                collapse_mode="bad",
+                show=False,
+            )
+
+        with self.assertRaisesRegex(ValueError, "collapse_func"):
+            adtl.adata_histograms(
+                adata=self.make_grouped_adata(),
+                var_groupby_key="Gene",
+                collapse_func="bad",
+                show=False,
+            )
+
+        with self.assertRaisesRegex(ValueError, "Missing"):
+            adtl.adata_histograms(
+                adata=self.make_grouped_adata(),
+                var_groupby_key="Missing",
+                show=False,
+            )
+
+        with self.assertRaisesRegex(ValueError, "Variable group"):
+            adtl.adata_histograms(
+                adata=self.make_grouped_adata(),
+                var_groupby_key="Gene",
+                var_names=["GENE_X"],
+                show=False,
+            )
+
+        with self.assertRaisesRegex(ValueError, "subplot_title_var_col"):
+            adtl.adata_histograms(
+                adata=self.make_grouped_adata(),
+                var_groupby_key="Gene",
+                subplot_title_var_col="variant_class",
+                show=False,
+            )
 
 
 if __name__ == "__main__":
