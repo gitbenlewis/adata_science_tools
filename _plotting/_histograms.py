@@ -133,10 +133,6 @@ def adata_histograms(
         raise ValueError("No observations remain after filtering.")
     if subset_obs_key is not None and subset_obs_key not in filtered_obs_df.columns:
         raise ValueError(f"Column '{subset_obs_key}' not found in observation metadata.")
-    if subset_obs_key is not None and filtered_obs_df[subset_obs_key].dropna().empty:
-        raise ValueError(
-            f"No non-missing values remain in observation column '{subset_obs_key}' after filtering."
-        )
 
     candidate_var_names = list(var_names) if var_names is not None else list(var_metadata_df.index)
     missing_vars = [name for name in candidate_var_names if name not in matrix_var_names]
@@ -205,24 +201,6 @@ def adata_histograms(
     if title is not None:
         fig.suptitle(title, fontsize=title_fontsize)
 
-    subset_hue_order = None
-    if grouped:
-        if subset_order is not None:
-            subset_hue_order = list(subset_order)
-        elif isinstance(filtered_obs_df[subset_obs_key].dtype, pd.CategoricalDtype):
-            subset_hue_order = list(
-                filtered_obs_df[subset_obs_key]
-                .cat.remove_unused_categories()
-                .cat.categories
-            )
-        else:
-            subset_hue_order = list(pd.unique(filtered_obs_df[subset_obs_key].dropna()))
-
-    subset_palette_to_use = subset_palette
-    if grouped and subset_hue_order is not None and subset_palette is not None:
-        if not isinstance(subset_palette, str):
-            subset_palette_to_use = list(subset_palette)[:len(subset_hue_order)]
-
     for plot_idx, var_name in enumerate(selected_var_names):
         axes = axes_flat[plot_idx]
         if selected_matrix is not None:
@@ -248,7 +226,7 @@ def adata_histograms(
         if dropzeros:
             plot_df = plot_df.loc[plot_df["value"] != 0]
 
-        if grouped and show_all_obs_hist:
+        if grouped and show_all_obs_hist and not plot_df.empty:
             sns.histplot(
                 data=plot_df,
                 x="value",
@@ -264,25 +242,64 @@ def adata_histograms(
             plot_hist_kwargs["alpha"] = alpha_to_use
 
         if grouped:
-            sns.histplot(
-                data=plot_df,
-                x="value",
-                hue=subset_obs_key,
-                hue_order=subset_hue_order,
-                palette=subset_palette_to_use,
-                ax=axes,
-                legend=legend,
-                **plot_hist_kwargs,
-            )
+            grouped_plot_df = plot_df.dropna(subset=[subset_obs_key])
+            if subset_order is not None:
+                subset_hue_order = [
+                    value
+                    for value in subset_order
+                    if value in set(grouped_plot_df[subset_obs_key])
+                ]
+            elif isinstance(filtered_obs_df[subset_obs_key].dtype, pd.CategoricalDtype):
+                subset_hue_order = list(
+                    grouped_plot_df[subset_obs_key]
+                    .cat.remove_unused_categories()
+                    .cat.categories
+                )
+            else:
+                subset_hue_order = list(pd.unique(grouped_plot_df[subset_obs_key].dropna()))
+
+            if grouped_plot_df.empty or not subset_hue_order:
+                axes.text(
+                    0.5,
+                    0.5,
+                    f"No non-missing {subset_obs_key} groups",
+                    ha="center",
+                    va="center",
+                    transform=axes.transAxes,
+                )
+            else:
+                subset_palette_to_use = subset_palette
+                if subset_palette is not None and not isinstance(subset_palette, str):
+                    subset_palette_to_use = list(subset_palette)[:len(subset_hue_order)]
+                sns.histplot(
+                    data=grouped_plot_df,
+                    x="value",
+                    hue=subset_obs_key,
+                    hue_order=subset_hue_order,
+                    palette=subset_palette_to_use,
+                    ax=axes,
+                    legend=legend,
+                    **plot_hist_kwargs,
+                )
         else:
-            sns.histplot(
-                data=plot_df,
-                x="value",
-                color=color,
-                ax=axes,
-                legend=False,
-                **plot_hist_kwargs,
-            )
+            if plot_df.empty:
+                axes.text(
+                    0.5,
+                    0.5,
+                    "No data after filtering",
+                    ha="center",
+                    va="center",
+                    transform=axes.transAxes,
+                )
+            else:
+                sns.histplot(
+                    data=plot_df,
+                    x="value",
+                    color=color,
+                    ax=axes,
+                    legend=False,
+                    **plot_hist_kwargs,
+                )
 
         if subplot_title_var_col is None:
             axes_title = str(var_name)
