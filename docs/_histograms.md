@@ -43,7 +43,7 @@ fig, axes = adtl.adata_histograms(
 
 4. `show_all_obs_hist=True` adds a neutral all-observation histogram behind subset histograms.
 
-5. `subset_obs_key` requires at least one non-missing value after observation filtering.
+5. Missing `subset_obs_key` values are ignored for grouped histogram layers; variables with no plottable subgroup rows get an annotated empty panel instead of stopping the full figure.
 
 ## Important behavior
 

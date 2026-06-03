@@ -179,17 +179,44 @@ class AdataHistogramsTests(unittest.TestCase):
                 show=False,
             )
 
-    def test_subset_obs_key_requires_non_missing_groups(self):
+    def test_subset_obs_key_allows_missing_groups_without_stopping_plot(self):
         adata = self.make_adata()
         adata.obs["Treatment"] = [None, None, None, None]
 
-        with self.assertRaisesRegex(ValueError, "No non-missing values remain.*Treatment"):
-            adtl.adata_histograms(
+        fig = None
+        try:
+            fig, axes = adtl.adata_histograms(
                 adata=adata,
                 var_names=["geneA"],
                 subset_obs_key="Treatment",
                 show=False,
             )
+
+            self.assertEqual(list(axes), ["geneA"])
+            self.assertIn("No non-missing Treatment groups", axes["geneA"].texts[0].get_text())
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_subset_obs_key_allows_features_with_no_plottable_values(self):
+        adata = self.make_adata()
+        adata.obs["Treatment"] = ["drug", "control", "drug", "control"]
+        adata.X[:, 0] = np.nan
+
+        fig = None
+        try:
+            fig, axes = adtl.adata_histograms(
+                adata=adata,
+                var_names=["geneA"],
+                subset_obs_key="Treatment",
+                show=False,
+            )
+
+            self.assertEqual(list(axes), ["geneA"])
+            self.assertIn("No non-missing Treatment groups", axes["geneA"].texts[0].get_text())
+        finally:
+            if fig is not None:
+                plt.close(fig)
 
 
 if __name__ == "__main__":
