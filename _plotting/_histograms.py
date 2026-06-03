@@ -55,6 +55,9 @@ def adata_histograms(
     figsize: tuple[float, float] | None = None,
     sharex: bool = False,
     xlims: Sequence[float] | None = None,
+    add_zero_line: bool = True,
+    add_mean_line: bool = True,
+    add_mean_to_legend: bool = True,
     bins: int | str | Sequence[float] = "auto",
     binwidth: float | None = None,
     binrange: tuple[float, float] | None = None,
@@ -414,6 +417,36 @@ def adata_histograms(
                     legend=legend,
                     **plot_hist_kwargs,
                 )
+                if add_mean_line:
+                    subset_mean_labels: dict[str, str] = {}
+                    for subset_value in subset_hue_order:
+                        subgroup_values = grouped_plot_df.loc[
+                            grouped_plot_df[subset_obs_key] == subset_value,
+                            "value",
+                        ].dropna()
+                        if subgroup_values.empty:
+                            continue
+                        subgroup_mean = subgroup_values.mean()
+                        if isinstance(subset_palette_map, dict):
+                            mean_color = subset_palette_map.get(subset_value, "black")
+                        else:
+                            mean_color = "black"
+                        axes.axvline(
+                            subgroup_mean,
+                            color=mean_color,
+                            linestyle="--",
+                            linewidth=1.5,
+                            label="_nolegend_",
+                        )
+                        subset_mean_labels[str(subset_value)] = (
+                            f"{subset_value} (mean={subgroup_mean:.3g})"
+                        )
+                    if add_mean_to_legend and legend and axes.get_legend() is not None:
+                        legend_obj = axes.get_legend()
+                        for legend_text in legend_obj.get_texts():
+                            legend_label = legend_text.get_text()
+                            if legend_label in subset_mean_labels:
+                                legend_text.set_text(subset_mean_labels[legend_label])
         else:
             if plot_df.empty:
                 axes.text(
@@ -433,6 +466,31 @@ def adata_histograms(
                     legend=False,
                     **plot_hist_kwargs,
                 )
+                if add_mean_line and not plot_values.empty:
+                    mean_value = plot_values.mean()
+                    mean_line_label = (
+                        f"Mean = {mean_value:.3g}"
+                        if add_mean_to_legend and legend
+                        else "_nolegend_"
+                    )
+                    axes.axvline(
+                        mean_value,
+                        color=color if color is not None else "black",
+                        linestyle="--",
+                        linewidth=1.5,
+                        label=mean_line_label,
+                    )
+                    if add_mean_to_legend and legend:
+                        axes.legend()
+
+        if add_zero_line:
+            axes.axvline(
+                0,
+                color="red",
+                linestyle=":",
+                linewidth=1.5,
+                label="_nolegend_",
+            )
 
         if subplot_title_var_col is None:
             axes_title = str(var_name)

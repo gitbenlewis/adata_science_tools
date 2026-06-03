@@ -92,6 +92,9 @@ class AdataHistogramsTests(unittest.TestCase):
             adtl.palettes.tol_colors,
         )
         self.assertIsNone(signature.parameters["subset_palette"].default)
+        self.assertIs(signature.parameters["add_zero_line"].default, True)
+        self.assertIs(signature.parameters["add_mean_line"].default, True)
+        self.assertIs(signature.parameters["add_mean_to_legend"].default, True)
 
     def test_adata_filters_obs_and_vars(self):
         fig = None
@@ -164,7 +167,7 @@ class AdataHistogramsTests(unittest.TestCase):
             self.assertEqual(legend.get_title().get_text(), "condition")
             self.assertEqual(
                 [text.get_text() for text in legend.get_texts()],
-                ["case", "control"],
+                ["case (mean=2)", "control (mean=3)"],
             )
         finally:
             if fig is not None:
@@ -250,6 +253,52 @@ class AdataHistogramsTests(unittest.TestCase):
                 xlims=[2, -2],
                 show=False,
             )
+
+    def test_zero_and_mean_lines_are_drawn_by_default(self):
+        fig = None
+        try:
+            fig, axes = adtl.adata_histograms(
+                adata=self.make_adata(),
+                var_names=["geneA"],
+                bins=2,
+                kde=False,
+                show=False,
+            )
+
+            line_x_positions = [line.get_xdata()[0] for line in axes["geneA"].lines]
+            self.assertIn(0, line_x_positions)
+            self.assertIn(2.5, line_x_positions)
+            zero_line = axes["geneA"].lines[line_x_positions.index(0)]
+            self.assertEqual(zero_line.get_color(), "red")
+            self.assertEqual(zero_line.get_linestyle(), ":")
+            legend = axes["geneA"].get_legend()
+            self.assertIsNotNone(legend)
+            self.assertEqual(
+                [text.get_text() for text in legend.get_texts()],
+                ["Mean = 2.5"],
+            )
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_zero_and_mean_lines_can_be_disabled(self):
+        fig = None
+        try:
+            fig, axes = adtl.adata_histograms(
+                adata=self.make_adata(),
+                var_names=["geneA"],
+                bins=2,
+                kde=False,
+                add_zero_line=False,
+                add_mean_line=False,
+                show=False,
+            )
+
+            self.assertEqual(len(axes["geneA"].lines), 0)
+            self.assertIsNone(axes["geneA"].get_legend())
+        finally:
+            if fig is not None:
+                plt.close(fig)
 
     def test_default_kde_allows_grouped_panel_with_one_value(self):
         obs = pd.DataFrame({"Treatment": ["drug"]}, index=["s1"])
@@ -341,10 +390,40 @@ class AdataHistogramsTests(unittest.TestCase):
                         colors.append(to_hex(handle.get_facecolor()))
                     else:
                         colors.append(to_hex(handle.get_color()))
-                color_map = dict(zip(labels, colors))
+                color_map = {
+                    label.split(" (mean=")[0]: color
+                    for label, color in zip(labels, colors)
+                }
                 self.assertEqual(color_map["A"], to_hex(adtl.palettes.tol_colors[0]))
                 self.assertEqual(color_map["B"], to_hex(adtl.palettes.tol_colors[1]))
                 self.assertEqual(color_map["C"], to_hex(adtl.palettes.tol_colors[2]))
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_grouped_mean_lines_update_subset_legend_labels(self):
+        fig = None
+        try:
+            fig, axes = adtl.adata_histograms(
+                adata=self.make_adata(),
+                var_names=["geneA"],
+                subset_obs_key="condition",
+                bins=2,
+                kde=False,
+                element="bars",
+                add_zero_line=False,
+                show=False,
+            )
+            fig.canvas.draw()
+
+            line_x_positions = [line.get_xdata()[0] for line in axes["geneA"].lines]
+            self.assertEqual(line_x_positions, [2.0, 3.0])
+            legend = axes["geneA"].get_legend()
+            self.assertIsNotNone(legend)
+            self.assertEqual(
+                [text.get_text() for text in legend.get_texts()],
+                ["case (mean=2)", "control (mean=3)"],
+            )
         finally:
             if fig is not None:
                 plt.close(fig)

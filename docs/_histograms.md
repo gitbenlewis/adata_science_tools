@@ -14,6 +14,8 @@ per gene when multiple variant columns map to the same gene.
 By default, histograms are filled density plots with KDE overlays. Subgroup
 histograms use `palette=palettes.tol_colors` unless `subset_palette` is supplied,
 and keep the same subgroup-to-color mapping across every panel.
+Panels include a red dotted zero reference line by default, plus dashed mean
+lines whose values are added to legends by default.
 
 ## Full signature
 
@@ -42,6 +44,9 @@ def adata_histograms(
     figsize: tuple[float, float] | None = None,
     sharex: bool = False,
     xlims: Sequence[float] | None = None,
+    add_zero_line: bool = True,
+    add_mean_line: bool = True,
+    add_mean_to_legend: bool = True,
     bins: int | str | Sequence[float] = "auto",
     binwidth: float | None = None,
     binrange: tuple[float, float] | None = None,
@@ -152,7 +157,13 @@ adtl.adata_histograms(
 
 5. `palette` controls subgroup colors by default; `subset_palette` overrides those colors when provided.
 
-6. Missing `subset_obs_key` values are ignored for grouped histogram layers; variables with no plottable subgroup rows get an annotated empty panel instead of stopping the full figure.
+6. `add_zero_line=True` draws a red dotted vertical reference line at `x=0`.
+
+7. `add_mean_line=True` draws dashed vertical mean lines for the overall histogram or each subgroup histogram.
+
+8. `add_mean_to_legend=True` adds the mean value to the legend when a mean line is drawn and legends are enabled.
+
+9. Missing `subset_obs_key` values are ignored for grouped histogram layers; variables with no plottable subgroup rows get an annotated empty panel instead of stopping the full figure.
 
 ## Important behavior
 
