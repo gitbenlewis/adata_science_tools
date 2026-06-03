@@ -179,6 +179,18 @@ class AdataHistogramsTests(unittest.TestCase):
                 show=False,
             )
 
+    def test_subset_obs_key_requires_non_missing_groups(self):
+        adata = self.make_adata()
+        adata.obs["Treatment"] = [None, None, None, None]
+
+        with self.assertRaisesRegex(ValueError, "No non-missing values remain.*Treatment"):
+            adtl.adata_histograms(
+                adata=adata,
+                var_names=["geneA"],
+                subset_obs_key="Treatment",
+                show=False,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

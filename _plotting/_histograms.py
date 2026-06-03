@@ -133,6 +133,10 @@ def adata_histograms(
         raise ValueError("No observations remain after filtering.")
     if subset_obs_key is not None and subset_obs_key not in filtered_obs_df.columns:
         raise ValueError(f"Column '{subset_obs_key}' not found in observation metadata.")
+    if subset_obs_key is not None and filtered_obs_df[subset_obs_key].dropna().empty:
+        raise ValueError(
+            f"No non-missing values remain in observation column '{subset_obs_key}' after filtering."
+        )
 
     candidate_var_names = list(var_names) if var_names is not None else list(var_metadata_df.index)
     missing_vars = [name for name in candidate_var_names if name not in matrix_var_names]
