@@ -38,7 +38,7 @@ def adata_histograms(
     var_df: pd.DataFrame | None = None,
     var_names: Sequence[str] | None = None,
     var_groupby_key: str | None = None,
-    collapse_mode: Literal["stack", "aggregate"] = "aggregate",
+    collapse_mode: Literal["stack", "aggregate", "all"] = "aggregate",
     collapse_func: Literal["mean", "median", "sum", "min", "max", "count"] = "mean",
     layer: str | None = None,
     use_raw: bool = False,
@@ -97,8 +97,10 @@ def adata_histograms(
         raise ValueError("Provide exactly one of 'adata' or 'df'.")
     if use_raw and layer is not None:
         raise ValueError("'layer' cannot be used when use_raw=True.")
-    if collapse_mode not in {"stack", "aggregate"}:
-        raise ValueError("'collapse_mode' must be one of 'stack' or 'aggregate'.")
+    if collapse_mode not in {"stack", "aggregate", "all"}:
+        raise ValueError("'collapse_mode' must be one of 'stack', 'aggregate', or 'all'.")
+    if collapse_mode == "all" and var_groupby_key is not None:
+        raise ValueError("'collapse_mode=\"all\"' is only supported when 'var_groupby_key' is None.")
     if collapse_func not in {"mean", "median", "sum", "min", "max", "count"}:
         raise ValueError(
             "'collapse_func' must be one of 'mean', 'median', 'sum', 'min', 'max', or 'count'."
@@ -145,11 +147,14 @@ def adata_histograms(
         matrix_var_names = pd.Index(df.columns)
 
     has_var_groups = var_groupby_key is not None
+    has_all_vars_panel = collapse_mode == "all"
     if has_var_groups:
         if var_groupby_key not in var_metadata_df.columns:
             raise ValueError(f"Column '{var_groupby_key}' not found in variable metadata.")
         if subplot_title_var_col is not None:
             raise ValueError("'subplot_title_var_col' is not supported with 'var_groupby_key'.")
+    elif has_all_vars_panel and subplot_title_var_col is not None:
+        raise ValueError("'subplot_title_var_col' is not supported with 'collapse_mode=\"all\"'.")
     elif subplot_title_var_col is not None and subplot_title_var_col not in var_metadata_df.columns:
         raise ValueError(f"Column '{subplot_title_var_col}' not found in variable metadata.")
 
@@ -216,13 +221,14 @@ def adata_histograms(
             raise ValueError("No variable groups remain after filtering.")
         raise ValueError("No variables remain after filtering.")
 
+    panel_names = ["all"] if has_all_vars_panel else selected_var_names
     if figsize is None:
-        plot_ncols = min(ncols, len(selected_var_names))
-        plot_nrows = math.ceil(len(selected_var_names) / plot_ncols)
+        plot_ncols = min(ncols, len(panel_names))
+        plot_nrows = math.ceil(len(panel_names) / plot_ncols)
         figsize = (5.0 * plot_ncols, 3.5 * plot_nrows)
     else:
-        plot_ncols = min(ncols, len(selected_var_names))
-        plot_nrows = math.ceil(len(selected_var_names) / plot_ncols)
+        plot_ncols = min(ncols, len(panel_names))
+        plot_nrows = math.ceil(len(panel_names) / plot_ncols)
 
     if adata is not None and not has_var_groups:
         obs_positions = np.flatnonzero(obs_mask.to_numpy())
@@ -299,9 +305,34 @@ def adata_histograms(
                 for idx, subset_value in enumerate(subset_hue_order)
             }
 
-    for plot_idx, var_name in enumerate(selected_var_names):
+    for plot_idx, var_name in enumerate(panel_names):
         axes = axes_flat[plot_idx]
-        if has_var_groups:
+        if has_all_vars_panel:
+            if selected_matrix is not None:
+                all_values_matrix = selected_matrix
+                if hasattr(all_values_matrix, "toarray"):
+                    all_values_matrix = np.asarray(all_values_matrix.toarray())
+                else:
+                    all_values_matrix = np.asarray(all_values_matrix)
+            else:
+                all_values_matrix = df.loc[filtered_obs_df.index, selected_var_names].to_numpy()
+            if all_values_matrix.ndim == 1:
+                all_values_matrix = all_values_matrix.reshape(len(filtered_obs_df), 1)
+            all_values_df = pd.DataFrame(
+                all_values_matrix,
+                index=filtered_obs_df.index,
+                columns=selected_var_names,
+            ).apply(pd.to_numeric, errors="coerce")
+            plot_df = pd.DataFrame(
+                {"value": all_values_df.to_numpy().ravel()},
+                index=np.repeat(filtered_obs_df.index.to_numpy(), all_values_df.shape[1]),
+            )
+            if has_obs_groups:
+                plot_df[subset_obs_key] = np.repeat(
+                    filtered_obs_df[subset_obs_key].to_numpy(),
+                    all_values_df.shape[1],
+                )
+        elif has_var_groups:
             group_variant_names = group_to_variant_names[var_name]
             if adata is not None:
                 var_positions = matrix_var_names.get_indexer(group_variant_names)
@@ -354,7 +385,7 @@ def adata_histograms(
         else:
             values = df.loc[filtered_obs_df.index, var_name].to_numpy()
 
-        if not has_var_groups:
+        if not has_var_groups and not has_all_vars_panel:
             plot_df = pd.DataFrame(
                 {"value": pd.to_numeric(values, errors="coerce")},
                 index=filtered_obs_df.index,
@@ -510,7 +541,7 @@ def adata_histograms(
 
         axes_by_var[str(var_name)] = axes
 
-    for axes in axes_flat[len(selected_var_names):]:
+    for axes in axes_flat[len(panel_names):]:
         axes.set_visible(False)
 
     if xlims_tuple is not None:
