@@ -12,8 +12,67 @@ Histogram plotting helpers from `_plotting/_histograms.py`.
 It can also draw one histogram per variable metadata group, such as one panel
 per gene when multiple variant columns map to the same gene.
 By default, histograms are filled density plots with KDE overlays. Subgroup
-histograms use `palettes.tol_colors` and keep the same subgroup-to-color mapping
-across every panel.
+histograms use `palette=palettes.tol_colors` unless `subset_palette` is supplied,
+and keep the same subgroup-to-color mapping across every panel.
+
+## Full signature
+
+```python
+def adata_histograms(
+    adata: anndata.AnnData | None = None,
+    *,
+    df: pd.DataFrame | None = None,
+    var_df: pd.DataFrame | None = None,
+    var_names: Sequence[str] | None = None,
+    var_groupby_key: str | None = None,
+    collapse_mode: Literal["stack", "aggregate"] = "aggregate",
+    collapse_func: Literal["mean", "median", "sum", "min", "max", "count"] = "mean",
+    layer: str | None = None,
+    use_raw: bool = False,
+    filter_vars_by_isin_lists: Mapping[str, Sequence[Any]] | None = None,
+    filter_obs_by_isin_lists: Mapping[str, Sequence[Any]] | None = None,
+    subset_obs_key: str | None = None,
+    subset_order: Sequence[Any] | None = None,
+    palette: Sequence[Any] | str | None = palettes.tol_colors,
+    subset_palette: Sequence[Any] | str | None = None,
+    show_all_obs_hist: bool = False,
+    all_obs_color: Any = "0.7",
+    all_obs_alpha: float = 0.20,
+    ncols: int = 3,
+    figsize: tuple[float, float] | None = None,
+    sharex: bool = False,
+    xlims: Sequence[float] | None = None,
+    bins: int | str | Sequence[float] = "auto",
+    binwidth: float | None = None,
+    binrange: tuple[float, float] | None = None,
+    stat: Literal["count", "frequency", "probability", "percent", "density"] = "density",
+    multiple: Literal["layer", "dodge", "stack", "fill"] | None = None,
+    element: Literal["bars", "step", "poly"] | None = None,
+    fill: bool | None = True,
+    kde: bool = True,
+    common_bins: bool = True,
+    common_norm: bool = False,
+    discrete: bool | None = None,
+    cumulative: bool = False,
+    alpha: float | None = None,
+    color: Any | None = None,
+    xlabel: str | None = None,
+    ylabel: str | None = None,
+    title: str | None = None,
+    subplot_title_var_col: str | None = None,
+    title_fontsize: int = 14,
+    axis_label_fontsize: int = 12,
+    tick_label_fontsize: int | None = None,
+    legend_fontsize: int | None = None,
+    legend: bool = True,
+    dropna: bool = True,
+    nas2zeros: bool = False,
+    dropzeros: bool = False,
+    show: bool = True,
+) -> tuple[plt.Figure, dict[str, plt.Axes]]:
+```
+
+## Basic example
 
 ```python
 import adata_science_tools as adtl
@@ -91,7 +150,9 @@ adtl.adata_histograms(
 
 4. `show_all_obs_hist=True` adds a neutral non-subsetted all-observation density histogram behind the subset histograms for each variable.
 
-5. Missing `subset_obs_key` values are ignored for grouped histogram layers; variables with no plottable subgroup rows get an annotated empty panel instead of stopping the full figure.
+5. `palette` controls subgroup colors by default; `subset_palette` overrides those colors when provided.
+
+6. Missing `subset_obs_key` values are ignored for grouped histogram layers; variables with no plottable subgroup rows get an annotated empty panel instead of stopping the full figure.
 
 ## Important behavior
 

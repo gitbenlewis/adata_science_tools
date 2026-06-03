@@ -88,9 +88,10 @@ class AdataHistogramsTests(unittest.TestCase):
         self.assertIs(signature.parameters["kde"].default, True)
         self.assertIs(signature.parameters["fill"].default, True)
         self.assertEqual(
-            signature.parameters["subset_palette"].default,
+            signature.parameters["palette"].default,
             adtl.palettes.tol_colors,
         )
+        self.assertIsNone(signature.parameters["subset_palette"].default)
 
     def test_adata_filters_obs_and_vars(self):
         fig = None
@@ -347,6 +348,60 @@ class AdataHistogramsTests(unittest.TestCase):
         finally:
             if fig is not None:
                 plt.close(fig)
+
+    def test_palette_controls_subset_colors_and_subset_palette_overrides(self):
+        adata = self.make_adata()
+        base_palette = ["#123456", "#abcdef"]
+        override_palette = ["#ff0000", "#00ff00"]
+
+        fig_palette = None
+        fig_override = None
+        try:
+            fig_palette, axes_palette = adtl.adata_histograms(
+                adata=adata,
+                var_names=["geneA"],
+                subset_obs_key="condition",
+                palette=base_palette,
+                bins=2,
+                kde=False,
+                show=False,
+            )
+            fig_palette.canvas.draw()
+            legend_palette = axes_palette["geneA"].get_legend()
+            self.assertIsNotNone(legend_palette)
+            colors = []
+            for handle in legend_palette.legend_handles:
+                if hasattr(handle, "get_facecolor"):
+                    colors.append(to_hex(handle.get_facecolor()))
+                else:
+                    colors.append(to_hex(handle.get_color()))
+            self.assertEqual(colors, [to_hex(color) for color in base_palette])
+
+            fig_override, axes_override = adtl.adata_histograms(
+                adata=adata,
+                var_names=["geneA"],
+                subset_obs_key="condition",
+                palette=base_palette,
+                subset_palette=override_palette,
+                bins=2,
+                kde=False,
+                show=False,
+            )
+            fig_override.canvas.draw()
+            legend_override = axes_override["geneA"].get_legend()
+            self.assertIsNotNone(legend_override)
+            colors = []
+            for handle in legend_override.legend_handles:
+                if hasattr(handle, "get_facecolor"):
+                    colors.append(to_hex(handle.get_facecolor()))
+                else:
+                    colors.append(to_hex(handle.get_color()))
+            self.assertEqual(colors, [to_hex(color) for color in override_palette])
+        finally:
+            if fig_palette is not None:
+                plt.close(fig_palette)
+            if fig_override is not None:
+                plt.close(fig_override)
 
     def test_show_all_obs_hist_adds_non_subset_overlay(self):
         adata = self.make_adata()
