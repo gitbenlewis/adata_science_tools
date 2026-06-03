@@ -20,6 +20,62 @@ matched target/reference pair. It is intended for paired Pre/Post-style
 transforms such as `Post - Pre`, percent change, fold change, and log2 fold
 change.
 
+### Full signature
+
+The runtime Python signature keeps optional configuration in `**params` for
+backward-compatible config-driven use:
+
+```python
+def ref_vs_target_adata(
+    adata: ad.AnnData,
+    groupby_key: str = "Pre_or_Post_obs_col",
+    groupby_key_target_value: str = "Post",
+    groupby_key_ref_value: str = "Pre",
+    opperation_flavor: str = "subtraction",
+    obs_dfs: str = "merge",
+    ref_obs_suffix: str = ".src_pre",
+    target_obs_suffix: str = ".src_post",
+    keep_var_df: bool = True,
+    **params,
+) -> ad.AnnData | tuple[ad.AnnData, pd.DataFrame]:
+```
+
+The full supported call surface, with `**params` expanded, is:
+
+```python
+result = adtl.ref_vs_target_adata(
+    adata,
+    groupby_key="Pre_or_Post_obs_col",
+    groupby_key_target_value="Post",
+    groupby_key_ref_value="Pre",
+    opperation_flavor="subtraction",
+    obs_dfs="merge",
+    ref_obs_suffix=".src_pre",
+    target_obs_suffix=".src_post",
+    keep_var_df=True,
+    pair_by_key="SubjectID",  # required
+    layer=None,
+    layers_to_compute=None,
+    base_layer=None,
+    epsilon=1e-9,
+    target_min_value=None,
+    target_max_value=None,
+    ref_min_value=None,
+    ref_max_value=None,
+    merge_shared_obs_cols=False,
+    return_df=False,
+    allow_unused_params=False,
+    logger=None,
+    log_level="INFO",
+    save_source_values_obsm=False,
+    target_values_obsm_key="target_values",
+    ref_values_obsm_key="ref_values",
+)
+```
+
+`operation_flavor` is also accepted as a corrected alias for the typo-compatible
+`opperation_flavor`.
+
 ```python
 import adata_science_tools as adtl
 
