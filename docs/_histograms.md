@@ -43,6 +43,8 @@ fig, axes = adtl.adata_histograms(
 
 4. `show_all_obs_hist=True` adds a neutral all-observation histogram behind subset histograms.
 
+5. `subset_obs_key` requires at least one non-missing value after observation filtering.
+
 ## Important behavior
 
 1. AnnData extraction is column-focused for the selected variables and does not densify the full matrix.
