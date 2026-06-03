@@ -1,6 +1,7 @@
 import sys
 import unittest
 from pathlib import Path
+from typing import get_args
 from unittest.mock import patch
 
 import anndata as ad
@@ -95,6 +96,7 @@ class AdataHistogramsTests(unittest.TestCase):
         self.assertIs(signature.parameters["add_zero_line"].default, True)
         self.assertIs(signature.parameters["add_mean_line"].default, True)
         self.assertIs(signature.parameters["add_mean_to_legend"].default, True)
+        self.assertIn("all", get_args(signature.parameters["collapse_mode"].annotation))
 
     def test_adata_filters_obs_and_vars(self):
         fig = None
@@ -574,6 +576,152 @@ class AdataHistogramsTests(unittest.TestCase):
         finally:
             if fig is not None:
                 plt.close(fig)
+
+    def test_collapse_mode_all_stacks_selected_adata_variables(self):
+        captured_calls = []
+
+        def fake_histplot(*args, **kwargs):
+            captured_calls.append(kwargs)
+            return kwargs.get("ax")
+
+        fig = None
+        try:
+            with patch.object(histograms_module.sns, "histplot", side_effect=fake_histplot):
+                fig, axes = adtl.adata_histograms(
+                    adata=self.make_adata(),
+                    var_names=["geneA", "geneC"],
+                    collapse_mode="all",
+                    kde=False,
+                    show=False,
+                )
+
+            self.assertEqual(list(axes), ["all"])
+            self.assertEqual(axes["all"].get_title(), "all")
+            self.assertEqual(axes["all"].get_xlabel(), "all")
+            plot_df = captured_calls[0]["data"]
+            self.assertEqual(
+                plot_df.index.tolist(),
+                ["s1", "s1", "s2", "s2", "s3", "s3", "s4", "s4"],
+            )
+            self.assertEqual(
+                plot_df["value"].tolist(),
+                [1.0, 5.0, 2.0, 6.0, 3.0, 7.0, 4.0, 8.0],
+            )
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_collapse_mode_all_repeats_subset_labels_per_selected_variable(self):
+        captured_calls = []
+
+        def fake_histplot(*args, **kwargs):
+            captured_calls.append(kwargs)
+            return kwargs.get("ax")
+
+        fig = None
+        try:
+            with patch.object(histograms_module.sns, "histplot", side_effect=fake_histplot):
+                fig, axes = adtl.adata_histograms(
+                    adata=self.make_adata(),
+                    var_names=["geneA", "geneC"],
+                    collapse_mode="all",
+                    subset_obs_key="condition",
+                    kde=False,
+                    show=False,
+                )
+
+            self.assertEqual(list(axes), ["all"])
+            self.assertEqual(captured_calls[0]["hue"], "condition")
+            plot_df = captured_calls[0]["data"]
+            self.assertEqual(
+                plot_df["condition"].tolist(),
+                ["case", "case", "control", "control", "case", "case", "control", "control"],
+            )
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_collapse_mode_all_applies_variable_filters_before_stacking(self):
+        captured_calls = []
+
+        def fake_histplot(*args, **kwargs):
+            captured_calls.append(kwargs)
+            return kwargs.get("ax")
+
+        fig = None
+        try:
+            with patch.object(histograms_module.sns, "histplot", side_effect=fake_histplot):
+                fig, axes = adtl.adata_histograms(
+                    adata=self.make_adata(),
+                    collapse_mode="all",
+                    filter_vars_by_isin_lists={"feature_type": ["rna"]},
+                    kde=False,
+                    show=False,
+                )
+
+            self.assertEqual(list(axes), ["all"])
+            plot_df = captured_calls[0]["data"]
+            self.assertEqual(plot_df["value"].tolist(), [10.0, 20.0, 30.0, 40.0])
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_collapse_mode_all_supports_dataframe_input_with_var_df(self):
+        df = pd.DataFrame(
+            {
+                "sample_type": ["tumor", "normal", "tumor"],
+                "TP53": [1.2, 0.4, 2.2],
+                "EGFR": [5.0, 0.1, 6.0],
+            },
+            index=["s1", "s2", "s3"],
+        )
+        var_df = pd.DataFrame(
+            {"gene_family": ["tumor_suppressor", "receptor"]},
+            index=["TP53", "EGFR"],
+        )
+        captured_calls = []
+
+        def fake_histplot(*args, **kwargs):
+            captured_calls.append(kwargs)
+            return kwargs.get("ax")
+
+        fig = None
+        try:
+            with patch.object(histograms_module.sns, "histplot", side_effect=fake_histplot):
+                fig, axes = adtl.adata_histograms(
+                    df=df,
+                    var_df=var_df,
+                    var_names=["TP53", "EGFR"],
+                    collapse_mode="all",
+                    filter_obs_by_isin_lists={"sample_type": ["tumor"]},
+                    kde=False,
+                    show=False,
+                )
+
+            self.assertEqual(list(axes), ["all"])
+            plot_df = captured_calls[0]["data"]
+            self.assertEqual(plot_df.index.tolist(), ["s1", "s1", "s3", "s3"])
+            self.assertEqual(plot_df["value"].tolist(), [1.2, 5.0, 2.2, 6.0])
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_collapse_mode_all_invalid_argument_combinations_raise_clear_errors(self):
+        with self.assertRaisesRegex(ValueError, "collapse_mode"):
+            adtl.adata_histograms(
+                adata=self.make_grouped_adata(),
+                var_groupby_key="Gene",
+                collapse_mode="all",
+                show=False,
+            )
+
+        with self.assertRaisesRegex(ValueError, "subplot_title_var_col"):
+            adtl.adata_histograms(
+                adata=self.make_adata(),
+                collapse_mode="all",
+                subplot_title_var_col="label",
+                show=False,
+            )
 
     def test_var_groupby_stack_mode_pools_non_missing_variant_values(self):
         captured_calls = []

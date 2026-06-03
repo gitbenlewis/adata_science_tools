@@ -27,7 +27,7 @@ def adata_histograms(
     var_df: pd.DataFrame | None = None,
     var_names: Sequence[str] | None = None,
     var_groupby_key: str | None = None,
-    collapse_mode: Literal["stack", "aggregate"] = "aggregate",
+    collapse_mode: Literal["stack", "aggregate", "all"] = "aggregate",
     collapse_func: Literal["mean", "median", "sum", "min", "max", "count"] = "mean",
     layer: str | None = None,
     use_raw: bool = False,
@@ -104,6 +104,25 @@ fig, axes = adtl.adata_histograms(
 
 3. `var_df=...` is feature metadata for DataFrame input. It is used for `filter_vars_by_isin_lists` and optional subplot labels, not as the numeric values being plotted.
 
+## All-variable stacked histogram
+
+1. With `var_groupby_key=None`, `collapse_mode="all"` draws one combined panel keyed as `"all"` by stacking all selected raw variable values.
+
+2. `var_names=[...]` still selects raw variable names in this mode, and `filter_vars_by_isin_lists` is applied before stacking.
+
+3. Observations with more selected measured variables contribute more values to the histogram; `collapse_func` is ignored because no within-observation aggregation is performed.
+
+```python
+adtl.adata_histograms(
+    adata=adata,
+    var_names=["GENE_A_variant_1", "GENE_A_variant_2"],
+    collapse_mode="all",
+    subset_obs_key="Treatment",
+    sharex=True,
+    xlims=[-2, 2],
+)
+```
+
 ## Variable-grouped histograms
 
 1. `var_groupby_key="column"` groups raw variable columns by a variable metadata column after `filter_vars_by_isin_lists` is applied.
@@ -177,4 +196,4 @@ adtl.adata_histograms(
 
 5. `show=False` closes the figure before returning, matching the package's other test-backed plotting APIs.
 
-6. The return value is `(fig, axes)` where `axes` is a dict keyed by selected variable name.
+6. The return value is `(fig, axes)` where `axes` is a dict keyed by selected variable name, selected group name, or `"all"` for `collapse_mode="all"`.
