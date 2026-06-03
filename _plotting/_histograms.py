@@ -49,6 +49,8 @@ def adata_histograms(
     all_obs_alpha: float = 0.20,
     ncols: int = 3,
     figsize: tuple[float, float] | None = None,
+    sharex: bool = False,
+    xlims: Sequence[float] | None = None,
     bins: int | str | Sequence[float] = "auto",
     binwidth: float | None = None,
     binrange: tuple[float, float] | None = None,
@@ -90,6 +92,14 @@ def adata_histograms(
         raise ValueError("'layer' cannot be used when use_raw=True.")
     if ncols < 1:
         raise ValueError("'ncols' must be at least 1.")
+    if xlims is not None:
+        xlims_tuple = tuple(xlims)
+        if len(xlims_tuple) != 2:
+            raise ValueError("'xlims' must contain exactly two values.")
+        if xlims_tuple[0] >= xlims_tuple[1]:
+            raise ValueError("'xlims' lower bound must be less than upper bound.")
+    else:
+        xlims_tuple = None
 
     if adata is not None:
         obs_metadata_df = adata.obs.copy()
@@ -258,7 +268,13 @@ def adata_histograms(
         if dropzeros:
             plot_df = plot_df.loc[plot_df["value"] != 0]
 
+        plot_values = plot_df["value"].dropna()
+        plot_supports_kde = len(plot_values) > 1 and plot_values.nunique() > 1
+
         if grouped and show_all_obs_hist and not plot_df.empty:
+            all_obs_hist_kwargs = dict(hist_kwargs)
+            if not plot_supports_kde:
+                all_obs_hist_kwargs["kde"] = False
             sns.histplot(
                 data=plot_df,
                 x="value",
@@ -266,15 +282,20 @@ def adata_histograms(
                 alpha=all_obs_alpha,
                 ax=axes,
                 legend=False,
-                **hist_kwargs,
+                **all_obs_hist_kwargs,
             )
 
         plot_hist_kwargs = dict(hist_kwargs)
         if alpha_to_use is not None:
             plot_hist_kwargs["alpha"] = alpha_to_use
+        if not plot_supports_kde:
+            plot_hist_kwargs["kde"] = False
 
         if grouped:
             grouped_plot_df = plot_df.dropna(subset=[subset_obs_key])
+            grouped_values = grouped_plot_df["value"].dropna()
+            if len(grouped_values) <= 1 or grouped_values.nunique() <= 1:
+                plot_hist_kwargs["kde"] = False
             if grouped_plot_df.empty or not subset_hue_order:
                 axes.text(
                     0.5,
@@ -335,6 +356,17 @@ def adata_histograms(
 
     for axes in axes_flat[len(selected_var_names):]:
         axes.set_visible(False)
+
+    if xlims_tuple is not None:
+        for axes in axes_by_var.values():
+            axes.set_xlim(xlims_tuple)
+    elif sharex and axes_by_var:
+        shared_xlims = (
+            min(axes.get_xlim()[0] for axes in axes_by_var.values()),
+            max(axes.get_xlim()[1] for axes in axes_by_var.values()),
+        )
+        for axes in axes_by_var.values():
+            axes.set_xlim(shared_xlims)
 
     fig.tight_layout()
     if title is not None:

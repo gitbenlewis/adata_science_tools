@@ -23,6 +23,8 @@ fig, axes = adtl.adata_histograms(
     filter_obs_by_isin_lists={"Treatment": ["drug"]},
     subset_obs_key="Batch",
     show_all_obs_hist=True,
+    sharex=True,
+    xlims=[-2, 2],
     bins=30,
     show=False,
 )
@@ -54,6 +56,10 @@ fig, axes = adtl.adata_histograms(
 
 2. The default `stat="density"` and `kde=True` normalize distributions for shape comparison; use `stat="count"` and/or `kde=False` for raw count histograms.
 
-3. `show=False` closes the figure before returning, matching the package's other test-backed plotting APIs.
+3. KDE is skipped for panels or grouped layers with fewer than two distinct plottable values so sparse subsets still draw histograms.
 
-4. The return value is `(fig, axes)` where `axes` is a dict keyed by selected variable name.
+4. `sharex=True` applies common x-axis limits across selected variable panels; `xlims=[lower, upper]` sets explicit x-axis limits for every panel.
+
+5. `show=False` closes the figure before returning, matching the package's other test-backed plotting APIs.
+
+6. The return value is `(fig, axes)` where `axes` is a dict keyed by selected variable name.

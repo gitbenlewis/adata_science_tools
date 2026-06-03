@@ -179,6 +179,100 @@ class AdataHistogramsTests(unittest.TestCase):
             if fig_sparse is not None:
                 plt.close(fig_sparse)
 
+    def test_sharex_uses_common_axis_limits(self):
+        fig = None
+        try:
+            fig, axes = adtl.adata_histograms(
+                adata=self.make_adata(),
+                var_names=["geneA", "geneC"],
+                bins=2,
+                kde=False,
+                sharex=True,
+                show=False,
+            )
+
+            self.assertEqual(axes["geneA"].get_xlim(), axes["geneC"].get_xlim())
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_xlims_sets_explicit_axis_limits(self):
+        fig = None
+        try:
+            fig, axes = adtl.adata_histograms(
+                adata=self.make_adata(),
+                var_names=["geneA", "geneC"],
+                bins=2,
+                kde=False,
+                sharex=True,
+                xlims=[-2, 2],
+                show=False,
+            )
+
+            for axes_obj in axes.values():
+                self.assertEqual(axes_obj.get_xlim(), (-2.0, 2.0))
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_xlims_requires_two_increasing_values(self):
+        with self.assertRaisesRegex(ValueError, "xlims"):
+            adtl.adata_histograms(
+                adata=self.make_adata(),
+                xlims=[2, -2],
+                show=False,
+            )
+
+    def test_default_kde_allows_grouped_panel_with_one_value(self):
+        obs = pd.DataFrame({"Treatment": ["drug"]}, index=["s1"])
+        var = pd.DataFrame(index=["geneA"])
+        adata = ad.AnnData(X=np.array([[1.0]]), obs=obs, var=var)
+
+        fig = None
+        try:
+            fig, axes = adtl.adata_histograms(
+                adata=adata,
+                var_names=["geneA"],
+                subset_obs_key="Treatment",
+                show=False,
+            )
+
+            self.assertEqual(list(axes), ["geneA"])
+            artist_count = (
+                len(axes["geneA"].patches)
+                + len(axes["geneA"].lines)
+                + len(axes["geneA"].collections)
+            )
+            self.assertGreater(artist_count, 0)
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_default_kde_allows_grouped_panel_with_constant_values(self):
+        obs = pd.DataFrame({"Treatment": ["drug", "drug"]}, index=["s1", "s2"])
+        var = pd.DataFrame(index=["geneA"])
+        adata = ad.AnnData(X=np.array([[1.0], [1.0]]), obs=obs, var=var)
+
+        fig = None
+        try:
+            fig, axes = adtl.adata_histograms(
+                adata=adata,
+                var_names=["geneA"],
+                subset_obs_key="Treatment",
+                show=False,
+            )
+
+            self.assertEqual(list(axes), ["geneA"])
+            artist_count = (
+                len(axes["geneA"].patches)
+                + len(axes["geneA"].lines)
+                + len(axes["geneA"].collections)
+            )
+            self.assertGreater(artist_count, 0)
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
     def test_subset_palette_is_stable_across_panels_with_different_groups(self):
         obs = pd.DataFrame(
             {"Treatment": ["A", "B", "C", "A", "B", "C"]},
