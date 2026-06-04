@@ -48,6 +48,7 @@ def adata_histograms(
     add_zero_line: bool = True,
     add_mean_line: bool = True,
     add_mean_to_legend: bool = True,
+    highlight_negative_mean_legend: bool = True,
     bins: int | str | Sequence[float] = "auto",
     binwidth: float | None = None,
     binrange: tuple[float, float] | None = None,
@@ -210,7 +211,9 @@ adtl.adata_histograms(
 
 8. `add_mean_to_legend=True` adds mean values to the legend when mean lines are drawn and legends are enabled. In subset mode, the legend starts with `All data (mean=...)`, computed from all filtered plotted values in the panel after value filtering and before missing `subset_obs_key` labels are ignored for subgroup layers.
 
-9. Missing `subset_obs_key` values are ignored for grouped histogram layers; variables with no plottable subgroup rows get an annotated empty panel instead of stopping the full figure.
+9. `highlight_negative_mean_legend=True` renders calculated negative mean legend entries in red bold text by default. This applies to non-subset labels such as `Mean = -2`, all-data labels such as `All data (mean=-1)`, and subgroup labels such as `case (mean=-3)`. Set `highlight_negative_mean_legend=False` to keep Matplotlib's default legend text styling.
+
+10. Missing `subset_obs_key` values are ignored for grouped histogram layers; variables with no plottable subgroup rows get an annotated empty panel instead of stopping the full figure.
 
 ## Important behavior
 
