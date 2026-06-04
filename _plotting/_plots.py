@@ -545,6 +545,7 @@ def paired_datapoints(
     target_max_value: float | None = None,
     ref_min_value: float | None = None,
     ref_max_value: float | None = None,
+    bounds_fill_missing: bool = False,
     filter_vars_by_isin_lists: Mapping[str, Sequence[Any]] | None = None,
     filter_obs_by_isin_lists: Mapping[str, Sequence[Any]] | None = None,
     subset_obs_key: str | None = None,
@@ -945,9 +946,24 @@ def paired_datapoints(
                 index=pair_index,
             )
 
-    if ref_min_value is not None or ref_max_value is not None:
+    ref_bounds_requested = ref_min_value is not None or ref_max_value is not None
+    target_bounds_requested = target_min_value is not None or target_max_value is not None
+    if ref_bounds_requested or bounds_fill_missing:
+        ref_values_df = ref_values_df.apply(pd.to_numeric, errors="coerce")
+    if target_bounds_requested or bounds_fill_missing:
+        target_values_df = target_values_df.apply(pd.to_numeric, errors="coerce")
+    if bounds_fill_missing:
+        if ref_min_value is not None:
+            ref_values_df = ref_values_df.fillna(ref_min_value)
+        elif ref_max_value is not None:
+            ref_values_df = ref_values_df.fillna(ref_max_value)
+        if target_min_value is not None:
+            target_values_df = target_values_df.fillna(target_min_value)
+        elif target_max_value is not None:
+            target_values_df = target_values_df.fillna(target_max_value)
+    if ref_bounds_requested:
         ref_values_df = ref_values_df.clip(lower=ref_min_value, upper=ref_max_value)
-    if target_min_value is not None or target_max_value is not None:
+    if target_bounds_requested:
         target_values_df = target_values_df.clip(lower=target_min_value, upper=target_max_value)
 
     records: list[dict[str, Any]] = []
