@@ -220,10 +220,10 @@ fig, axes, plot_df = adtl.paired_datapoints(
 )
 ```
 
-Bounds match `ref_vs_target_adata()` semantics. `ref_min_value` and
-`ref_max_value` apply only to reference values; `target_min_value` and
-`target_max_value` apply only to target values. The bounded values are returned
-in `plot_df["value"]` and drawn in the plot.
+Bounds match `ref_vs_target_adata()` clipping and optional missing-fill
+semantics. `ref_min_value` and `ref_max_value` apply only to reference values;
+`target_min_value` and `target_max_value` apply only to target values. The
+bounded values are returned in `plot_df["value"]` and drawn in the plot.
 
 By default, bounds do not impute missing values. Set
 `bounds_fill_missing=True` to fill every missing value on the bounded side
