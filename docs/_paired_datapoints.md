@@ -43,6 +43,7 @@ def paired_datapoints(
     ref_min_value: float | None = None,
     ref_max_value: float | None = None,
     bounds_fill_missing: bool = False,
+    bounds_fill_missing_paired_only: bool = False,
     filter_vars_by_isin_lists: Mapping[str, Sequence[Any]] | None = None,
     filter_obs_by_isin_lists: Mapping[str, Sequence[Any]] | None = None,
     subset_obs_key: str | None = None,
@@ -225,10 +226,47 @@ Bounds match `ref_vs_target_adata()` semantics. `ref_min_value` and
 in `plot_df["value"]` and drawn in the plot.
 
 By default, bounds do not impute missing values. Set
-`bounds_fill_missing=True` to fill missing values before clipping and value
-filtering. For example, with `target_min_value=1`, missing target values are
-filled with `1`; with `target_max_value=10` and no target min, missing target
-values are filled with `10`.
+`bounds_fill_missing=True` to fill every missing value on the bounded side
+before clipping and value filtering. For example, with `target_min_value=1`,
+all missing target values are filled with `1`; with `target_max_value=10` and
+no target min, all missing target values are filled with `10`.
+
+Set `bounds_fill_missing_paired_only=True` to fill missing values only when the
+opposite side of the same pair and variable is present. If both missing-fill
+flags are `True`, the paired-only fill behavior is used. Numeric clipping of
+present values is unchanged.
+
+For one selected variable with `ref_min_value=2`, `target_min_value=1`, and
+`bounds_fill_missing_paired_only=True`, these rows behave as follows:
+
+| Raw reference | Raw target | Output reference | Output target | Reason |
+|---:|---:|---:|---:|---|
+| `10` | `NaN` | `10` | `1` | Missing target is filled because reference is present. |
+| `NaN` | `NaN` | `NaN` | `NaN` | Both sides are missing, so neither side is filled. |
+| `NaN` | `20` | `2` | `20` | Missing reference is filled because target is present. |
+| `0.5` | `0.25` | `2` | `1` | Present values are still clipped to their side-specific bounds. |
+
+The paired-only rule is useful when a missing value should be drawn at a limit
+of detection only if the paired observation exists on the other side:
+
+```python
+fig, axes, plot_df = adtl.paired_datapoints(
+    adata=adata,
+    var_names=["IL6"],
+    pair_by_key="Subject_ID",
+    ref_min_value=2,
+    target_min_value=1,
+    bounds_fill_missing_paired_only=True,
+    dropna=False,
+    show=False,
+)
+```
+
+Compared with `bounds_fill_missing=True`, the paired-only option preserves
+complete missing pairs as missing in `plot_df["value"]`. With the same bounds,
+`bounds_fill_missing=True` would fill a pair where both reference and target
+are missing to reference `2` and target `1`; `bounds_fill_missing_paired_only`
+leaves both values as `NaN`.
 
 ## `ref_vs_target_adata()` source values
 
