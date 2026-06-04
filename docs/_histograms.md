@@ -38,7 +38,7 @@ def adata_histograms(
     subset_order: Sequence[Any] | None = None,
     palette: Sequence[Any] | str | None = palettes.tol_colors,
     subset_palette: Sequence[Any] | str | None = None,
-    show_all_obs_hist: bool = False,
+    show_all_obs_hist: bool = True,
     all_obs_color: Any = "0.7",
     all_obs_alpha: float = 0.20,
     ncols: int = 3,
@@ -200,15 +200,15 @@ adtl.adata_histograms(
 
 3. `subset_obs_key="column"` draws overlapping histograms by observation metadata group after observation filtering.
 
-4. `show_all_obs_hist=True` adds a neutral non-subsetted all-observation density histogram behind the subset histograms for each variable.
+4. In subset mode, `show_all_obs_hist=True` by default adds a neutral non-subsetted all-observation histogram behind the subset histograms for each variable; set `show_all_obs_hist=False` to opt out.
 
 5. `palette` controls subgroup colors by default; `subset_palette` overrides those colors when provided.
 
 6. `add_zero_line=True` draws a red dotted vertical reference line at `x=0`.
 
-7. `add_mean_line=True` draws dashed vertical mean lines for the overall histogram or each subgroup histogram.
+7. `add_mean_line=True` draws dashed vertical mean lines for the overall histogram, the all-data subset overlay, or each subgroup histogram.
 
-8. `add_mean_to_legend=True` adds the mean value to the legend when a mean line is drawn and legends are enabled.
+8. `add_mean_to_legend=True` adds mean values to the legend when mean lines are drawn and legends are enabled. In subset mode, the legend starts with `All data (mean=...)`, computed from all filtered plotted values in the panel after value filtering and before missing `subset_obs_key` labels are ignored for subgroup layers.
 
 9. Missing `subset_obs_key` values are ignored for grouped histogram layers; variables with no plottable subgroup rows get an annotated empty panel instead of stopping the full figure.
 

@@ -61,7 +61,7 @@ def adata_histograms(
     subset_order: Sequence[Any] | None = None,
     palette: Sequence[Any] | str | None = palettes.tol_colors,
     subset_palette: Sequence[Any] | str | None = None,
-    show_all_obs_hist: bool = False,
+    show_all_obs_hist: bool = True,
     all_obs_color: Any = "0.7",
     all_obs_alpha: float = 0.20,
     ncols: int = 3,
@@ -511,7 +511,9 @@ def adata_histograms(
         plot_values = plot_df["value"].dropna()
         plot_supports_kde = len(plot_values) > 1 and plot_values.nunique() > 1
 
-        if has_obs_groups and show_all_obs_hist and not plot_df.empty:
+        all_data_mean_label = None
+        all_data_mean_handle = None
+        if has_obs_groups and show_all_obs_hist and not plot_values.empty:
             all_obs_hist_kwargs = dict(hist_kwargs)
             if not plot_supports_kde:
                 all_obs_hist_kwargs["kde"] = False
@@ -524,6 +526,16 @@ def adata_histograms(
                 legend=False,
                 **all_obs_hist_kwargs,
             )
+            if add_mean_line:
+                all_data_mean = plot_values.mean()
+                all_data_mean_label = f"All data (mean={all_data_mean:.3g})"
+                all_data_mean_handle = axes.axvline(
+                    all_data_mean,
+                    color=all_obs_color,
+                    linestyle="--",
+                    linewidth=1.5,
+                    label="_nolegend_",
+                )
 
         plot_hist_kwargs = dict(hist_kwargs)
         if alpha_to_use is not None:
@@ -536,15 +548,17 @@ def adata_histograms(
             grouped_values = grouped_plot_df["value"].dropna()
             if len(grouped_values) <= 1 or grouped_values.nunique() <= 1:
                 plot_hist_kwargs["kde"] = False
+            subset_mean_labels: dict[str, str] = {}
             if grouped_plot_df.empty or not subset_hue_order:
-                axes.text(
-                    0.5,
-                    0.5,
-                    f"No non-missing {subset_obs_key} groups",
-                    ha="center",
-                    va="center",
-                    transform=axes.transAxes,
-                )
+                if all_data_mean_handle is None:
+                    axes.text(
+                        0.5,
+                        0.5,
+                        f"No non-missing {subset_obs_key} groups",
+                        ha="center",
+                        va="center",
+                        transform=axes.transAxes,
+                    )
             else:
                 sns.histplot(
                     data=grouped_plot_df,
@@ -557,7 +571,6 @@ def adata_histograms(
                     **plot_hist_kwargs,
                 )
                 if add_mean_line:
-                    subset_mean_labels: dict[str, str] = {}
                     for subset_value in subset_hue_order:
                         subgroup_values = grouped_plot_df.loc[
                             grouped_plot_df[subset_obs_key] == subset_value,
@@ -580,12 +593,32 @@ def adata_histograms(
                         subset_mean_labels[str(subset_value)] = (
                             f"{subset_value} (mean={subgroup_mean:.3g})"
                         )
-                    if add_mean_to_legend and legend and axes.get_legend() is not None:
-                        legend_obj = axes.get_legend()
-                        for legend_text in legend_obj.get_texts():
-                            legend_label = legend_text.get_text()
-                            if legend_label in subset_mean_labels:
-                                legend_text.set_text(subset_mean_labels[legend_label])
+            if add_mean_line and add_mean_to_legend and legend:
+                legend_obj = axes.get_legend()
+                if legend_obj is not None:
+                    legend_handles = list(legend_obj.legend_handles)
+                    legend_labels = []
+                    for legend_text in legend_obj.get_texts():
+                        legend_label = legend_text.get_text()
+                        legend_labels.append(subset_mean_labels.get(legend_label, legend_label))
+                    if all_data_mean_handle is not None and all_data_mean_label is not None:
+                        legend_handles = [all_data_mean_handle] + legend_handles
+                        legend_labels = [all_data_mean_label] + legend_labels
+                        legend_obj.remove()
+                        axes.legend(
+                            handles=legend_handles,
+                            labels=legend_labels,
+                            title=subset_obs_key,
+                        )
+                    else:
+                        for legend_text, legend_label in zip(legend_obj.get_texts(), legend_labels):
+                            legend_text.set_text(legend_label)
+                elif all_data_mean_handle is not None and all_data_mean_label is not None:
+                    axes.legend(
+                        handles=[all_data_mean_handle],
+                        labels=[all_data_mean_label],
+                        title=subset_obs_key,
+                    )
         else:
             if plot_df.empty:
                 axes.text(
