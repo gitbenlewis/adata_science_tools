@@ -12,6 +12,7 @@ This directory holds module-level documentation for public `adata_science_tools`
 - [`_histograms.md`](_histograms.md): AnnData and wide-DataFrame histogram plotting with obs/var filters and subgroup overlays.
 - [`_metab_IO.md`](_metab_IO.md): Metabolon Excel ingestion, layer creation, optional metadata merge, and dataset export behavior.
 - [`_model_fit.md`](_model_fit.md): OLS and MixedLM model-fitting APIs, summary-table schemas, filtering support, and model-spec sidecar behavior.
+- [`_paired_datapoints.md`](_paired_datapoints.md): paired ref/target or Pre/Post datapoint plots with obs/var filters, grouping, and a synthetic example image.
 - [`_plots.md`](_plots.md): volcano plots, QQ plots for p-values, and paired time-series datapoint plots.
 - [`_plots_depreciated.md`](_plots_depreciated.md): legacy plotting APIs kept for backward compatibility, with preferred modern replacements.
 - [`_preprocessing.md`](_preprocessing.md): row-wise AnnData preprocessing helpers, including paired target-vs-reference transforms.
@@ -26,4 +27,4 @@ This directory holds module-level documentation for public `adata_science_tools`
 
 - These pages document the current implementation in `adata_science_tools`, not an earlier design draft.
 - The first source of truth for behavior is the code in `_tools/`, `_io/`, `_simulate_data/`, and the tests in `tests/`.
-- Within `_plotting`, direct regression coverage currently exists for `_corr_dotplots.py` and `_histograms.py`; the other plotting pages are based on current code and repo example usage.
+- Within `_plotting`, direct regression coverage currently exists for `_corr_dotplots.py`, `_histograms.py`, and `paired_datapoints()`; the other plotting pages are based on current code and repo example usage.
