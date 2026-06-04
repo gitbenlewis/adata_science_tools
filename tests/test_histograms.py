@@ -93,6 +93,7 @@ class AdataHistogramsTests(unittest.TestCase):
             adtl.palettes.tol_colors,
         )
         self.assertIsNone(signature.parameters["subset_palette"].default)
+        self.assertIs(signature.parameters["show_all_obs_hist"].default, True)
         self.assertIs(signature.parameters["add_zero_line"].default, True)
         self.assertIs(signature.parameters["add_mean_line"].default, True)
         self.assertIs(signature.parameters["add_mean_to_legend"].default, True)
@@ -157,7 +158,6 @@ class AdataHistogramsTests(unittest.TestCase):
                 adata=self.make_adata(),
                 var_names=["geneA"],
                 subset_obs_key="condition",
-                show_all_obs_hist=True,
                 bins=2,
                 kde=False,
                 show=False,
@@ -167,6 +167,30 @@ class AdataHistogramsTests(unittest.TestCase):
             legend = axes["geneA"].get_legend()
             self.assertIsNotNone(legend)
             self.assertEqual(legend.get_title().get_text(), "condition")
+            self.assertEqual(
+                [text.get_text() for text in legend.get_texts()],
+                ["All data (mean=2.5)", "case (mean=2)", "control (mean=3)"],
+            )
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_show_all_obs_hist_false_suppresses_all_data_mean_legend_entry(self):
+        fig = None
+        try:
+            fig, axes = adtl.adata_histograms(
+                adata=self.make_adata(),
+                var_names=["geneA"],
+                subset_obs_key="condition",
+                show_all_obs_hist=False,
+                bins=2,
+                kde=False,
+                show=False,
+            )
+            fig.canvas.draw()
+
+            legend = axes["geneA"].get_legend()
+            self.assertIsNotNone(legend)
             self.assertEqual(
                 [text.get_text() for text in legend.get_texts()],
                 ["case (mean=2)", "control (mean=3)"],
@@ -395,6 +419,7 @@ class AdataHistogramsTests(unittest.TestCase):
                 color_map = {
                     label.split(" (mean=")[0]: color
                     for label, color in zip(labels, colors)
+                    if not label.startswith("All data")
                 }
                 self.assertEqual(color_map["A"], to_hex(adtl.palettes.tol_colors[0]))
                 self.assertEqual(color_map["B"], to_hex(adtl.palettes.tol_colors[1]))
@@ -419,12 +444,12 @@ class AdataHistogramsTests(unittest.TestCase):
             fig.canvas.draw()
 
             line_x_positions = [line.get_xdata()[0] for line in axes["geneA"].lines]
-            self.assertEqual(line_x_positions, [2.0, 3.0])
+            self.assertEqual(line_x_positions, [2.5, 2.0, 3.0])
             legend = axes["geneA"].get_legend()
             self.assertIsNotNone(legend)
             self.assertEqual(
                 [text.get_text() for text in legend.get_texts()],
-                ["case (mean=2)", "control (mean=3)"],
+                ["All data (mean=2.5)", "case (mean=2)", "control (mean=3)"],
             )
         finally:
             if fig is not None:
@@ -451,7 +476,10 @@ class AdataHistogramsTests(unittest.TestCase):
             legend_palette = axes_palette["geneA"].get_legend()
             self.assertIsNotNone(legend_palette)
             colors = []
-            for handle in legend_palette.legend_handles:
+            labels = [text.get_text() for text in legend_palette.get_texts()]
+            for label, handle in zip(labels, legend_palette.legend_handles):
+                if label.startswith("All data"):
+                    continue
                 if hasattr(handle, "get_facecolor"):
                     colors.append(to_hex(handle.get_facecolor()))
                 else:
@@ -472,7 +500,10 @@ class AdataHistogramsTests(unittest.TestCase):
             legend_override = axes_override["geneA"].get_legend()
             self.assertIsNotNone(legend_override)
             colors = []
-            for handle in legend_override.legend_handles:
+            labels = [text.get_text() for text in legend_override.get_texts()]
+            for label, handle in zip(labels, legend_override.legend_handles):
+                if label.startswith("All data"):
+                    continue
                 if hasattr(handle, "get_facecolor"):
                     colors.append(to_hex(handle.get_facecolor()))
                 else:
@@ -538,7 +569,7 @@ class AdataHistogramsTests(unittest.TestCase):
                 show=False,
             )
 
-    def test_subset_obs_key_allows_missing_groups_without_stopping_plot(self):
+    def test_subset_obs_key_missing_groups_show_all_data_summary(self):
         adata = self.make_adata()
         adata.obs["Treatment"] = [None, None, None, None]
 
@@ -552,7 +583,14 @@ class AdataHistogramsTests(unittest.TestCase):
             )
 
             self.assertEqual(list(axes), ["geneA"])
-            self.assertIn("No non-missing Treatment groups", axes["geneA"].texts[0].get_text())
+            fig.canvas.draw()
+            legend = axes["geneA"].get_legend()
+            self.assertIsNotNone(legend)
+            self.assertEqual(
+                [text.get_text() for text in legend.get_texts()],
+                ["All data (mean=2.5)"],
+            )
+            self.assertEqual(len(axes["geneA"].texts), 0)
         finally:
             if fig is not None:
                 plt.close(fig)
@@ -631,8 +669,8 @@ class AdataHistogramsTests(unittest.TestCase):
                 )
 
             self.assertEqual(list(axes), ["all"])
-            self.assertEqual(captured_calls[0]["hue"], "condition")
-            plot_df = captured_calls[0]["data"]
+            grouped_call = next(call for call in captured_calls if call.get("hue") == "condition")
+            plot_df = grouped_call["data"]
             self.assertEqual(
                 plot_df["condition"].tolist(),
                 ["case", "case", "control", "control", "case", "case", "control", "control"],
@@ -977,9 +1015,9 @@ class AdataHistogramsTests(unittest.TestCase):
                     )
 
                 self.assertEqual(list(axes), ["GENE_A"])
-                self.assertEqual(captured_calls[0]["hue"], "Treatment")
-                self.assertEqual(captured_calls[0]["hue_order"], ["drug", "control"])
-                self.assertIn("Treatment", captured_calls[0]["data"].columns)
+                grouped_call = next(call for call in captured_calls if call.get("hue") == "Treatment")
+                self.assertEqual(grouped_call["hue_order"], ["drug", "control"])
+                self.assertIn("Treatment", grouped_call["data"].columns)
             finally:
                 if fig is not None:
                     plt.close(fig)
