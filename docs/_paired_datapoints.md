@@ -38,6 +38,10 @@ def paired_datapoints(
     subject_col: str = "Subject_ID",
     ref_values_obsm_key: str | None = None,
     target_values_obsm_key: str | None = None,
+    target_min_value: float | None = None,
+    target_max_value: float | None = None,
+    ref_min_value: float | None = None,
+    ref_max_value: float | None = None,
     filter_vars_by_isin_lists: Mapping[str, Sequence[Any]] | None = None,
     filter_obs_by_isin_lists: Mapping[str, Sequence[Any]] | None = None,
     subset_obs_key: str | None = None,
@@ -196,6 +200,27 @@ fig, axes, plot_df = adtl.paired_datapoints(
 4. Incomplete ref-only or target-only pairs are dropped and logged as warnings.
 
 5. If no complete pairs remain, the function raises `ValueError`.
+
+## Bounds
+
+Use side-specific bounds to clamp values before stacking, grouping, filtering,
+and plotting:
+
+```python
+fig, axes, plot_df = adtl.paired_datapoints(
+    adata=adata,
+    var_names=["IL6"],
+    pair_by_key="Subject_ID",
+    ref_min_value=0.5,
+    target_min_value=0.5,
+    show=False,
+)
+```
+
+Bounds match `ref_vs_target_adata()` semantics. `ref_min_value` and
+`ref_max_value` apply only to reference values; `target_min_value` and
+`target_max_value` apply only to target values. The bounded values are returned
+in `plot_df["value"]` and drawn in the plot.
 
 ## `ref_vs_target_adata()` source values
 

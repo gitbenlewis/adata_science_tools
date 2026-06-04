@@ -170,6 +170,61 @@ class PairedDatapointsTests(unittest.TestCase):
             if fig is not None:
                 plt.close(fig)
 
+    def test_bounds_apply_to_ref_and_target_values(self):
+        fig = None
+        try:
+            fig, _, plot_df = adtl.paired_datapoints(
+                adata=self.make_adata(),
+                var_names=["A_v1"],
+                pair_by_key="Subject_ID",
+                ref_min_value=2.0,
+                ref_max_value=4.0,
+                target_min_value=3.0,
+                target_max_value=5.0,
+                show=False,
+            )
+
+            self.assertEqual(plot_df.loc[plot_df["x_label"] == "Pre", "value"].tolist(), [2.0, 3.0, 4.0])
+            self.assertEqual(plot_df.loc[plot_df["x_label"] == "Post", "value"].tolist(), [3.0, 4.0, 5.0])
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_bounds_apply_to_source_obsm_values(self):
+        obs = pd.DataFrame({"Subject_ID": ["S1", "S2"]}, index=["S1", "S2"])
+        var = pd.DataFrame(index=["A_v1"])
+        adata = ad.AnnData(X=np.zeros((2, 1)), obs=obs, var=var)
+        adata.uns["ref_vs_target_adata"] = {"pair_by_key": "Subject_ID"}
+        adata.obsm["pre_values"] = pd.DataFrame(
+            [[0.1], [10.0]],
+            index=adata.obs_names,
+            columns=adata.var_names,
+        )
+        adata.obsm["post_values"] = pd.DataFrame(
+            [[0.2], [20.0]],
+            index=adata.obs_names,
+            columns=adata.var_names,
+        )
+
+        fig = None
+        try:
+            fig, _, plot_df = adtl.paired_datapoints(
+                adata=adata,
+                var_names=["A_v1"],
+                pair_by_key="Subject_ID",
+                ref_min_value=1.0,
+                ref_max_value=5.0,
+                target_min_value=2.0,
+                target_max_value=15.0,
+                show=False,
+            )
+
+            self.assertEqual(plot_df.loc[plot_df["x_label"] == "Pre", "value"].tolist(), [1.0, 5.0])
+            self.assertEqual(plot_df.loc[plot_df["x_label"] == "Post", "value"].tolist(), [2.0, 15.0])
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
     def test_duplicate_pairs_raise_and_incomplete_pairs_log_and_drop(self):
         duplicate_adata = self.make_adata()
         duplicate_adata.obs.loc["s3_pre", "Subject_ID"] = "S1"
