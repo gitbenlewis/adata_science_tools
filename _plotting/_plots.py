@@ -541,6 +541,10 @@ def paired_datapoints(
     subject_col: str = "Subject_ID",
     ref_values_obsm_key: str | None = None,
     target_values_obsm_key: str | None = None,
+    target_min_value: float | None = None,
+    target_max_value: float | None = None,
+    ref_min_value: float | None = None,
+    ref_max_value: float | None = None,
     filter_vars_by_isin_lists: Mapping[str, Sequence[Any]] | None = None,
     filter_obs_by_isin_lists: Mapping[str, Sequence[Any]] | None = None,
     subset_obs_key: str | None = None,
@@ -940,6 +944,11 @@ def paired_datapoints(
                 target_obs.loc[target_obs_index, subset_obs_key].to_numpy(),
                 index=pair_index,
             )
+
+    if ref_min_value is not None or ref_max_value is not None:
+        ref_values_df = ref_values_df.clip(lower=ref_min_value, upper=ref_max_value)
+    if target_min_value is not None or target_max_value is not None:
+        target_values_df = target_values_df.clip(lower=target_min_value, upper=target_max_value)
 
     records: list[dict[str, Any]] = []
     ref_label = str(groupby_key_ref_value)
