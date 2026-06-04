@@ -204,7 +204,8 @@ fig, axes, plot_df = adtl.paired_datapoints(
 
 2. Explicit `ref_values_obsm_key` and `target_values_obsm_key` take priority.
 
-3. Without explicit keys, the function checks `adata.obsm["pre"]` and
+3. Without explicit keys, the function checks `adata.obsm["pre_values"]` and
+   `adata.obsm["post_values"]`, then `adata.obsm["pre"]` and
    `adata.obsm["post"]`, then `adata.obsm["ref_values"]` and
    `adata.obsm["target_values"]`.
 

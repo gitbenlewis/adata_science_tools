@@ -126,8 +126,8 @@ def ref_vs_target_adata(
     logger = params.pop("logger", None)
     log_level = params.pop("log_level", "INFO")
     save_source_values_obsm = params.pop("save_source_values_obsm", False)
-    target_values_obsm_key = params.pop("target_values_obsm_key", "target_values")
-    ref_values_obsm_key = params.pop("ref_values_obsm_key", "ref_values")
+    target_values_obsm_key = params.pop("target_values_obsm_key", "post_values")
+    ref_values_obsm_key = params.pop("ref_values_obsm_key", "pre_values")
 
     if params and not allow_unused_params:
         raise ValueError(f"Unused params: {sorted(params)}")
