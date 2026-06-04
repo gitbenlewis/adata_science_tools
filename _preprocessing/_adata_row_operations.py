@@ -120,6 +120,8 @@ def ref_vs_target_adata(
     target_max_value = params.pop("target_max_value", None)
     ref_min_value = params.pop("ref_min_value", None)
     ref_max_value = params.pop("ref_max_value", None)
+    bounds_fill_missing = params.pop("bounds_fill_missing", False)
+    bounds_fill_missing_paired_only = params.pop("bounds_fill_missing_paired_only", False)
     merge_shared_obs_cols = params.pop("merge_shared_obs_cols", False)
     return_df = params.pop("return_df", False)
     allow_unused_params = params.pop("allow_unused_params", False)
@@ -246,6 +248,7 @@ def ref_vs_target_adata(
         value is not None
         for value in (target_min_value, target_max_value, ref_min_value, ref_max_value)
     )
+    bounds_missing_requested = bounds_requested and (bounds_fill_missing or bounds_fill_missing_paired_only)
 
     def _apply_bounds(value, min_value, max_value):
         if min_value is None and max_value is None:
@@ -267,6 +270,23 @@ def ref_vs_target_adata(
         target_values = matrix[target_positions, :].copy()
         ref_values = matrix[ref_positions, :].copy()
         if bounds_requested:
+            if bounds_missing_requested:
+                target_values = _as_dense_array(target_values).astype(float, copy=True)
+                ref_values = _as_dense_array(ref_values).astype(float, copy=True)
+                target_missing_fill_value = target_min_value if target_min_value is not None else target_max_value
+                ref_missing_fill_value = ref_min_value if ref_min_value is not None else ref_max_value
+                if bounds_fill_missing_paired_only:
+                    target_missing_mask = np.isnan(target_values) & ~np.isnan(ref_values)
+                    ref_missing_mask = np.isnan(ref_values) & ~np.isnan(target_values)
+                    if target_missing_fill_value is not None:
+                        target_values[target_missing_mask] = target_missing_fill_value
+                    if ref_missing_fill_value is not None:
+                        ref_values[ref_missing_mask] = ref_missing_fill_value
+                else:
+                    if target_missing_fill_value is not None:
+                        target_values[np.isnan(target_values)] = target_missing_fill_value
+                    if ref_missing_fill_value is not None:
+                        ref_values[np.isnan(ref_values)] = ref_missing_fill_value
             target_values = _apply_bounds(target_values, target_min_value, target_max_value)
             ref_values = _apply_bounds(ref_values, ref_min_value, ref_max_value)
 
@@ -370,6 +390,8 @@ def ref_vs_target_adata(
         "target_max_value": target_max_value,
         "ref_min_value": ref_min_value,
         "ref_max_value": ref_max_value,
+        "bounds_fill_missing": bounds_fill_missing,
+        "bounds_fill_missing_paired_only": bounds_fill_missing_paired_only,
         "merge_shared_obs_cols": merge_shared_obs_cols,
         "n_target_obs": int(target_mask.sum()),
         "n_ref_obs": int(ref_mask.sum()),

@@ -62,6 +62,8 @@ result = adtl.ref_vs_target_adata(
     target_max_value=None,
     ref_min_value=None,
     ref_max_value=None,
+    bounds_fill_missing=False,
+    bounds_fill_missing_paired_only=False,
     merge_shared_obs_cols=False,
     return_df=False,
     allow_unused_params=False,
@@ -168,9 +170,31 @@ computed:
 - `target_max_value`
 - `ref_min_value`
 - `ref_max_value`
+- `bounds_fill_missing`
+- `bounds_fill_missing_paired_only`
 
 For example, `target_min_value=0.5` treats any selected target value below `0.5`
 as `0.5`. Bounds are clamping controls, not filters.
+
+By default, bounds do not impute missing values. Set
+`bounds_fill_missing=True` to fill every missing value on each bounded side
+before clipping and computation. The fill value uses side-specific precedence:
+the side's min value when present, otherwise the side's max value.
+
+Set `bounds_fill_missing_paired_only=True` to fill missing values only when the
+opposite side of the same pair and variable is present. If both missing-fill
+flags are `True`, paired-only fill behavior is used. Numeric clipping of
+present values is unchanged.
+
+For one variable with `ref_min_value=2`, `target_min_value=1`, and
+`bounds_fill_missing_paired_only=True`:
+
+| Raw reference | Raw target | Bounded reference | Bounded target | Reason |
+|---:|---:|---:|---:|---|
+| `10` | `NaN` | `10` | `1` | Missing target is filled because reference is present. |
+| `NaN` | `NaN` | `NaN` | `NaN` | Both sides are missing, so neither side is filled. |
+| `NaN` | `20` | `2` | `20` | Missing reference is filled because target is present. |
+| `0.5` | `0.25` | `2` | `1` | Present values are still clipped to side-specific bounds. |
 
 ### Returned metadata
 
