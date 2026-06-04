@@ -22,6 +22,22 @@ adtl.save_dataset(
 )
 ```
 
+To skip `.obsm` CSV exports or save only selected `.obsm` keys:
+
+```python
+adtl.save_dataset(
+    adata,
+    "results/corrected_dataset.h5ad",
+    save_obsm=False,
+)
+
+adtl.save_dataset(
+    adata,
+    "results/corrected_dataset.h5ad",
+    obsm_keys=["ref_values", "target_values"],
+)
+```
+
 ### Output files
 
 If the output path is `results/corrected_dataset.h5ad`, the helper writes:
@@ -31,6 +47,7 @@ If the output path is `results/corrected_dataset.h5ad`, the helper writes:
 - `results/corrected_dataset.var.csv`
 - `results/corrected_dataset.X.csv`
 - one CSV per layer, named like `results/corrected_dataset.layer.<layer_name>.csv`
+- one CSV per saved `.obsm` table, named like `results/corrected_dataset.obsm.<obsm_key>.csv`
 
 If the path does not end in `.h5ad`, the helper treats it as the basename and still writes the same set of files with `.h5ad` and CSV suffixes.
 
@@ -40,7 +57,42 @@ If the path does not end in `.h5ad`, the helper treats it as the basename and st
 - `adata.X` is converted to dense before writing the `.X.csv` file if needed.
 - Each layer is also written to CSV.
 - Layer names containing `/` are normalized to `_` in the layer CSV filenames.
+- By default, each 2D `.obsm` value aligned to observations is written to CSV.
+- `.obsm` names containing `/` are normalized to `_` in CSV filenames.
+- Requested missing `.obsm` keys raise `KeyError`.
+- Sanitized `.obsm` filename collisions raise `ValueError` before files are written.
+- Unsupported `.obsm` values, such as arrays that are not 2D, are logged and skipped.
 - The helper always writes the `.h5ad` plus CSV bundle together. There is no flag to save only one of those outputs.
+
+### `.obsm` table exports
+
+For `.obsm` entries that are already `pandas.DataFrame` objects,
+`save_dataset(...)` preserves the DataFrame index and columns.
+
+For array-like or sparse 2D `.obsm` entries, the helper uses `adata.obs_names`
+as the row index. If the number of `.obsm` columns equals `adata.n_vars`, it
+uses `adata.var_names` as column labels; otherwise it writes deterministic
+columns named `dim_0`, `dim_1`, and so on.
+
+This is useful for source-value tables created by
+`ref_vs_target_adata(save_source_values_obsm=True)`, which stores paired
+reference and target source matrices in `.obsm["ref_values"]` and
+`.obsm["target_values"]` by default:
+
+```python
+post_minus_pre = adtl.ref_vs_target_adata(
+    adata,
+    pair_by_key="Subject_ID",
+    save_source_values_obsm=True,
+)
+
+adtl.save_dataset(post_minus_pre, "results/post_minus_pre.h5ad")
+```
+
+This writes:
+
+- `results/post_minus_pre.obsm.ref_values.csv`
+- `results/post_minus_pre.obsm.target_values.csv`
 
 ## `make_df_obs_adataX`
 

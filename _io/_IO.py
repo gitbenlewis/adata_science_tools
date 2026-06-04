@@ -1,9 +1,10 @@
 
 import logging
 from pathlib import Path
-from typing import List, Optional, Union
+from collections.abc import Sequence
 
 import anndata as ad
+import numpy as np
 import pandas as pd
 
 
@@ -11,6 +12,8 @@ def save_dataset(
     _adata: ad.AnnData,
     output_path: str | Path,
     logger: logging.Logger | None = None,
+    save_obsm: bool = True,
+    obsm_keys: Sequence[str] | None = None,
 ) -> None:
     """Save a parsed dataset as h5ad plus CSV exports."""
     logger = logger or logging.getLogger(__name__)
@@ -21,6 +24,32 @@ def save_dataset(
     obs_csv_path = Path(f"{output_base_path}.obs.csv")
     var_csv_path = Path(f"{output_base_path}.var.csv")
     x_csv_path = Path(f"{output_base_path}.X.csv")
+    if save_obsm:
+        if obsm_keys is None:
+            keys_to_save = list(_adata.obsm.keys())
+        elif isinstance(obsm_keys, (str, bytes)):
+            keys_to_save = [str(obsm_keys)]
+        else:
+            keys_to_save = list(obsm_keys)
+        missing_obsm_keys = [key for key in keys_to_save if key not in _adata.obsm]
+        if missing_obsm_keys:
+            raise KeyError(f"obsm key(s) not found: {missing_obsm_keys}")
+
+        safe_obsm_names = {key: str(key).replace("/", "_") for key in keys_to_save}
+        safe_name_counts = {}
+        for safe_name in safe_obsm_names.values():
+            safe_name_counts[safe_name] = safe_name_counts.get(safe_name, 0) + 1
+        duplicated_safe_names = sorted(
+            safe_name
+            for safe_name, count in safe_name_counts.items()
+            if count > 1
+        )
+        if duplicated_safe_names:
+            raise ValueError(f"Sanitized obsm filenames collide: {duplicated_safe_names}")
+    else:
+        keys_to_save = []
+        safe_obsm_names = {}
+
     logger.info("Saving adata to %s", h5ad_path)
     _adata.write_h5ad(h5ad_path)
     logger.info("Saving adata.obs to %s", obs_csv_path)
@@ -36,6 +65,53 @@ def save_dataset(
         logger.info("Saving adata.layers['%s'] to %s", layer_name, layer_csv_path)
         layer_values = layer_data.toarray() if hasattr(layer_data, "toarray") else layer_data
         pd.DataFrame(layer_values, index=_adata.obs_names, columns=_adata.var_names).to_csv(layer_csv_path)
+    if save_obsm:
+        for obsm_key in keys_to_save:
+            obsm_value = _adata.obsm[obsm_key]
+            if isinstance(obsm_value, pd.DataFrame):
+                obsm_df = obsm_value
+            else:
+                obsm_values = obsm_value.toarray() if hasattr(obsm_value, "toarray") else np.asarray(obsm_value)
+                if obsm_values.ndim != 2:
+                    logger.warning(
+                        "Skipping adata.obsm['%s'] because it is not 2D; shape=%s",
+                        obsm_key,
+                        getattr(obsm_values, "shape", None),
+                    )
+                    continue
+                if obsm_values.shape[0] != _adata.n_obs:
+                    logger.warning(
+                        "Skipping adata.obsm['%s'] because row count %d does not match adata.n_obs %d",
+                        obsm_key,
+                        obsm_values.shape[0],
+                        _adata.n_obs,
+                    )
+                    continue
+                if obsm_values.shape[1] == _adata.n_vars:
+                    obsm_columns = _adata.var_names
+                else:
+                    obsm_columns = [f"dim_{idx}" for idx in range(obsm_values.shape[1])]
+                obsm_df = pd.DataFrame(obsm_values, index=_adata.obs_names, columns=obsm_columns)
+
+            if obsm_df.ndim != 2:
+                logger.warning(
+                    "Skipping adata.obsm['%s'] because it is not 2D; shape=%s",
+                    obsm_key,
+                    getattr(obsm_df, "shape", None),
+                )
+                continue
+            if obsm_df.shape[0] != _adata.n_obs:
+                logger.warning(
+                    "Skipping adata.obsm['%s'] because row count %d does not match adata.n_obs %d",
+                    obsm_key,
+                    obsm_df.shape[0],
+                    _adata.n_obs,
+                )
+                continue
+
+            obsm_csv_path = Path(f"{output_base_path}.obsm.{safe_obsm_names[obsm_key]}.csv")
+            logger.info("Saving adata.obsm['%s'] to %s", obsm_key, obsm_csv_path)
+            obsm_df.to_csv(obsm_csv_path)
     logger.info("Saved dataset to directory: %s", h5ad_path.parent)
     logger.info("Saved dataset with base filename: %s", h5ad_path.stem)
 

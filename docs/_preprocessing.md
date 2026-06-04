@@ -215,6 +215,11 @@ observations and variables:
 When bounds are requested, these source-value tables reflect the bounded values
 used for computation.
 
+`adtl.save_dataset(result, "path/to/result.h5ad")` exports these tables by
+default as `.obsm.<key>.csv` files, for example
+`result.obsm.ref_values.csv` and `result.obsm.target_values.csv` when the
+default keys are used.
+
 ### DataFrame return
 
 Set `return_df=True` to return both the result object and a feature matrix
