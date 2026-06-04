@@ -546,6 +546,7 @@ def paired_datapoints(
     ref_min_value: float | None = None,
     ref_max_value: float | None = None,
     bounds_fill_missing: bool = False,
+    bounds_fill_missing_paired_only: bool = False,
     filter_vars_by_isin_lists: Mapping[str, Sequence[Any]] | None = None,
     filter_obs_by_isin_lists: Mapping[str, Sequence[Any]] | None = None,
     subset_obs_key: str | None = None,
@@ -948,11 +949,21 @@ def paired_datapoints(
 
     ref_bounds_requested = ref_min_value is not None or ref_max_value is not None
     target_bounds_requested = target_min_value is not None or target_max_value is not None
-    if ref_bounds_requested or bounds_fill_missing:
+    bounds_missing_requested = bounds_fill_missing or bounds_fill_missing_paired_only
+    if ref_bounds_requested or bounds_missing_requested:
         ref_values_df = ref_values_df.apply(pd.to_numeric, errors="coerce")
-    if target_bounds_requested or bounds_fill_missing:
+    if target_bounds_requested or bounds_missing_requested:
         target_values_df = target_values_df.apply(pd.to_numeric, errors="coerce")
-    if bounds_fill_missing:
+    if bounds_fill_missing_paired_only:
+        ref_missing_fill_value = ref_min_value if ref_min_value is not None else ref_max_value
+        target_missing_fill_value = target_min_value if target_min_value is not None else target_max_value
+        ref_missing_mask = ref_values_df.isna() & target_values_df.notna()
+        target_missing_mask = target_values_df.isna() & ref_values_df.notna()
+        if ref_missing_fill_value is not None:
+            ref_values_df = ref_values_df.mask(ref_missing_mask, ref_missing_fill_value)
+        if target_missing_fill_value is not None:
+            target_values_df = target_values_df.mask(target_missing_mask, target_missing_fill_value)
+    elif bounds_fill_missing:
         if ref_min_value is not None:
             ref_values_df = ref_values_df.fillna(ref_min_value)
         elif ref_max_value is not None:
