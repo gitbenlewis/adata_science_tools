@@ -147,11 +147,11 @@ class SaveDatasetTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             adtl.save_dataset(result, Path(tmpdir) / "post_minus_pre")
 
-            ref_values = pd.read_csv(Path(tmpdir) / "post_minus_pre.obsm.ref_values.csv", index_col=0)
-            target_values = pd.read_csv(Path(tmpdir) / "post_minus_pre.obsm.target_values.csv", index_col=0)
+            ref_values = pd.read_csv(Path(tmpdir) / "post_minus_pre.obsm.pre_values.csv", index_col=0)
+            target_values = pd.read_csv(Path(tmpdir) / "post_minus_pre.obsm.post_values.csv", index_col=0)
 
-            assert_frame_equal(ref_values, result.obsm["ref_values"])
-            assert_frame_equal(target_values, result.obsm["target_values"])
+            assert_frame_equal(ref_values, result.obsm["pre_values"])
+            assert_frame_equal(target_values, result.obsm["post_values"])
 
 
 if __name__ == "__main__":

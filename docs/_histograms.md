@@ -172,7 +172,7 @@ adtl.adata_histograms(
     var_names=["GENE_A"],
     collapse_mode="aggregate",
     collapse_func="select_max_ref_value",
-    ref_values_obsm_key="ref_values",
+    ref_values_obsm_key="pre_values",
     subset_obs_key="Treatment",
     sharex=True,
     xlims=[-2, 2],

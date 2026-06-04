@@ -133,7 +133,7 @@ class PairedDatapointsTests(unittest.TestCase):
             if fig is not None:
                 plt.close(fig)
 
-    def test_ref_vs_target_source_obsm_defaults_to_pre_post(self):
+    def test_ref_vs_target_source_obsm_defaults_to_pre_post_values(self):
         obs = pd.DataFrame({"Subject_ID": ["S1", "S2"]}, index=["S1", "S2"])
         var = pd.DataFrame(index=["A_v1", "B_v1"])
         adata = ad.AnnData(
@@ -142,12 +142,12 @@ class PairedDatapointsTests(unittest.TestCase):
             var=var,
         )
         adata.uns["ref_vs_target_adata"] = {"pair_by_key": "Subject_ID"}
-        adata.obsm["pre"] = pd.DataFrame(
+        adata.obsm["pre_values"] = pd.DataFrame(
             [[10.0, 100.0], [20.0, 200.0]],
             index=adata.obs_names,
             columns=adata.var_names,
         )
-        adata.obsm["post"] = pd.DataFrame(
+        adata.obsm["post_values"] = pd.DataFrame(
             [[11.0, 101.0], [22.0, 202.0]],
             index=adata.obs_names,
             columns=adata.var_names,
@@ -163,7 +163,7 @@ class PairedDatapointsTests(unittest.TestCase):
                     show=False,
                 )
 
-            self.assertIn("adata.obsm['pre']", "\n".join(logs.output))
+            self.assertIn("adata.obsm['pre_values']", "\n".join(logs.output))
             self.assertEqual(plot_df.loc[plot_df["x_label"] == "Pre", "value"].tolist(), [10.0, 20.0])
             self.assertEqual(plot_df.loc[plot_df["x_label"] == "Post", "value"].tolist(), [11.0, 22.0])
         finally:

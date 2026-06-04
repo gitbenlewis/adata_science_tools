@@ -650,7 +650,7 @@ def paired_datapoints(
         else:
             looks_like_ref_vs_target = "ref_vs_target_adata" in adata.uns or groupby_key not in adata.obs.columns
             if looks_like_ref_vs_target:
-                for candidate_pair in (("pre", "post"), ("ref_values", "target_values")):
+                for candidate_pair in (("pre_values", "post_values"), ("pre", "post"), ("ref_values", "target_values")):
                     if candidate_pair[0] in adata.obsm and candidate_pair[1] in adata.obsm:
                         source_obsm_pair = candidate_pair
                         break

@@ -68,8 +68,8 @@ result = adtl.ref_vs_target_adata(
     logger=None,
     log_level="INFO",
     save_source_values_obsm=False,
-    target_values_obsm_key="target_values",
-    ref_values_obsm_key="ref_values",
+    target_values_obsm_key="post_values",
+    ref_values_obsm_key="pre_values",
 )
 ```
 
@@ -217,7 +217,7 @@ used for computation.
 
 `adtl.save_dataset(result, "path/to/result.h5ad")` exports these tables by
 default as `.obsm.<key>.csv` files, for example
-`result.obsm.ref_values.csv` and `result.obsm.target_values.csv` when the
+`result.obsm.pre_values.csv` and `result.obsm.post_values.csv` when the
 default keys are used.
 
 ### DataFrame return

@@ -34,7 +34,7 @@ adtl.save_dataset(
 adtl.save_dataset(
     adata,
     "results/corrected_dataset.h5ad",
-    obsm_keys=["ref_values", "target_values"],
+    obsm_keys=["pre_values", "post_values"],
 )
 ```
 
@@ -76,8 +76,8 @@ columns named `dim_0`, `dim_1`, and so on.
 
 This is useful for source-value tables created by
 `ref_vs_target_adata(save_source_values_obsm=True)`, which stores paired
-reference and target source matrices in `.obsm["ref_values"]` and
-`.obsm["target_values"]` by default:
+reference and target source matrices in `.obsm["pre_values"]` and
+`.obsm["post_values"]` by default:
 
 ```python
 post_minus_pre = adtl.ref_vs_target_adata(
@@ -91,8 +91,8 @@ adtl.save_dataset(post_minus_pre, "results/post_minus_pre.h5ad")
 
 This writes:
 
-- `results/post_minus_pre.obsm.ref_values.csv`
-- `results/post_minus_pre.obsm.target_values.csv`
+- `results/post_minus_pre.obsm.pre_values.csv`
+- `results/post_minus_pre.obsm.post_values.csv`
 
 ## `make_df_obs_adataX`
 
