@@ -225,6 +225,56 @@ class PairedDatapointsTests(unittest.TestCase):
             if fig is not None:
                 plt.close(fig)
 
+    def test_bounds_fill_missing_is_opt_in(self):
+        obs = pd.DataFrame(
+            {
+                "Pre_or_Post_obs_col": ["Pre", "Post", "Pre", "Post"],
+                "Subject_ID": ["S1", "S1", "S2", "S2"],
+            },
+            index=["s1_pre", "s1_post", "s2_pre", "s2_post"],
+        )
+        var = pd.DataFrame(index=["A_v1"])
+        adata = ad.AnnData(
+            X=np.array([[0.0], [0.0], [np.nan], [np.nan]]),
+            obs=obs,
+            var=var,
+        )
+
+        fig_default = None
+        fig_fill = None
+        try:
+            fig_default, _, default_df = adtl.paired_datapoints(
+                adata=adata,
+                var_names=["A_v1"],
+                pair_by_key="Subject_ID",
+                ref_min_value=1.0,
+                target_min_value=1.0,
+                dropna=False,
+                show=False,
+            )
+            self.assertEqual(default_df.loc[default_df["x_label"] == "Pre", "value"].tolist()[0], 1.0)
+            self.assertTrue(np.isnan(default_df.loc[default_df["x_label"] == "Pre", "value"].tolist()[1]))
+            self.assertEqual(default_df.loc[default_df["x_label"] == "Post", "value"].tolist()[0], 1.0)
+            self.assertTrue(np.isnan(default_df.loc[default_df["x_label"] == "Post", "value"].tolist()[1]))
+
+            fig_fill, _, fill_df = adtl.paired_datapoints(
+                adata=adata,
+                var_names=["A_v1"],
+                pair_by_key="Subject_ID",
+                ref_min_value=1.0,
+                target_min_value=1.0,
+                bounds_fill_missing=True,
+                dropzeros=True,
+                show=False,
+            )
+            self.assertEqual(fill_df.loc[fill_df["x_label"] == "Pre", "value"].tolist(), [1.0, 1.0])
+            self.assertEqual(fill_df.loc[fill_df["x_label"] == "Post", "value"].tolist(), [1.0, 1.0])
+        finally:
+            if fig_default is not None:
+                plt.close(fig_default)
+            if fig_fill is not None:
+                plt.close(fig_fill)
+
     def test_duplicate_pairs_raise_and_incomplete_pairs_log_and_drop(self):
         duplicate_adata = self.make_adata()
         duplicate_adata.obs.loc["s3_pre", "Subject_ID"] = "S1"

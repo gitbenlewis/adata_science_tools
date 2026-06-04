@@ -42,6 +42,7 @@ def paired_datapoints(
     target_max_value: float | None = None,
     ref_min_value: float | None = None,
     ref_max_value: float | None = None,
+    bounds_fill_missing: bool = False,
     filter_vars_by_isin_lists: Mapping[str, Sequence[Any]] | None = None,
     filter_obs_by_isin_lists: Mapping[str, Sequence[Any]] | None = None,
     subset_obs_key: str | None = None,
@@ -213,6 +214,7 @@ fig, axes, plot_df = adtl.paired_datapoints(
     pair_by_key="Subject_ID",
     ref_min_value=0.5,
     target_min_value=0.5,
+    bounds_fill_missing=True,
     show=False,
 )
 ```
@@ -221,6 +223,12 @@ Bounds match `ref_vs_target_adata()` semantics. `ref_min_value` and
 `ref_max_value` apply only to reference values; `target_min_value` and
 `target_max_value` apply only to target values. The bounded values are returned
 in `plot_df["value"]` and drawn in the plot.
+
+By default, bounds do not impute missing values. Set
+`bounds_fill_missing=True` to fill missing values before clipping and value
+filtering. For example, with `target_min_value=1`, missing target values are
+filled with `1`; with `target_max_value=10` and no target min, missing target
+values are filled with `10`.
 
 ## `ref_vs_target_adata()` source values
 
