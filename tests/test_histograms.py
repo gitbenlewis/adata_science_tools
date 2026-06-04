@@ -97,6 +97,7 @@ class AdataHistogramsTests(unittest.TestCase):
         self.assertIs(signature.parameters["add_zero_line"].default, True)
         self.assertIs(signature.parameters["add_mean_line"].default, True)
         self.assertIs(signature.parameters["add_mean_to_legend"].default, True)
+        self.assertIs(signature.parameters["highlight_negative_mean_legend"].default, True)
         self.assertIn("all", get_args(signature.parameters["collapse_mode"].annotation))
 
     def test_adata_filters_obs_and_vars(self):
@@ -195,6 +196,80 @@ class AdataHistogramsTests(unittest.TestCase):
                 [text.get_text() for text in legend.get_texts()],
                 ["case (mean=2)", "control (mean=3)"],
             )
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_negative_subset_mean_legend_entries_are_red_and_bold(self):
+        obs = pd.DataFrame(
+            {"condition": pd.Categorical(["case", "case", "control", "control"])},
+            index=["s1", "s2", "s3", "s4"],
+        )
+        var = pd.DataFrame(index=["geneA"])
+        adata = ad.AnnData(
+            X=np.array([[-4.0], [-2.0], [1.0], [1.0]]),
+            obs=obs,
+            var=var,
+        )
+
+        fig = None
+        try:
+            fig, axes = adtl.adata_histograms(
+                adata=adata,
+                var_names=["geneA"],
+                subset_obs_key="condition",
+                bins=2,
+                kde=False,
+                show=False,
+            )
+            fig.canvas.draw()
+
+            legend = axes["geneA"].get_legend()
+            self.assertIsNotNone(legend)
+            text_by_label = {text.get_text(): text for text in legend.get_texts()}
+            self.assertEqual(
+                list(text_by_label),
+                ["All data (mean=-1)", "case (mean=-3)", "control (mean=1)"],
+            )
+            for label in ["All data (mean=-1)", "case (mean=-3)"]:
+                self.assertEqual(text_by_label[label].get_color(), "red")
+                self.assertEqual(text_by_label[label].get_fontweight(), "bold")
+            self.assertNotEqual(text_by_label["control (mean=1)"].get_color(), "red")
+            self.assertNotEqual(text_by_label["control (mean=1)"].get_fontweight(), "bold")
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_negative_mean_legend_highlight_can_be_disabled(self):
+        obs = pd.DataFrame(
+            {"condition": pd.Categorical(["case", "case", "control", "control"])},
+            index=["s1", "s2", "s3", "s4"],
+        )
+        var = pd.DataFrame(index=["geneA"])
+        adata = ad.AnnData(
+            X=np.array([[-4.0], [-2.0], [1.0], [1.0]]),
+            obs=obs,
+            var=var,
+        )
+
+        fig = None
+        try:
+            fig, axes = adtl.adata_histograms(
+                adata=adata,
+                var_names=["geneA"],
+                subset_obs_key="condition",
+                highlight_negative_mean_legend=False,
+                bins=2,
+                kde=False,
+                show=False,
+            )
+            fig.canvas.draw()
+
+            legend = axes["geneA"].get_legend()
+            self.assertIsNotNone(legend)
+            for legend_text in legend.get_texts():
+                self.assertNotEqual(legend_text.get_color(), "red")
+                self.assertNotEqual(legend_text.get_fontweight(), "bold")
         finally:
             if fig is not None:
                 plt.close(fig)
@@ -303,6 +378,35 @@ class AdataHistogramsTests(unittest.TestCase):
                 [text.get_text() for text in legend.get_texts()],
                 ["Mean = 2.5"],
             )
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_negative_non_subset_mean_legend_entry_is_red_and_bold(self):
+        obs = pd.DataFrame({"batch": ["A", "A"]}, index=["s1", "s2"])
+        var = pd.DataFrame(index=["geneA"])
+        adata = ad.AnnData(X=np.array([[-3.0], [-1.0]]), obs=obs, var=var)
+
+        fig = None
+        try:
+            fig, axes = adtl.adata_histograms(
+                adata=adata,
+                var_names=["geneA"],
+                bins=2,
+                kde=False,
+                show=False,
+            )
+            fig.canvas.draw()
+
+            legend = axes["geneA"].get_legend()
+            self.assertIsNotNone(legend)
+            self.assertEqual(
+                [text.get_text() for text in legend.get_texts()],
+                ["Mean = -2"],
+            )
+            legend_text = legend.get_texts()[0]
+            self.assertEqual(legend_text.get_color(), "red")
+            self.assertEqual(legend_text.get_fontweight(), "bold")
         finally:
             if fig is not None:
                 plt.close(fig)

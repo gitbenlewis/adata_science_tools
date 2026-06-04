@@ -71,6 +71,7 @@ def adata_histograms(
     add_zero_line: bool = True,
     add_mean_line: bool = True,
     add_mean_to_legend: bool = True,
+    highlight_negative_mean_legend: bool = True,
     bins: int | str | Sequence[float] = "auto",
     binwidth: float | None = None,
     binrange: tuple[float, float] | None = None,
@@ -510,6 +511,7 @@ def adata_histograms(
 
         plot_values = plot_df["value"].dropna()
         plot_supports_kde = len(plot_values) > 1 and plot_values.nunique() > 1
+        negative_mean_legend_labels: set[str] = set()
 
         all_data_mean_label = None
         all_data_mean_handle = None
@@ -529,6 +531,8 @@ def adata_histograms(
             if add_mean_line:
                 all_data_mean = plot_values.mean()
                 all_data_mean_label = f"All data (mean={all_data_mean:.3g})"
+                if all_data_mean < 0:
+                    negative_mean_legend_labels.add(all_data_mean_label)
                 all_data_mean_handle = axes.axvline(
                     all_data_mean,
                     color=all_obs_color,
@@ -593,6 +597,8 @@ def adata_histograms(
                         subset_mean_labels[str(subset_value)] = (
                             f"{subset_value} (mean={subgroup_mean:.3g})"
                         )
+                        if subgroup_mean < 0:
+                            negative_mean_legend_labels.add(subset_mean_labels[str(subset_value)])
             if add_mean_line and add_mean_to_legend and legend:
                 legend_obj = axes.get_legend()
                 if legend_obj is not None:
@@ -645,6 +651,8 @@ def adata_histograms(
                         if add_mean_to_legend and legend
                         else "_nolegend_"
                     )
+                    if mean_value < 0 and mean_line_label != "_nolegend_":
+                        negative_mean_legend_labels.add(mean_line_label)
                     axes.axvline(
                         mean_value,
                         color=color if color is not None else "black",
@@ -663,6 +671,14 @@ def adata_histograms(
                 linewidth=1.5,
                 label="_nolegend_",
             )
+
+        if highlight_negative_mean_legend and negative_mean_legend_labels:
+            legend_obj = axes.get_legend()
+            if legend_obj is not None:
+                for legend_text in legend_obj.get_texts():
+                    if legend_text.get_text() in negative_mean_legend_labels:
+                        legend_text.set_color("red")
+                        legend_text.set_fontweight("bold")
 
         if subplot_title_var_col is None:
             axes_title = str(var_name)
