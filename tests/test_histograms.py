@@ -98,6 +98,8 @@ class AdataHistogramsTests(unittest.TestCase):
         self.assertIs(signature.parameters["add_mean_line"].default, True)
         self.assertIs(signature.parameters["add_mean_to_legend"].default, True)
         self.assertIs(signature.parameters["highlight_negative_mean_legend"].default, True)
+        self.assertIsNone(signature.parameters["legend_loc"].default)
+        self.assertIsNone(signature.parameters["legend_bbox_to_anchor"].default)
         self.assertIn("all", get_args(signature.parameters["collapse_mode"].annotation))
 
     def test_adata_filters_obs_and_vars(self):
@@ -196,6 +198,56 @@ class AdataHistogramsTests(unittest.TestCase):
                 [text.get_text() for text in legend.get_texts()],
                 ["case (mean=2)", "control (mean=3)"],
             )
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_subset_legend_position_can_be_overridden(self):
+        fig = None
+        try:
+            fig, axes = adtl.adata_histograms(
+                adata=self.make_adata(),
+                var_names=["geneA"],
+                subset_obs_key="condition",
+                bins=2,
+                kde=False,
+                legend_loc="upper left",
+                legend_bbox_to_anchor=(1.02, 1),
+                show=False,
+            )
+            fig.canvas.draw()
+
+            legend = axes["geneA"].get_legend()
+            self.assertIsNotNone(legend)
+            self.assertEqual(legend._loc, 2)
+            self.assertEqual(legend.get_bbox_to_anchor()._bbox.bounds, (1.02, 1.0, 0.0, 0.0))
+            self.assertEqual(
+                [text.get_text() for text in legend.get_texts()],
+                ["All data (mean=2.5)", "case (mean=2)", "control (mean=3)"],
+            )
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_mean_line_legend_position_can_be_overridden_without_subset(self):
+        fig = None
+        try:
+            fig, axes = adtl.adata_histograms(
+                adata=self.make_adata(),
+                var_names=["geneA"],
+                bins=2,
+                kde=False,
+                legend_loc="center left",
+                legend_bbox_to_anchor=(1.02, 0.5),
+                show=False,
+            )
+            fig.canvas.draw()
+
+            legend = axes["geneA"].get_legend()
+            self.assertIsNotNone(legend)
+            self.assertEqual(legend._loc, 6)
+            self.assertEqual(legend.get_bbox_to_anchor()._bbox.bounds, (1.02, 0.5, 0.0, 0.0))
+            self.assertEqual([text.get_text() for text in legend.get_texts()], ["Mean = 2.5"])
         finally:
             if fig is not None:
                 plt.close(fig)
