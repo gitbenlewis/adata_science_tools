@@ -508,17 +508,61 @@ class PairedDatapointsTests(unittest.TestCase):
                 subset_obs_key="cohort",
                 subset_order=["B", "A"],
                 legend=True,
+                legend_loc="upper left",
+                legend_bbox_to_anchor=(1.02, 1),
                 show=False,
             )
             fig.canvas.draw()
 
             legend = axes["A_v1"].get_legend()
             self.assertIsNotNone(legend)
+            self.assertEqual(legend._loc, 2)
+            self.assertEqual(legend.get_bbox_to_anchor()._bbox.bounds, (1.02, 1.0, 0.0, 0.0))
             self.assertEqual([text.get_text() for text in legend.get_texts()], ["B", "A"])
             self.assertIn("cohort", plot_df.columns)
         finally:
             if fig is not None:
                 plt.close(fig)
+
+    def test_figure_legend_scope_uses_single_ordered_legend(self):
+        fig = None
+        try:
+            fig, axes, _ = adtl.paired_datapoints(
+                adata=self.make_adata(),
+                var_names=["A_v1", "A_v2"],
+                pair_by_key="Subject_ID",
+                subset_obs_key="cohort",
+                subset_order=["B", "A"],
+                legend=True,
+                legend_scope="figure",
+                legend_loc="center left",
+                legend_bbox_to_anchor=(1.02, 0.5),
+                ncols=2,
+                show=False,
+            )
+            fig.canvas.draw()
+
+            self.assertEqual(len(fig.legends), 1)
+            self.assertTrue(all(ax.get_legend() is None for ax in axes.values()))
+            figure_legend = fig.legends[0]
+            self.assertEqual([text.get_text() for text in figure_legend.get_texts()], ["B", "A"])
+            self.assertEqual(figure_legend._loc, 6)
+            self.assertEqual(figure_legend.get_bbox_to_anchor()._bbox.bounds, (1.02, 0.5, 0.0, 0.0))
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_invalid_legend_scope_raises(self):
+        with self.assertRaisesRegex(ValueError, "'legend_scope' must be one of 'axis' or 'figure'"):
+            adtl.paired_datapoints(
+                adata=self.make_adata(),
+                var_names=["A_v1"],
+                pair_by_key="Subject_ID",
+                subset_obs_key="cohort",
+                legend=True,
+                legend_scope="panel",
+                show=False,
+            )
 
 
 if __name__ == "__main__":

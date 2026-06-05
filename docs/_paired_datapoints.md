@@ -73,6 +73,9 @@ def paired_datapoints(
     axis_label_fontsize: int = 12,
     tick_label_fontsize: int | None = None,
     legend_fontsize: int | None = None,
+    legend_loc: str | int | None = None,
+    legend_bbox_to_anchor: tuple[float, ...] | None = None,
+    legend_scope: Literal["axis", "figure"] = "axis",
     legend: bool = False,
     dropna: bool = True,
     nas2zeros: bool = False,
@@ -316,6 +319,24 @@ fig, axes, plot_df = adtl.paired_datapoints(
 
 4. `subset_order` controls hue order; otherwise categorical order or first
    appearance is used.
+
+5. `legend_scope="figure"` draws one shared legend for a multi-panel grid.
+   `legend_loc` and `legend_bbox_to_anchor` are forwarded to Matplotlib legend
+   placement for either per-axis or figure-level legends.
+
+```python
+fig, axes, plot_df = adtl.paired_datapoints(
+    adata=adata,
+    var_names=["IL6", "TNF", "CRP"],
+    pair_by_key="Subject_ID",
+    subset_obs_key="cohort",
+    legend=True,
+    legend_scope="figure",
+    legend_loc="center left",
+    legend_bbox_to_anchor=(1.02, 0.5),
+    show=False,
+)
+```
 
 ## Variable grouping and collapse
 
