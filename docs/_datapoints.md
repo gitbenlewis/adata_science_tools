@@ -45,7 +45,9 @@ fig, axes, plot_df = adtl.datapoints(
 5. PANELS: `subplot_by_obs_key` splits observations into panels by obs metadata.
    `subplot_by_var_key` splits selected x categories into panels by var metadata.
    The two subplot modes are mutually exclusive in v1. Missing values in
-   `subplot_by_obs_key` raise instead of silently dropping observations.
+   `subplot_by_obs_key` raise instead of silently dropping observations. Missing
+   values in `subplot_by_var_key` are routed to `subplot_by_var_missing_label`,
+   which defaults to `"Missing"`.
 
 6. OVERLAYS: Box plots are enabled by default. Violin plots are opt-in with
    `violinplot=True`; when both overlays are enabled, violins draw behind a

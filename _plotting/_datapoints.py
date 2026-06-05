@@ -37,6 +37,7 @@ def datapoints(
     subset_order: Sequence[Any] | None = None,
     subplot_by_obs_key: str | None = None,
     subplot_by_var_key: str | None = None,
+    subplot_by_var_missing_label: str = "Missing",
     subplot_order: Sequence[Any] | None = None,
     x_order: Sequence[Any] | None = None,
     palette: Sequence[Any] | str | None = palettes.tol_colors,
@@ -283,14 +284,14 @@ def datapoints(
     def _var_panel_for_raw_var(raw_var_name: str) -> str:
         panel_value = var_metadata_df.loc[raw_var_name, subplot_by_var_key]
         if pd.isna(panel_value):
-            raise ValueError(
-                f"Variable '{raw_var_name}' has a missing value in subplot_by_var_key '{subplot_by_var_key}'."
-            )
+            return subplot_by_var_missing_label
         return str(panel_value)
 
     def _var_panel_for_group(group_name: Any, raw_var_names: Sequence[str]) -> str:
         panel_values = var_metadata_df.loc[list(raw_var_names), subplot_by_var_key].dropna()
         unique_panel_values = list(pd.unique(panel_values))
+        if not unique_panel_values:
+            return subplot_by_var_missing_label
         if len(unique_panel_values) != 1:
             raise ValueError(
                 f"Variable group '{group_name}' must map to exactly one nonmissing "
