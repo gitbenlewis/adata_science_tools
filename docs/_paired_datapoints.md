@@ -234,7 +234,9 @@ no target min, all missing target values are filled with `10`.
 Set `bounds_fill_missing_paired_only=True` to fill missing values only when the
 opposite side of the same pair and variable is present. If both missing-fill
 flags are `True`, the paired-only fill behavior is used. Numeric clipping of
-present values is unchanged.
+present values is unchanged. A missing side is filled only when that side has a
+min or max bound; if no bound is provided for that side, the missing value stays
+missing.
 
 For one selected variable with `ref_min_value=2`, `target_min_value=1`, and
 `bounds_fill_missing_paired_only=True`, these rows behave as follows:
@@ -266,7 +268,9 @@ Compared with `bounds_fill_missing=True`, the paired-only option preserves
 complete missing pairs as missing in `plot_df["value"]`. With the same bounds,
 `bounds_fill_missing=True` would fill a pair where both reference and target
 are missing to reference `2` and target `1`; `bounds_fill_missing_paired_only`
-leaves both values as `NaN`.
+leaves both values as `NaN`. Because `paired_datapoints()` defaults to
+`dropna=True`, set `dropna=False` when those both-missing rows should remain in
+the returned `plot_df`.
 
 ## `ref_vs_target_adata()` source values
 
