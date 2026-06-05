@@ -258,6 +258,133 @@ class DatapointsTests(unittest.TestCase):
                 show=False,
             )
 
+    def test_x_by_obs_key_uses_obs_groups_as_x_axis(self):
+        fig = None
+        try:
+            fig, axes, plot_df = adtl.datapoints(
+                adata=self.make_adata(),
+                var_names=["A_v1"],
+                x_by_obs_key="condition",
+                show=False,
+            )
+
+            self.assertEqual(list(axes), ["all"])
+            self.assertEqual(list(pd.unique(plot_df["x_label"])), ["case", "control"])
+            self.assertEqual(plot_df["condition"].tolist(), ["case", "control", "case", "control"])
+            self.assertEqual(plot_df["x_order"].tolist(), [1, 2, 1, 2])
+            self.assertEqual(axes["all"].get_xlabel(), "condition")
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_x_by_obs_key_missing_values_route_to_fallback_label(self):
+        adata = self.make_adata()
+        adata.obs.loc["s1", "batch"] = np.nan
+
+        fig = None
+        try:
+            fig, axes, plot_df = adtl.datapoints(
+                adata=adata,
+                var_names=["A_v1"],
+                x_by_obs_key="batch",
+                show=False,
+            )
+
+            self.assertEqual(list(axes), ["all"])
+            self.assertEqual(plot_df.loc[plot_df["obs_name"] == "s1", "x_label"].tolist(), ["Missing"])
+            self.assertEqual(plot_df.loc[plot_df["obs_name"] == "s1", "batch"].tolist(), ["Missing"])
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_x_by_obs_key_custom_missing_label(self):
+        adata = self.make_adata()
+        adata.obs.loc["s1", "batch"] = np.nan
+
+        fig = None
+        try:
+            fig, _, plot_df = adtl.datapoints(
+                adata=adata,
+                var_names=["A_v1"],
+                x_by_obs_key="batch",
+                x_by_obs_missing_label="Unlabeled",
+                show=False,
+            )
+
+            self.assertEqual(plot_df.loc[plot_df["obs_name"] == "s1", "x_label"].tolist(), ["Unlabeled"])
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_x_by_obs_key_uses_x_order_for_obs_groups(self):
+        fig = None
+        try:
+            fig, axes, plot_df = adtl.datapoints(
+                adata=self.make_adata(),
+                var_names=["A_v1"],
+                x_by_obs_key="batch",
+                x_order=["B", "A"],
+                show=False,
+            )
+
+            self.assertEqual([label.get_text() for label in axes["all"].get_xticklabels()], ["B", "A"])
+            self.assertEqual(plot_df.loc[plot_df["obs_name"] == "s1", "x_order"].tolist(), [2])
+            self.assertEqual(plot_df.loc[plot_df["obs_name"] == "s3", "x_order"].tolist(), [1])
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_x_by_obs_key_multiple_variables_panel_by_variable_by_default(self):
+        fig = None
+        try:
+            fig, axes, plot_df = adtl.datapoints(
+                adata=self.make_adata(),
+                var_names=["A_v1", "B_v1"],
+                x_by_obs_key="condition",
+                show=False,
+            )
+
+            self.assertEqual(list(axes), ["A_v1", "B_v1"])
+            self.assertEqual(plot_df["panel"].unique().tolist(), ["A_v1", "B_v1"])
+            self.assertEqual(
+                list(pd.unique(plot_df.loc[plot_df["panel"] == "A_v1", "x_label"])),
+                ["case", "control"],
+            )
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_x_by_obs_key_multiple_variables_can_pool_variables(self):
+        fig = None
+        try:
+            fig, axes, plot_df = adtl.datapoints(
+                adata=self.make_adata(),
+                var_names=["A_v1", "B_v1"],
+                x_by_obs_key="condition",
+                x_by_obs_multi_var_mode="pool_variables",
+                show=False,
+            )
+
+            self.assertEqual(list(axes), ["all"])
+            self.assertEqual(plot_df["panel"].unique().tolist(), ["all"])
+            self.assertEqual(
+                plot_df.loc[plot_df["x_label"] == "case", "value"].tolist(),
+                [1.0, 3.0, 100.0, 300.0],
+            )
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_x_by_obs_key_panel_by_variable_rejects_subplot_keys(self):
+        with self.assertRaisesRegex(ValueError, "panel_by_variable"):
+            adtl.datapoints(
+                adata=self.make_adata(),
+                var_names=["A_v1", "B_v1"],
+                x_by_obs_key="condition",
+                subplot_by_obs_key="batch",
+                show=False,
+            )
+
     def test_var_groupby_aggregate_stack_and_all_modes(self):
         adata = self.make_adata()
         fig_aggregate = None
@@ -369,6 +496,42 @@ class DatapointsTests(unittest.TestCase):
                 plt.close(fig_box)
             if fig_violin is not None:
                 plt.close(fig_violin)
+
+    def test_zero_line_is_opt_in(self):
+        fig_default = None
+        fig_zero = None
+        try:
+            fig_default, axes_default, _ = adtl.datapoints(
+                adata=self.make_adata(),
+                var_names=["A_v1"],
+                show=False,
+            )
+            default_zero_lines = [
+                line
+                for line in axes_default["all"].lines
+                if line.get_color() == "red" and line.get_linestyle() == ":"
+            ]
+            self.assertEqual(default_zero_lines, [])
+
+            fig_zero, axes_zero, _ = adtl.datapoints(
+                adata=self.make_adata(),
+                var_names=["A_v1"],
+                add_zero_line=True,
+                show=False,
+            )
+            zero_lines = [
+                line
+                for line in axes_zero["all"].lines
+                if line.get_color() == "red" and line.get_linestyle() == ":"
+            ]
+            self.assertEqual(len(zero_lines), 1)
+            self.assertEqual(zero_lines[0].get_linewidth(), 1.5)
+            np.testing.assert_allclose(zero_lines[0].get_ydata(), [0, 0])
+        finally:
+            if fig_default is not None:
+                plt.close(fig_default)
+            if fig_zero is not None:
+                plt.close(fig_zero)
 
     def test_configurable_legend_metrics(self):
         fig = None

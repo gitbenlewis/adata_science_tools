@@ -22,6 +22,17 @@ fig, axes, plot_df = adtl.datapoints(
 )
 ```
 
+```python
+fig, axes, plot_df = adtl.datapoints(
+    adata=adata,
+    var_names=["IL6"],
+    x_by_obs_key="condition",
+    add_zero_line=True,
+    ylims=[-3, 3],
+    show=False,
+)
+```
+
 ### Important behavior
 
 1. INPUTS: Provide exactly one of `input_data`, `adata`, or `df`. For wide
@@ -40,26 +51,41 @@ fig, axes, plot_df = adtl.datapoints(
 4. X-AXIS: By default, one axis named `"all"` contains the selected variable
    names as x-axis categories. With `var_groupby_key`, `collapse_mode="aggregate"`
    uses variable-group names as x categories, while `collapse_mode="stack"` uses
-   source variable names.
+   source variable names. Set `x_by_obs_key="column"` to use observation
+   metadata groups as x-axis categories instead. Missing `x_by_obs_key` values
+   are routed to `x_by_obs_missing_label`, which defaults to `"Missing"`.
 
-5. PANELS: `subplot_by_obs_key` splits observations into panels by obs metadata.
+5. OBS-GROUP X-AXIS: With `x_by_obs_key` and multiple selected variables or
+   groups, `x_by_obs_multi_var_mode="panel_by_variable"` is the default and
+   creates one panel per selected variable/group. Use
+   `x_by_obs_multi_var_mode="pool_variables"` to pool all selected variables or
+   groups within each obs-group x category.
+
+6. PANELS: `subplot_by_obs_key` splits observations into panels by obs metadata.
    `subplot_by_var_key` splits selected x categories into panels by var metadata.
    The two subplot modes are mutually exclusive in v1. Missing values in
    `subplot_by_obs_key` raise instead of silently dropping observations. Missing
    values in `subplot_by_var_key` are routed to `subplot_by_var_missing_label`,
    which defaults to `"Missing"`.
 
-6. OVERLAYS: Box plots are enabled by default. Violin plots are opt-in with
+7. OVERLAYS: Box plots are enabled by default. Violin plots are opt-in with
    `violinplot=True`; when both overlays are enabled, violins draw behind a
    lightweight outline box and the strip points.
 
-7. LEGEND METRICS: `legend_metrics` can include `mean`, `median`, `count`,
+8. AXIS REFERENCES: `add_zero_line=True` draws a red dotted horizontal
+   reference line at `y=0`. `ylims=[low, high]` applies explicit y-axis limits
+   after reference lines are drawn.
+
+9. LEGEND METRICS: `legend_metrics` can include `mean`, `median`, `count`,
    `std`, and `sem`. When `legend=True`, labels include all-data metrics plus
    per-`subset_obs_key` group metrics. Metrics are computed after `nas2zeros`,
    `dropna`, and `dropzeros`.
 
-8. METRIC SCOPE: Legend metrics are panel-level summaries. If one panel contains
+10. METRIC SCOPE: Legend metrics are panel-level summaries. If one panel contains
    multiple x-axis variables, each metric pools across those x categories.
+
+11. PUBLISHED DOCS: The GitHub Pages docs hub regenerates this page from the
+   repository source during its deploy workflow.
 
 ### Return value
 
