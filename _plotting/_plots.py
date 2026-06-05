@@ -572,9 +572,12 @@ def paired_datapoints(
     sharey: bool = False,
     ylims: Sequence[float] | None = None,
     ylabel: str | None = None,
+    xlabel: str | None = None,
     title: str | None = None,
     subplot_title_var_col: str | None = None,
+    subplot_title_y: float | None = None,
     title_fontsize: int = 14,
+    title_y: float | None = None,
     axis_label_fontsize: int = 12,
     tick_label_fontsize: int | None = None,
     legend_fontsize: int | None = None,
@@ -1329,7 +1332,10 @@ def paired_datapoints(
         default_point_color = palette_colors[0]
 
     if title is not None:
-        fig.suptitle(title, fontsize=title_fontsize)
+        title_kwargs: dict[str, Any] = {"fontsize": title_fontsize}
+        if title_y is not None:
+            title_kwargs["y"] = title_y
+        fig.suptitle(title, **title_kwargs)
 
     for plot_idx, panel_name in enumerate(plot_panel_names):
         ax = axes_flat[plot_idx]
@@ -1411,10 +1417,13 @@ def paired_datapoints(
             panel_title = str(var_metadata_df.loc[panel_name, subplot_title_var_col])
         else:
             panel_title = panel_name
-        ax.set_title(panel_title)
+        subplot_title_kwargs = {}
+        if subplot_title_y is not None:
+            subplot_title_kwargs["y"] = subplot_title_y
+        ax.set_title(panel_title, **subplot_title_kwargs)
         ax.set_xticks([1, 2])
         ax.set_xticklabels([ref_label, target_label], rotation=45, ha="right")
-        ax.set_xlabel(groupby_key, fontsize=axis_label_fontsize)
+        ax.set_xlabel(groupby_key if xlabel is None else xlabel, fontsize=axis_label_fontsize)
         ax.set_ylabel(ylabel or "value", fontsize=axis_label_fontsize)
         if tick_label_fontsize is not None:
             ax.tick_params(axis="both", labelsize=tick_label_fontsize)

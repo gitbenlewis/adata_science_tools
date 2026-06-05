@@ -755,6 +755,29 @@ class PairedDatapointsTests(unittest.TestCase):
             if fig is not None:
                 plt.close(fig)
 
+    def test_title_y_positions_and_xlabel_override(self):
+        fig = None
+        try:
+            fig, axes, _ = adtl.paired_datapoints(
+                adata=self.make_adata(),
+                var_names=["A_v1"],
+                pair_by_key="Subject_ID",
+                title="Paired values",
+                title_y=1.03,
+                subplot_title_y=1.05,
+                xlabel="",
+                show=False,
+            )
+            fig.canvas.draw()
+
+            self.assertIsNotNone(fig._suptitle)
+            self.assertAlmostEqual(fig._suptitle.get_position()[1], 1.03)
+            self.assertAlmostEqual(axes["A_v1"].title.get_position()[1], 1.05)
+            self.assertEqual(axes["A_v1"].get_xlabel(), "")
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
     def test_invalid_legend_scope_raises(self):
         with self.assertRaisesRegex(ValueError, "'legend_scope' must be one of 'axis' or 'figure'"):
             adtl.paired_datapoints(

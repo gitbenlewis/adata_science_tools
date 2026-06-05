@@ -69,9 +69,12 @@ def paired_datapoints(
     sharey: bool = False,
     ylims: Sequence[float] | None = None,
     ylabel: str | None = None,
+    xlabel: str | None = None,
     title: str | None = None,
     subplot_title_var_col: str | None = None,
+    subplot_title_y: float | None = None,
     title_fontsize: int = 14,
+    title_y: float | None = None,
     axis_label_fontsize: int = 12,
     tick_label_fontsize: int | None = None,
     legend_fontsize: int | None = None,
@@ -106,6 +109,25 @@ fig, axes, plot_df = adtl.paired_datapoints(
     pair_by_key="Subject_ID",
     subset_obs_key="Treatment",
     legend=True,
+    show=False,
+)
+```
+
+## Title and axis label placement
+
+Use `title_y` and `subplot_title_y` to move the figure title or subplot titles
+vertically. Use `xlabel=""` to suppress the x-axis label below the Pre/Post tick
+labels.
+
+```python
+fig, axes, plot_df = adtl.paired_datapoints(
+    adata=adata,
+    var_names=["IL6"],
+    pair_by_key="Subject_ID",
+    title="Paired IL6",
+    title_y=1.03,
+    subplot_title_y=1.05,
+    xlabel="",
     show=False,
 )
 ```
