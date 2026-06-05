@@ -2,6 +2,7 @@
 the plotting subpackage
 '''
 from ._utils import *
+from ._datapoints import *
 from ._plots import *
 from ._column_plots import *
 from ._row_plots import *

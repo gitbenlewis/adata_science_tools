@@ -155,7 +155,7 @@ class PairedDatapointsTests(unittest.TestCase):
 
         fig = None
         try:
-            with self.assertLogs("adata_science_tools._plotting._plots", level="INFO") as logs:
+            with self.assertLogs("adata_science_tools._plotting._datapoints", level="INFO") as logs:
                 fig, _, plot_df = adtl.paired_datapoints(
                     adata=adata,
                     var_names=["A_v1"],
@@ -451,7 +451,7 @@ class PairedDatapointsTests(unittest.TestCase):
         incomplete_adata = self.make_adata()[["s1_pre", "s1_post", "s2_pre", "s2_post", "s3_pre"], :].copy()
         fig = None
         try:
-            with self.assertLogs("adata_science_tools._plotting._plots", level="WARNING") as logs:
+            with self.assertLogs("adata_science_tools._plotting._datapoints", level="WARNING") as logs:
                 fig, _, plot_df = adtl.paired_datapoints(
                     adata=incomplete_adata,
                     var_names=["A_v1"],

@@ -1,6 +1,6 @@
 # `_paired_datapoints`
 
-Paired datapoint plotting helpers from `_plotting/_plots.py`.
+Paired datapoint plotting helpers from `_plotting/_datapoints.py`.
 
 ## Main entry point
 
