@@ -71,6 +71,8 @@ def adata_histograms(
     axis_label_fontsize: int = 12,
     tick_label_fontsize: int | None = None,
     legend_fontsize: int | None = None,
+    legend_loc: str | int | None = None,
+    legend_bbox_to_anchor: tuple[float, ...] | None = None,
     legend: bool = True,
     dropna: bool = True,
     nas2zeros: bool = False,
@@ -94,6 +96,21 @@ fig, axes = adtl.adata_histograms(
     sharex=True,
     xlims=[-2, 2],
     bins=30,
+    show=False,
+)
+```
+
+## Legend positioning
+
+Use `legend_loc` and `legend_bbox_to_anchor` to move per-panel legends.
+
+```python
+adtl.adata_histograms(
+    adata=adata,
+    var_names=["GENE_A"],
+    subset_obs_key="Treatment",
+    legend_loc="upper left",
+    legend_bbox_to_anchor=(1.02, 1),
     show=False,
 )
 ```

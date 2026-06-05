@@ -94,6 +94,8 @@ def adata_histograms(
     axis_label_fontsize: int = 12,
     tick_label_fontsize: int | None = None,
     legend_fontsize: int | None = None,
+    legend_loc: str | int | None = None,
+    legend_bbox_to_anchor: tuple[float, ...] | None = None,
     legend: bool = True,
     dropna: bool = True,
     nas2zeros: bool = False,
@@ -335,6 +337,12 @@ def adata_histograms(
 
     if title is not None:
         fig.suptitle(title, fontsize=title_fontsize)
+
+    legend_position_kwargs: dict[str, Any] = {}
+    if legend_loc is not None:
+        legend_position_kwargs["loc"] = legend_loc
+    if legend_bbox_to_anchor is not None:
+        legend_position_kwargs["bbox_to_anchor"] = legend_bbox_to_anchor
 
     subset_hue_order: list[Any] = []
     subset_palette_map: dict[Any, Any] | str | None = None
@@ -615,15 +623,40 @@ def adata_histograms(
                             handles=legend_handles,
                             labels=legend_labels,
                             title=subset_obs_key,
+                            **legend_position_kwargs,
                         )
                     else:
-                        for legend_text, legend_label in zip(legend_obj.get_texts(), legend_labels):
-                            legend_text.set_text(legend_label)
+                        if legend_position_kwargs:
+                            legend_title = legend_obj.get_title().get_text()
+                            legend_obj.remove()
+                            axes.legend(
+                                handles=legend_handles,
+                                labels=legend_labels,
+                                title=legend_title,
+                                **legend_position_kwargs,
+                            )
+                        else:
+                            for legend_text, legend_label in zip(legend_obj.get_texts(), legend_labels):
+                                legend_text.set_text(legend_label)
                 elif all_data_mean_handle is not None and all_data_mean_label is not None:
                     axes.legend(
                         handles=[all_data_mean_handle],
                         labels=[all_data_mean_label],
                         title=subset_obs_key,
+                        **legend_position_kwargs,
+                    )
+            elif legend and legend_position_kwargs:
+                legend_obj = axes.get_legend()
+                if legend_obj is not None:
+                    legend_handles = list(legend_obj.legend_handles)
+                    legend_labels = [legend_text.get_text() for legend_text in legend_obj.get_texts()]
+                    legend_title = legend_obj.get_title().get_text()
+                    legend_obj.remove()
+                    axes.legend(
+                        handles=legend_handles,
+                        labels=legend_labels,
+                        title=legend_title,
+                        **legend_position_kwargs,
                     )
         else:
             if plot_df.empty:
@@ -661,7 +694,7 @@ def adata_histograms(
                         label=mean_line_label,
                     )
                     if add_mean_to_legend and legend:
-                        axes.legend()
+                        axes.legend(**legend_position_kwargs)
 
         if add_zero_line:
             axes.axvline(
