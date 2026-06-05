@@ -549,6 +549,7 @@ def paired_datapoints(
     bounds_fill_missing_paired_only: bool = False,
     filter_vars_by_isin_lists: Mapping[str, Sequence[Any]] | None = None,
     filter_obs_by_isin_lists: Mapping[str, Sequence[Any]] | None = None,
+    subplot_by_obs_key: str | None = None,
     subset_obs_key: str | None = None,
     subset_var_key: str | None = None,
     subset_order: Sequence[Any] | None = None,
@@ -742,6 +743,8 @@ def paired_datapoints(
     filtered_obs_df = obs_metadata_df.loc[obs_mask].copy()
     if filtered_obs_df.empty:
         raise ValueError("No observations remain after filtering.")
+    if subplot_by_obs_key is not None and subplot_by_obs_key not in filtered_obs_df.columns:
+        raise ValueError(f"Column '{subplot_by_obs_key}' not found in observation metadata.")
     if subset_obs_key is not None and subset_obs_key not in filtered_obs_df.columns:
         raise ValueError(f"Column '{subset_obs_key}' not found in observation metadata.")
 
@@ -874,6 +877,7 @@ def paired_datapoints(
             return values_df.count(axis=1)
         raise ValueError("'select_max_ref_value' is handled separately.")
 
+    subplot_values_by_pair: pd.Series | None = None
     if using_source_obsm:
         if pair_by_key is not None:
             if effective_pair_key not in filtered_obs_df.columns:
@@ -893,6 +897,11 @@ def paired_datapoints(
         ref_values_df.index = pair_order
         target_values_df.index = pair_order
         pair_index = pd.Index(pair_order, name=effective_pair_key if effective_pair_key in filtered_obs_df.columns else None)
+        if subplot_by_obs_key is not None:
+            subplot_values_by_pair = pd.Series(
+                filtered_obs_df[subplot_by_obs_key].to_numpy(),
+                index=pair_index,
+            )
         if subset_obs_key is None:
             subset_values_by_pair = pd.Series(index=pair_index, dtype=object)
         else:
@@ -955,12 +964,40 @@ def paired_datapoints(
         ref_values_df.index = pair_order
         target_values_df.index = pair_order
         pair_index = pd.Index(pair_order, name=effective_pair_key)
+        if subplot_by_obs_key is not None:
+            ref_subplot_values = pd.Series(
+                ref_obs.loc[ref_obs_index, subplot_by_obs_key].to_numpy(),
+                index=pair_index,
+            )
+            target_subplot_values = pd.Series(
+                target_obs.loc[target_obs_index, subplot_by_obs_key].to_numpy(),
+                index=pair_index,
+            )
+            missing_subplot_pair_ids = list(pair_index[ref_subplot_values.isna() | target_subplot_values.isna()])
+            if missing_subplot_pair_ids:
+                raise ValueError(
+                    f"Missing values in '{subplot_by_obs_key}' for pair IDs: {missing_subplot_pair_ids}."
+                )
+            mismatched_subplot_pair_ids = list(pair_index[ref_subplot_values.ne(target_subplot_values)])
+            if mismatched_subplot_pair_ids:
+                raise ValueError(
+                    f"Mismatched values in '{subplot_by_obs_key}' for pair IDs: "
+                    f"{mismatched_subplot_pair_ids}."
+                )
+            subplot_values_by_pair = target_subplot_values
         if subset_obs_key is None:
             subset_values_by_pair = pd.Series(index=pair_index, dtype=object)
         else:
             subset_values_by_pair = pd.Series(
                 target_obs.loc[target_obs_index, subset_obs_key].to_numpy(),
                 index=pair_index,
+            )
+
+    if subplot_values_by_pair is not None:
+        missing_subplot_pair_ids = list(subplot_values_by_pair.index[subplot_values_by_pair.isna()])
+        if missing_subplot_pair_ids:
+            raise ValueError(
+                f"Missing values in '{subplot_by_obs_key}' for pair IDs: {missing_subplot_pair_ids}."
             )
 
     ref_bounds_requested = ref_min_value is not None or ref_max_value is not None
@@ -1012,40 +1049,56 @@ def paired_datapoints(
         source_variable: Any,
         line_id: str,
         subset_value: Any,
+        subplot_value: Any,
     ) -> None:
         panel_label = str(panel_name)
         variable_label = str(variable_name)
-        records.append(
-            {
-                "panel": panel_label,
-                "variable": variable_label,
-                "source_variable": source_variable,
-                "pair_id": str(pair_id),
-                "x_label": ref_label,
-                "x_order": 1,
-                "value": ref_value,
-                "line_id": line_id,
-                "side": "ref",
-                "subset_value": subset_value,
-            }
-        )
-        records.append(
-            {
-                "panel": panel_label,
-                "variable": variable_label,
-                "source_variable": source_variable,
-                "pair_id": str(pair_id),
-                "x_label": target_label,
-                "x_order": 2,
-                "value": target_value,
-                "line_id": line_id,
-                "side": "target",
-                "subset_value": subset_value,
-            }
-        )
+        ref_record = {
+            "panel": panel_label,
+            "variable": variable_label,
+            "source_variable": source_variable,
+            "pair_id": str(pair_id),
+            "x_label": ref_label,
+            "x_order": 1,
+            "value": ref_value,
+            "line_id": line_id,
+            "side": "ref",
+            "subset_value": subset_value,
+        }
+        target_record = {
+            "panel": panel_label,
+            "variable": variable_label,
+            "source_variable": source_variable,
+            "pair_id": str(pair_id),
+            "x_label": target_label,
+            "x_order": 2,
+            "value": target_value,
+            "line_id": line_id,
+            "side": "target",
+            "subset_value": subset_value,
+        }
+        if subplot_by_obs_key is not None:
+            ref_record[subplot_by_obs_key] = subplot_value
+            target_record[subplot_by_obs_key] = subplot_value
+        records.append(ref_record)
+        records.append(target_record)
 
     if connect_lines and collapse_mode in {"stack", "all"}:
         log.info("Connecting paired lines by pair ID and source variable for collapse_mode=%r.", collapse_mode)
+
+    has_single_panel = len(selected_panel_names) == 1
+    if subplot_values_by_pair is None:
+        plot_panel_names = [str(panel_name) for panel_name in selected_panel_names]
+    else:
+        subplot_panel_values = list(pd.unique(subplot_values_by_pair))
+        if has_single_panel:
+            plot_panel_names = [str(subplot_value) for subplot_value in subplot_panel_values]
+        else:
+            plot_panel_names = [
+                f"{panel_name} | {subplot_value}"
+                for panel_name in selected_panel_names
+                for subplot_value in subplot_panel_values
+            ]
 
     for panel_name in selected_panel_names:
         panel_raw_vars = group_to_variant_names[panel_name]
@@ -1053,14 +1106,26 @@ def paired_datapoints(
         if has_all_vars_panel or collapse_mode == "stack":
             for raw_var_name in panel_raw_vars:
                 for pair_id in pair_index:
+                    subplot_value = (
+                        subplot_values_by_pair.loc[pair_id]
+                        if subplot_values_by_pair is not None
+                        else pd.NA
+                    )
+                    record_panel_label = (
+                        str(subplot_value)
+                        if subplot_values_by_pair is not None and has_single_panel
+                        else f"{panel_label} | {subplot_value}"
+                        if subplot_values_by_pair is not None
+                        else panel_label
+                    )
                     _append_pair_records(
-                        panel_name=panel_label,
+                        panel_name=record_panel_label,
                         variable_name=panel_label,
                         pair_id=pair_id,
                         ref_value=ref_values_df.loc[pair_id, raw_var_name],
                         target_value=target_values_df.loc[pair_id, raw_var_name],
                         source_variable=raw_var_name,
-                        line_id=f"{panel_label}|{pair_id}|{raw_var_name}",
+                        line_id=f"{record_panel_label}|{pair_id}|{raw_var_name}",
                         subset_value=(
                             subset_values_by_pair.loc[pair_id]
                             if subset_obs_key is not None
@@ -1068,6 +1133,7 @@ def paired_datapoints(
                             if subset_var_key is not None
                             else pd.NA
                         ),
+                        subplot_value=subplot_value,
                     )
         elif has_var_groups:
             ref_panel_values_df = ref_values_df.loc[:, panel_raw_vars]
@@ -1111,41 +1177,79 @@ def paired_datapoints(
                         subset_value = var_subset_values_by_name.loc[selected_source_variable]
                     else:
                         subset_value = pd.NA
+                    subplot_value = (
+                        subplot_values_by_pair.loc[pair_id]
+                        if subplot_values_by_pair is not None
+                        else pd.NA
+                    )
+                    record_panel_label = (
+                        str(subplot_value)
+                        if subplot_values_by_pair is not None and has_single_panel
+                        else f"{panel_label} | {subplot_value}"
+                        if subplot_values_by_pair is not None
+                        else panel_label
+                    )
                     _append_pair_records(
-                        panel_name=panel_label,
+                        panel_name=record_panel_label,
                         variable_name=panel_label,
                         pair_id=pair_id,
                         ref_value=ref_value,
                         target_value=target_value,
                         source_variable=selected_source_variable,
-                        line_id=f"{panel_label}|{pair_id}",
+                        line_id=f"{record_panel_label}|{pair_id}",
                         subset_value=subset_value,
+                        subplot_value=subplot_value,
                     )
             else:
                 ref_values = _aggregate_values(ref_panel_values_df)
                 target_values = _aggregate_values(target_panel_values_df)
                 for pair_id in pair_index:
+                    subplot_value = (
+                        subplot_values_by_pair.loc[pair_id]
+                        if subplot_values_by_pair is not None
+                        else pd.NA
+                    )
+                    record_panel_label = (
+                        str(subplot_value)
+                        if subplot_values_by_pair is not None and has_single_panel
+                        else f"{panel_label} | {subplot_value}"
+                        if subplot_values_by_pair is not None
+                        else panel_label
+                    )
                     _append_pair_records(
-                        panel_name=panel_label,
+                        panel_name=record_panel_label,
                         variable_name=panel_label,
                         pair_id=pair_id,
                         ref_value=ref_values.loc[pair_id],
                         target_value=target_values.loc[pair_id],
                         source_variable=pd.NA,
-                        line_id=f"{panel_label}|{pair_id}",
+                        line_id=f"{record_panel_label}|{pair_id}",
                         subset_value=subset_values_by_pair.loc[pair_id] if subset_obs_key is not None else pd.NA,
+                        subplot_value=subplot_value,
                     )
         else:
             raw_var_name = panel_raw_vars[0]
             for pair_id in pair_index:
+                subplot_value = (
+                    subplot_values_by_pair.loc[pair_id]
+                    if subplot_values_by_pair is not None
+                    else pd.NA
+                )
+                record_panel_label = (
+                    str(subplot_value)
+                    if subplot_values_by_pair is not None and has_single_panel
+                    else f"{panel_label} | {subplot_value}"
+                    if subplot_values_by_pair is not None
+                    else panel_label
+                )
                 _append_pair_records(
-                    panel_name=panel_label,
+                    panel_name=record_panel_label,
                     variable_name=panel_label,
                     pair_id=pair_id,
                     ref_value=ref_values_df.loc[pair_id, raw_var_name],
                     target_value=target_values_df.loc[pair_id, raw_var_name],
                     source_variable=raw_var_name,
-                    line_id=f"{panel_label}|{pair_id}",
+                    line_id=f"{record_panel_label}|{pair_id}",
                     subset_value=(
                         subset_values_by_pair.loc[pair_id]
                         if subset_obs_key is not None
@@ -1153,6 +1257,7 @@ def paired_datapoints(
                         if subset_var_key is not None
                         else pd.NA
                     ),
+                    subplot_value=subplot_value,
                 )
 
     plot_df = pd.DataFrame.from_records(records)
@@ -1168,7 +1273,6 @@ def paired_datapoints(
     if plot_df.empty:
         raise ValueError("No paired datapoints remain after value filtering.")
 
-    plot_panel_names = [str(panel_name) for panel_name in selected_panel_names]
     plot_ncols = min(ncols, len(plot_panel_names))
     plot_nrows = math.ceil(len(plot_panel_names) / plot_ncols)
     if figsize is None:

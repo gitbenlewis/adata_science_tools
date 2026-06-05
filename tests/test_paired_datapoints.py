@@ -498,6 +498,104 @@ class PairedDatapointsTests(unittest.TestCase):
             if fig_stack is not None:
                 plt.close(fig_stack)
 
+    def test_subplot_by_obs_key_splits_single_variable_panels(self):
+        fig = None
+        try:
+            fig, axes, plot_df = adtl.paired_datapoints(
+                adata=self.make_adata(),
+                var_names=["A_v1"],
+                pair_by_key="Subject_ID",
+                subplot_by_obs_key="Subject_ID",
+                show=False,
+            )
+
+            self.assertEqual(list(axes), ["S1", "S2", "S3"])
+            self.assertEqual(set(plot_df["Subject_ID"]), {"S1", "S2", "S3"})
+            self.assertEqual(set(plot_df.loc[plot_df["panel"] == "S1", "pair_id"]), {"S1"})
+            self.assertEqual(plot_df.loc[plot_df["panel"] == "S1", "value"].tolist(), [1.0, 2.0])
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_subplot_by_obs_key_composes_with_var_group_panels(self):
+        fig = None
+        try:
+            fig, axes, plot_df = adtl.paired_datapoints(
+                adata=self.make_adata(),
+                var_groupby_key="Gene",
+                var_names=["GENE_A", "GENE_B"],
+                collapse_mode="aggregate",
+                collapse_func="mean",
+                pair_by_key="Subject_ID",
+                subplot_by_obs_key="cohort",
+                show=False,
+            )
+
+            self.assertEqual(list(axes), ["GENE_A | A", "GENE_A | B", "GENE_B | A", "GENE_B | B"])
+            self.assertEqual(set(plot_df.loc[plot_df["panel"] == "GENE_A | A", "pair_id"]), {"S1", "S3"})
+            self.assertEqual(
+                plot_df.loc[
+                    (plot_df["panel"] == "GENE_A | B") & (plot_df["x_label"] == "Pre"),
+                    "value",
+                ].tolist(),
+                [16.5],
+            )
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_subplot_by_obs_key_supports_source_obsm_pairs(self):
+        obs = pd.DataFrame(
+            {
+                "Subject_ID": ["S1", "S2"],
+                "visit_group": ["baseline", "followup"],
+            },
+            index=["S1", "S2"],
+        )
+        var = pd.DataFrame(index=["A_v1"])
+        adata = ad.AnnData(X=np.zeros((2, 1)), obs=obs, var=var)
+        adata.uns["ref_vs_target_adata"] = {"pair_by_key": "Subject_ID"}
+        adata.obsm["pre_values"] = pd.DataFrame(
+            [[10.0], [20.0]],
+            index=adata.obs_names,
+            columns=adata.var_names,
+        )
+        adata.obsm["post_values"] = pd.DataFrame(
+            [[11.0], [22.0]],
+            index=adata.obs_names,
+            columns=adata.var_names,
+        )
+
+        fig = None
+        try:
+            fig, axes, plot_df = adtl.paired_datapoints(
+                adata=adata,
+                var_names=["A_v1"],
+                pair_by_key="Subject_ID",
+                subplot_by_obs_key="visit_group",
+                show=False,
+            )
+
+            self.assertEqual(list(axes), ["baseline", "followup"])
+            self.assertEqual(set(plot_df["visit_group"]), {"baseline", "followup"})
+            self.assertEqual(plot_df.loc[plot_df["panel"] == "followup", "value"].tolist(), [20.0, 22.0])
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_subplot_by_obs_key_requires_matching_ref_and_target_values(self):
+        adata = self.make_adata()
+        adata.obs.loc["s1_post", "cohort"] = "B"
+
+        with self.assertRaisesRegex(ValueError, "Mismatched values in 'cohort'"):
+            adtl.paired_datapoints(
+                adata=adata,
+                var_names=["A_v1"],
+                pair_by_key="Subject_ID",
+                subplot_by_obs_key="cohort",
+                show=False,
+            )
+
     def test_subset_var_key_controls_hue_from_variable_metadata(self):
         fig = None
         try:
