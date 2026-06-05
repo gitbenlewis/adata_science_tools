@@ -47,6 +47,7 @@ def paired_datapoints(
     filter_vars_by_isin_lists: Mapping[str, Sequence[Any]] | None = None,
     filter_obs_by_isin_lists: Mapping[str, Sequence[Any]] | None = None,
     subset_obs_key: str | None = None,
+    subset_var_key: str | None = None,
     subset_order: Sequence[Any] | None = None,
     palette: Sequence[Any] | str | None = palettes.tol_colors,
     subset_palette: Sequence[Any] | str | None = None,
@@ -315,7 +316,8 @@ fig, axes, plot_df = adtl.paired_datapoints(
    AND semantics before grouping and collapse.
 
 3. `subset_obs_key="column"` colors points by observation metadata group within
-   each panel.
+   each panel. `subset_var_key="column"` colors points by variable metadata
+   when plotted records map to one `source_variable`.
 
 4. `subset_order` controls hue order; otherwise categorical order or first
    appearance is used.
@@ -330,6 +332,25 @@ fig, axes, plot_df = adtl.paired_datapoints(
     var_names=["IL6", "TNF", "CRP"],
     pair_by_key="Subject_ID",
     subset_obs_key="cohort",
+    legend=True,
+    legend_scope="figure",
+    legend_loc="center left",
+    legend_bbox_to_anchor=(1.02, 0.5),
+    show=False,
+)
+```
+
+Use `subset_var_key` with raw-variable rows, such as `collapse_mode="stack"` or
+`collapse_mode="all"`, when hue should come from `adata.var` or `var_df`:
+
+```python
+fig, axes, plot_df = adtl.paired_datapoints(
+    adata=adata,
+    var_groupby_key="Gene",
+    var_names=["IL6"],
+    collapse_mode="stack",
+    pair_by_key="Subject_ID",
+    subset_var_key="feature_type",
     legend=True,
     legend_scope="figure",
     legend_loc="center left",
@@ -359,6 +380,11 @@ fig, axes, plot_df = adtl.paired_datapoints(
    `var_groupby_key`, and selects the raw variable with the largest non-missing
    reference value per pair and group. Ties are logged and resolved by filtered
    variable order.
+
+7. `subset_var_key` is not supported for grouped aggregate reductions such as
+   `mean`, `median`, or `sum`, because those rows combine multiple variables.
+   Use `collapse_mode="stack"`, `collapse_mode="all"`, ungrouped variables, or
+   `collapse_func="select_max_ref_value"` when variable-metadata hue is needed.
 
 ## Logging
 
