@@ -498,6 +498,111 @@ class PairedDatapointsTests(unittest.TestCase):
             if fig_stack is not None:
                 plt.close(fig_stack)
 
+    def test_subset_var_key_controls_hue_from_variable_metadata(self):
+        fig = None
+        try:
+            fig, axes, plot_df = adtl.paired_datapoints(
+                adata=self.make_adata(),
+                var_names=["A_v1", "B_v1"],
+                collapse_mode="all",
+                pair_by_key="Subject_ID",
+                subset_var_key="feature_type",
+                subset_order=["rna", "protein"],
+                legend=True,
+                legend_scope="figure",
+                show=False,
+            )
+            fig.canvas.draw()
+
+            self.assertEqual(list(axes), ["all"])
+            self.assertEqual(set(plot_df.loc[plot_df["source_variable"] == "A_v1", "feature_type"]), {"protein"})
+            self.assertEqual(set(plot_df.loc[plot_df["source_variable"] == "B_v1", "feature_type"]), {"rna"})
+            self.assertEqual(len(fig.legends), 1)
+            self.assertEqual([text.get_text() for text in fig.legends[0].get_texts()], ["rna", "protein"])
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_subset_var_key_supports_dataframe_input_with_var_df(self):
+        adata = self.make_adata()
+        wide_df = adata.obs.join(
+            pd.DataFrame(adata.X, index=adata.obs_names, columns=adata.var_names)
+        )
+        fig = None
+        try:
+            fig, _, plot_df = adtl.paired_datapoints(
+                input_data=wide_df,
+                var_df=adata.var,
+                var_names=["A_v1", "B_v1"],
+                collapse_mode="all",
+                pair_by_key="Subject_ID",
+                subset_var_key="feature_type",
+                show=False,
+            )
+
+            self.assertEqual(set(plot_df["feature_type"]), {"protein", "rna"})
+            self.assertEqual(set(plot_df.loc[plot_df["source_variable"] == "A_v1", "feature_type"]), {"protein"})
+            self.assertEqual(set(plot_df.loc[plot_df["source_variable"] == "B_v1", "feature_type"]), {"rna"})
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_subset_var_key_supports_select_max_ref_value(self):
+        adata = self.make_adata()
+        adata.var.loc["A_v2", "feature_type"] = "rna"
+        fig = None
+        try:
+            fig, _, plot_df = adtl.paired_datapoints(
+                adata=adata,
+                var_groupby_key="Gene",
+                var_names=["GENE_A"],
+                collapse_mode="aggregate",
+                collapse_func="select_max_ref_value",
+                pair_by_key="Subject_ID",
+                subset_var_key="feature_type",
+                show=False,
+            )
+
+            self.assertEqual(set(plot_df["source_variable"]), {"A_v2"})
+            self.assertEqual(set(plot_df["feature_type"]), {"rna"})
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_subset_obs_key_and_subset_var_key_are_mutually_exclusive(self):
+        with self.assertRaisesRegex(ValueError, "Provide only one of 'subset_obs_key' or 'subset_var_key'"):
+            adtl.paired_datapoints(
+                adata=self.make_adata(),
+                var_names=["A_v1"],
+                pair_by_key="Subject_ID",
+                subset_obs_key="cohort",
+                subset_var_key="feature_type",
+                show=False,
+            )
+
+    def test_subset_var_key_requires_variable_metadata_column(self):
+        with self.assertRaisesRegex(ValueError, "Column 'missing_key' not found in variable metadata"):
+            adtl.paired_datapoints(
+                adata=self.make_adata(),
+                var_names=["A_v1"],
+                pair_by_key="Subject_ID",
+                subset_var_key="missing_key",
+                show=False,
+            )
+
+    def test_subset_var_key_rejects_grouped_aggregate_without_source_variable(self):
+        with self.assertRaisesRegex(ValueError, "subset_var_key.*grouped collapse_mode"):
+            adtl.paired_datapoints(
+                adata=self.make_adata(),
+                var_groupby_key="Gene",
+                var_names=["GENE_A"],
+                collapse_mode="aggregate",
+                collapse_func="mean",
+                pair_by_key="Subject_ID",
+                subset_var_key="feature_type",
+                show=False,
+            )
+
     def test_subset_obs_key_controls_hue_legend(self):
         fig = None
         try:

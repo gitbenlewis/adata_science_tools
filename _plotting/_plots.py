@@ -550,6 +550,7 @@ def paired_datapoints(
     filter_vars_by_isin_lists: Mapping[str, Sequence[Any]] | None = None,
     filter_obs_by_isin_lists: Mapping[str, Sequence[Any]] | None = None,
     subset_obs_key: str | None = None,
+    subset_var_key: str | None = None,
     subset_order: Sequence[Any] | None = None,
     palette: Sequence[Any] | str | None = palettes.tol_colors,
     subset_palette: Sequence[Any] | str | None = None,
@@ -639,6 +640,8 @@ def paired_datapoints(
         raise ValueError("'ncols' must be at least 1.")
     if legend_scope not in {"axis", "figure"}:
         raise ValueError("'legend_scope' must be one of 'axis' or 'figure'.")
+    if subset_obs_key is not None and subset_var_key is not None:
+        raise ValueError("Provide only one of 'subset_obs_key' or 'subset_var_key'.")
     if ylims is not None:
         ylims_tuple = tuple(ylims)
         if len(ylims_tuple) != 2:
@@ -721,6 +724,14 @@ def paired_datapoints(
         raise ValueError("'subplot_title_var_col' is not supported with 'collapse_mode=\"all\"'.")
     elif subplot_title_var_col is not None and subplot_title_var_col not in var_metadata_df.columns:
         raise ValueError(f"Column '{subplot_title_var_col}' not found in variable metadata.")
+    if subset_var_key is not None:
+        if subset_var_key not in var_metadata_df.columns:
+            raise ValueError(f"Column '{subset_var_key}' not found in variable metadata.")
+        if has_var_groups and collapse_mode == "aggregate" and collapse_func != "select_max_ref_value":
+            raise ValueError(
+                "'subset_var_key' is not supported with grouped collapse_mode=\"aggregate\" "
+                "unless collapse_func=\"select_max_ref_value\"."
+            )
 
     obs_mask = _apply_isin_filters(
         obs_metadata_df,
@@ -987,6 +998,9 @@ def paired_datapoints(
     records: list[dict[str, Any]] = []
     ref_label = str(groupby_key_ref_value)
     target_label = str(groupby_key_target_value)
+    active_subset_key = subset_obs_key or subset_var_key
+    active_subset_metadata_df = filtered_obs_df if subset_obs_key is not None else var_metadata_df
+    var_subset_values_by_name = var_metadata_df[subset_var_key] if subset_var_key is not None else None
 
     def _append_pair_records(
         *,
@@ -1047,7 +1061,13 @@ def paired_datapoints(
                         target_value=target_values_df.loc[pair_id, raw_var_name],
                         source_variable=raw_var_name,
                         line_id=f"{panel_label}|{pair_id}|{raw_var_name}",
-                        subset_value=subset_values_by_pair.loc[pair_id] if subset_obs_key is not None else pd.NA,
+                        subset_value=(
+                            subset_values_by_pair.loc[pair_id]
+                            if subset_obs_key is not None
+                            else var_subset_values_by_name.loc[raw_var_name]
+                            if subset_var_key is not None
+                            else pd.NA
+                        ),
                     )
         elif has_var_groups:
             ref_panel_values_df = ref_values_df.loc[:, panel_raw_vars]
@@ -1085,6 +1105,12 @@ def paired_datapoints(
                         selected_source_variable = panel_raw_vars[selected_position]
                         ref_value = ref_values_matrix[row_idx, selected_position]
                         target_value = target_values_matrix[row_idx, selected_position]
+                    if subset_obs_key is not None:
+                        subset_value = subset_values_by_pair.loc[pair_id]
+                    elif subset_var_key is not None and not pd.isna(selected_source_variable):
+                        subset_value = var_subset_values_by_name.loc[selected_source_variable]
+                    else:
+                        subset_value = pd.NA
                     _append_pair_records(
                         panel_name=panel_label,
                         variable_name=panel_label,
@@ -1093,7 +1119,7 @@ def paired_datapoints(
                         target_value=target_value,
                         source_variable=selected_source_variable,
                         line_id=f"{panel_label}|{pair_id}",
-                        subset_value=subset_values_by_pair.loc[pair_id] if subset_obs_key is not None else pd.NA,
+                        subset_value=subset_value,
                     )
             else:
                 ref_values = _aggregate_values(ref_panel_values_df)
@@ -1120,13 +1146,19 @@ def paired_datapoints(
                     target_value=target_values_df.loc[pair_id, raw_var_name],
                     source_variable=raw_var_name,
                     line_id=f"{panel_label}|{pair_id}",
-                    subset_value=subset_values_by_pair.loc[pair_id] if subset_obs_key is not None else pd.NA,
+                    subset_value=(
+                        subset_values_by_pair.loc[pair_id]
+                        if subset_obs_key is not None
+                        else var_subset_values_by_name.loc[raw_var_name]
+                        if subset_var_key is not None
+                        else pd.NA
+                    ),
                 )
 
     plot_df = pd.DataFrame.from_records(records)
     plot_df["value"] = pd.to_numeric(plot_df["value"], errors="coerce")
-    if subset_obs_key is not None:
-        plot_df[subset_obs_key] = plot_df["subset_value"]
+    if active_subset_key is not None:
+        plot_df[active_subset_key] = plot_df["subset_value"]
     if nas2zeros:
         plot_df["value"] = plot_df["value"].fillna(0)
     if dropna:
@@ -1155,14 +1187,14 @@ def paired_datapoints(
 
     subset_hue_order: list[Any] = []
     subset_palette_map: dict[Any, Any] | None = None
-    if subset_obs_key is not None:
-        subset_values = plot_df[subset_obs_key].dropna()
+    if active_subset_key is not None:
+        subset_values = plot_df[active_subset_key].dropna()
         if subset_order is not None:
             observed_subset_values = set(subset_values)
             subset_hue_order = [value for value in subset_order if value in observed_subset_values]
-        elif isinstance(filtered_obs_df[subset_obs_key].dtype, pd.CategoricalDtype):
+        elif isinstance(active_subset_metadata_df[active_subset_key].dtype, pd.CategoricalDtype):
             subset_hue_order = list(
-                filtered_obs_df[subset_obs_key]
+                active_subset_metadata_df[active_subset_key]
                 .cat.remove_unused_categories()
                 .cat.categories
             )
@@ -1236,7 +1268,7 @@ def paired_datapoints(
                         zorder=1,
                     )
 
-        if subset_obs_key is None:
+        if active_subset_key is None:
             ax.scatter(
                 panel_df["_jittered_x"],
                 panel_df["value"],
@@ -1247,7 +1279,7 @@ def paired_datapoints(
             )
         else:
             for subset_value in subset_hue_order:
-                subset_df = panel_df.loc[panel_df[subset_obs_key] == subset_value]
+                subset_df = panel_df.loc[panel_df[active_subset_key] == subset_value]
                 if subset_df.empty:
                     continue
                 color = subset_palette_map.get(subset_value) if subset_palette_map is not None else None
@@ -1260,7 +1292,7 @@ def paired_datapoints(
                     label=str(subset_value),
                     zorder=2,
                 )
-            missing_subset_df = panel_df.loc[panel_df[subset_obs_key].isna()]
+            missing_subset_df = panel_df.loc[panel_df[active_subset_key].isna()]
             if not missing_subset_df.empty:
                 ax.scatter(
                     missing_subset_df["_jittered_x"],
@@ -1284,8 +1316,8 @@ def paired_datapoints(
             ax.tick_params(axis="both", labelsize=tick_label_fontsize)
         if ylims_tuple is not None:
             ax.set_ylim(ylims_tuple)
-        if legend and legend_scope == "axis" and subset_obs_key is not None and subset_hue_order:
-            legend_kwargs: dict[str, Any] = {"title": subset_obs_key, "fontsize": legend_fontsize}
+        if legend and legend_scope == "axis" and active_subset_key is not None and subset_hue_order:
+            legend_kwargs: dict[str, Any] = {"title": active_subset_key, "fontsize": legend_fontsize}
             if legend_loc is not None:
                 legend_kwargs["loc"] = legend_loc
             if legend_bbox_to_anchor is not None:
@@ -1295,7 +1327,7 @@ def paired_datapoints(
     for ax in axes_flat[len(plot_panel_names):]:
         ax.set_visible(False)
 
-    if legend and legend_scope == "figure" and subset_obs_key is not None and subset_hue_order:
+    if legend and legend_scope == "figure" and active_subset_key is not None and subset_hue_order:
         ordered_labels = [str(subset_value) for subset_value in subset_hue_order]
         handles_by_label = {}
         for ax in axes_by_panel.values():
@@ -1306,7 +1338,7 @@ def paired_datapoints(
         legend_labels = [label for label in ordered_labels if label in handles_by_label]
         legend_handles = [handles_by_label[label] for label in legend_labels]
         if legend_handles:
-            legend_kwargs = {"title": subset_obs_key, "fontsize": legend_fontsize}
+            legend_kwargs = {"title": active_subset_key, "fontsize": legend_fontsize}
             if legend_loc is not None:
                 legend_kwargs["loc"] = legend_loc
             if legend_bbox_to_anchor is not None:
