@@ -40,6 +40,12 @@ def datapoints(
     subplot_by_var_missing_label: str = "Missing",
     subplot_order: Sequence[Any] | None = None,
     x_order: Sequence[Any] | None = None,
+    x_by_obs_key: str | None = None,
+    x_by_obs_missing_label: str = "Missing",
+    x_by_obs_multi_var_mode: Literal[
+        "panel_by_variable",
+        "pool_variables",
+    ] = "panel_by_variable",
     palette: Sequence[Any] | str | None = palettes.tol_colors,
     subset_palette: Sequence[Any] | str | None = None,
     color: Any | None = None,
@@ -60,6 +66,7 @@ def datapoints(
     figsize: tuple[float, float] | None = None,
     sharey: bool = False,
     ylims: Sequence[float] | None = None,
+    add_zero_line: bool = False,
     xlabel: str | None = None,
     ylabel: str | None = None,
     title: str | None = None,
@@ -120,6 +127,8 @@ def datapoints(
         raise ValueError("'legend_scope' must be one of 'axis' or 'figure'.")
     if subplot_by_obs_key is not None and subplot_by_var_key is not None:
         raise ValueError("Provide only one of 'subplot_by_obs_key' or 'subplot_by_var_key'.")
+    if x_by_obs_multi_var_mode not in {"panel_by_variable", "pool_variables"}:
+        raise ValueError("'x_by_obs_multi_var_mode' must be one of 'panel_by_variable' or 'pool_variables'.")
     if ylims is not None:
         ylims_tuple = tuple(ylims)
         if len(ylims_tuple) != 2:
@@ -168,6 +177,8 @@ def datapoints(
         raise ValueError(f"Column '{subset_obs_key}' not found in observation metadata.")
     if subplot_by_obs_key is not None and subplot_by_obs_key not in obs_metadata_df.columns:
         raise ValueError(f"Column '{subplot_by_obs_key}' not found in observation metadata.")
+    if x_by_obs_key is not None and x_by_obs_key not in obs_metadata_df.columns:
+        raise ValueError(f"Column '{x_by_obs_key}' not found in observation metadata.")
     if subplot_by_var_key is not None and subplot_by_var_key not in var_metadata_df.columns:
         raise ValueError(f"Column '{subplot_by_var_key}' not found in variable metadata.")
 
@@ -306,6 +317,14 @@ def datapoints(
             return var_panel or default_panel
         return default_panel
 
+    def _record_x_label(default_x_label: Any, obs_name: Any) -> str:
+        if x_by_obs_key is None:
+            return str(default_x_label)
+        x_value = filtered_obs_df.loc[obs_name, x_by_obs_key]
+        if pd.isna(x_value):
+            return x_by_obs_missing_label
+        return str(x_value)
+
     values_df = _matrix_to_frame(filtered_obs_df.index, selected_raw_var_names)
     records: list[dict[str, Any]] = []
 
@@ -318,12 +337,13 @@ def datapoints(
         var_panel: str | None,
     ) -> None:
         for obs_name, value in values.items():
+            record_x_label = _record_x_label(x_label, obs_name)
             record = {
                 "panel": _record_panel("all", obs_name, var_panel),
                 "variable": str(variable_name),
                 "source_variable": source_variable,
                 "obs_name": obs_name,
-                "x_label": str(x_label),
+                "x_label": record_x_label,
                 "value": value,
                 "subset_value": (
                     filtered_obs_df.loc[obs_name, subset_obs_key]
@@ -337,6 +357,8 @@ def datapoints(
                 record[subplot_by_obs_key] = filtered_obs_df.loc[obs_name, subplot_by_obs_key]
             if subplot_by_var_key is not None:
                 record[subplot_by_var_key] = var_panel
+            if x_by_obs_key is not None:
+                record[x_by_obs_key] = record_x_label
             records.append(record)
 
     if collapse_mode == "all":
@@ -412,6 +434,21 @@ def datapoints(
     if plot_df.empty:
         raise ValueError("No datapoints remain after value filtering.")
 
+    panel_by_x_variable = False
+    if x_by_obs_key is not None and x_by_obs_multi_var_mode == "panel_by_variable":
+        x_by_obs_variables = list(pd.unique(plot_df["variable"].dropna()))
+        if len(x_by_obs_variables) > 1:
+            if subplot_by_obs_key is not None or subplot_by_var_key is not None:
+                raise ValueError(
+                    "When 'x_by_obs_key' is used with multiple variables/groups and "
+                    "'x_by_obs_multi_var_mode=\"panel_by_variable\"', do not also provide "
+                    "'subplot_by_obs_key' or 'subplot_by_var_key'. Select one variable/group "
+                    "or use 'x_by_obs_multi_var_mode=\"pool_variables\"'."
+                )
+            plot_df = plot_df.copy()
+            plot_df["panel"] = plot_df["variable"].astype(str)
+            panel_by_x_variable = True
+
     def _ordered_values(
         observed_values: Sequence[Any],
         requested_order: Sequence[Any] | None = None,
@@ -430,7 +467,12 @@ def datapoints(
             return ordered + [value for value in observed if value not in set(ordered)]
         return observed
 
-    if subplot_by_obs_key is not None:
+    if panel_by_x_variable:
+        panel_names = [
+            str(value)
+            for value in _ordered_values(plot_df["panel"], subplot_order)
+        ]
+    elif subplot_by_obs_key is not None:
         panel_names = [
             str(value)
             for value in _ordered_values(
@@ -640,10 +682,22 @@ def datapoints(
         ax.set_title(panel_name)
         ax.set_xticks(x_positions)
         ax.set_xticklabels(x_labels, rotation=45, ha="right")
-        ax.set_xlabel(xlabel or "variable", fontsize=axis_label_fontsize)
+        ax.set_xlabel(
+            xlabel or (x_by_obs_key if x_by_obs_key is not None else "variable"),
+            fontsize=axis_label_fontsize,
+        )
         ax.set_ylabel(ylabel or "value", fontsize=axis_label_fontsize)
         if tick_label_fontsize is not None:
             ax.tick_params(axis="both", labelsize=tick_label_fontsize)
+        if add_zero_line:
+            ax.axhline(
+                0,
+                color="red",
+                linestyle=":",
+                linewidth=1.5,
+                label="_nolegend_",
+                zorder=0.5,
+            )
         if ylims_tuple is not None:
             ax.set_ylim(ylims_tuple)
         if legend and legend_scope == "axis":
