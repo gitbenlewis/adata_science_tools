@@ -2,15 +2,15 @@
 
 General plotting utilities from `_plotting/_plots.py`.
 
-This module contains volcano-plot, QQ-plot, and paired datapoint plotting helpers:
+This module contains volcano-plot, QQ-plot, and paired time-series datapoint plotting helpers:
 
 - `volcano_plot_generic`
 - `qqplot`
-- `paired_datapoints`
 - `timeseries_paired_datapoints`
 
-The newer configurable Pre/Post or ref/target paired plotting API is documented in
-[`_paired_datapoints.md`](_paired_datapoints.md). Older replacements live in
+The configurable unpaired and Pre/Post/ref-target datapoint plotting APIs live in
+`_plotting/_datapoints.py` and are documented in [`_datapoints.md`](_datapoints.md)
+and [`_paired_datapoints.md`](_paired_datapoints.md). Older replacements live in
 [`_plots_depreciated.md`](_plots_depreciated.md).
 
 ## `volcano_plot_generic`
@@ -126,4 +126,4 @@ The current implementation does not return a figure object. Treat it as a show-a
 
 ## Coverage note
 
-This page documents current code in `_plotting/_plots.py` and repo example usage such as `example_PMID_33969320/scripts/make_volcano_plots.py`. Dedicated regression coverage exists for `paired_datapoints()` in `tests/test_paired_datapoints.py`; the other functions on this page are based on current code and repo example usage.
+This page documents current code in `_plotting/_plots.py` and repo example usage such as `example_PMID_33969320/scripts/make_volcano_plots.py`. Dedicated datapoint regression coverage lives in `tests/test_datapoints.py` and `tests/test_paired_datapoints.py`; the functions on this page are based on current code and repo example usage.

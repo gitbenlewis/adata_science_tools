@@ -7,6 +7,7 @@ This directory holds module-level documentation for public `adata_science_tools`
 - [`_IO.md`](_IO.md): core dataset save and AnnData-to-DataFrame helpers used across the package.
 - [`_column_plots.md`](_column_plots.md): horizontal bar plots, log2 fold-change dotplots, and multi-panel composite figure builders.
 - [`_corr_dotplots.md`](_corr_dotplots.md): correlation scatterplots, subgroup fit overlays, and rank-comparison helpers.
+- [`_datapoints.md`](_datapoints.md): unpaired variable-level datapoint plots with obs/var filters, grouped variables, optional box/violin overlays, and metric legends.
 - [`_diff_test.md`](_diff_test.md): differential testing across independent, paired, and nested paired group comparisons, including CSV-backed input workflows.
 - [`_expectation_based_covar_correction.md`](_expectation_based_covar_correction.md): expectation-model fitting, artifact export, prediction, regression-based correction, and residual or ratio transforms for `AnnData` objects.
 - [`_histograms.md`](_histograms.md): AnnData and wide-DataFrame histogram plotting with obs/var filters and subgroup overlays.
@@ -27,4 +28,4 @@ This directory holds module-level documentation for public `adata_science_tools`
 
 - These pages document the current implementation in `adata_science_tools`, not an earlier design draft.
 - The first source of truth for behavior is the code in `_tools/`, `_io/`, `_simulate_data/`, and the tests in `tests/`.
-- Within `_plotting`, direct regression coverage currently exists for `_corr_dotplots.py`, `_histograms.py`, and `paired_datapoints()`; the other plotting pages are based on current code and repo example usage.
+- Within `_plotting`, direct regression coverage currently exists for `_corr_dotplots.py`, `_histograms.py`, `datapoints()`, and `paired_datapoints()`; the other plotting pages are based on current code and repo example usage.
