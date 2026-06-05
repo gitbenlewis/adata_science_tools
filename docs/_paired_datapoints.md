@@ -46,6 +46,7 @@ def paired_datapoints(
     bounds_fill_missing_paired_only: bool = False,
     filter_vars_by_isin_lists: Mapping[str, Sequence[Any]] | None = None,
     filter_obs_by_isin_lists: Mapping[str, Sequence[Any]] | None = None,
+    subplot_by_obs_key: str | None = None,
     subset_obs_key: str | None = None,
     subset_var_key: str | None = None,
     subset_order: Sequence[Any] | None = None,
@@ -315,16 +316,30 @@ fig, axes, plot_df = adtl.paired_datapoints(
 2. `filter_vars_by_isin_lists={"column": ["allowed"]}` filters variables with
    AND semantics before grouping and collapse.
 
-3. `subset_obs_key="column"` colors points by observation metadata group within
+3. `subplot_by_obs_key="column"` splits paired records into one subplot per
+   non-missing observation metadata value. For normal Pre/Post-style input, the
+   ref and target rows in a pair must have the same value.
+
+4. `subset_obs_key="column"` colors points by observation metadata group within
    each panel. `subset_var_key="column"` colors points by variable metadata
    when plotted records map to one `source_variable`.
 
-4. `subset_order` controls hue order; otherwise categorical order or first
+5. `subset_order` controls hue order; otherwise categorical order or first
    appearance is used.
 
-5. `legend_scope="figure"` draws one shared legend for a multi-panel grid.
+6. `legend_scope="figure"` draws one shared legend for a multi-panel grid.
    `legend_loc` and `legend_bbox_to_anchor` are forwarded to Matplotlib legend
    placement for either per-axis or figure-level legends.
+
+```python
+fig, axes, plot_df = adtl.paired_datapoints(
+    adata=adata,
+    var_names=["IL6"],
+    pair_by_key="subject_id",
+    subplot_by_obs_key="subject_id",
+    show=False,
+)
+```
 
 ```python
 fig, axes, plot_df = adtl.paired_datapoints(
