@@ -576,6 +576,9 @@ def paired_datapoints(
     axis_label_fontsize: int = 12,
     tick_label_fontsize: int | None = None,
     legend_fontsize: int | None = None,
+    legend_loc: str | int | None = None,
+    legend_bbox_to_anchor: tuple[float, ...] | None = None,
+    legend_scope: Literal["axis", "figure"] = "axis",
     legend: bool = False,
     dropna: bool = True,
     nas2zeros: bool = False,
@@ -634,6 +637,8 @@ def paired_datapoints(
             raise ValueError("'collapse_func=\"select_max_ref_value\"' requires collapse_mode=\"aggregate\".")
     if ncols < 1:
         raise ValueError("'ncols' must be at least 1.")
+    if legend_scope not in {"axis", "figure"}:
+        raise ValueError("'legend_scope' must be one of 'axis' or 'figure'.")
     if ylims is not None:
         ylims_tuple = tuple(ylims)
         if len(ylims_tuple) != 2:
@@ -1279,11 +1284,34 @@ def paired_datapoints(
             ax.tick_params(axis="both", labelsize=tick_label_fontsize)
         if ylims_tuple is not None:
             ax.set_ylim(ylims_tuple)
-        if legend and subset_obs_key is not None and subset_hue_order:
-            ax.legend(title=subset_obs_key, fontsize=legend_fontsize)
+        if legend and legend_scope == "axis" and subset_obs_key is not None and subset_hue_order:
+            legend_kwargs: dict[str, Any] = {"title": subset_obs_key, "fontsize": legend_fontsize}
+            if legend_loc is not None:
+                legend_kwargs["loc"] = legend_loc
+            if legend_bbox_to_anchor is not None:
+                legend_kwargs["bbox_to_anchor"] = legend_bbox_to_anchor
+            ax.legend(**legend_kwargs)
 
     for ax in axes_flat[len(plot_panel_names):]:
         ax.set_visible(False)
+
+    if legend and legend_scope == "figure" and subset_obs_key is not None and subset_hue_order:
+        ordered_labels = [str(subset_value) for subset_value in subset_hue_order]
+        handles_by_label = {}
+        for ax in axes_by_panel.values():
+            handles, labels = ax.get_legend_handles_labels()
+            for handle, label in zip(handles, labels):
+                if label in ordered_labels and label not in handles_by_label:
+                    handles_by_label[label] = handle
+        legend_labels = [label for label in ordered_labels if label in handles_by_label]
+        legend_handles = [handles_by_label[label] for label in legend_labels]
+        if legend_handles:
+            legend_kwargs = {"title": subset_obs_key, "fontsize": legend_fontsize}
+            if legend_loc is not None:
+                legend_kwargs["loc"] = legend_loc
+            if legend_bbox_to_anchor is not None:
+                legend_kwargs["bbox_to_anchor"] = legend_bbox_to_anchor
+            fig.legend(legend_handles, legend_labels, **legend_kwargs)
 
     plt.tight_layout()
     if savefig:
