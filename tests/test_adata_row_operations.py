@@ -207,6 +207,76 @@ class RefVsTargetAdataTests(unittest.TestCase):
         )
         assert_allclose(result_with_both_flags.X, result.X, equal_nan=True)
 
+    def test_bounds_fill_missing_paired_only_without_bounds_is_noop(self):
+        obs = pd.DataFrame(
+            {
+                "Pre_or_Post_obs_col": ["Post", "Pre", "Post", "Pre"],
+                "pair_id": ["A", "A", "B", "B"],
+            },
+            index=["post_A", "pre_A", "post_B", "pre_B"],
+        )
+        var = pd.DataFrame(index=["feature_1"])
+        adata = ad.AnnData(
+            X=np.array([[np.nan], [10.0], [np.nan], [np.nan]]),
+            obs=obs,
+            var=var,
+        )
+
+        result = ref_vs_target_adata(
+            adata,
+            pair_by_key="pair_id",
+            bounds_fill_missing_paired_only=True,
+            save_source_values_obsm=True,
+        )
+
+        assert_allclose(result.X, np.array([[np.nan], [np.nan]]), equal_nan=True)
+        assert_allclose(
+            result.obsm["post_values"].to_numpy(),
+            np.array([[np.nan], [np.nan]]),
+            equal_nan=True,
+        )
+        assert_allclose(
+            result.obsm["pre_values"].to_numpy(),
+            np.array([[10.0], [np.nan]]),
+            equal_nan=True,
+        )
+
+    def test_bounds_fill_missing_paired_only_uses_max_when_min_absent(self):
+        obs = pd.DataFrame(
+            {
+                "Pre_or_Post_obs_col": ["Post", "Pre", "Post", "Pre", "Post", "Pre"],
+                "pair_id": ["A", "A", "B", "B", "C", "C"],
+            },
+            index=["post_A", "pre_A", "post_B", "pre_B", "post_C", "pre_C"],
+        )
+        var = pd.DataFrame(index=["feature_1"])
+        adata = ad.AnnData(
+            X=np.array([[np.nan], [7.0], [np.nan], [np.nan], [6.0], [np.nan]]),
+            obs=obs,
+            var=var,
+        )
+
+        result = ref_vs_target_adata(
+            adata,
+            pair_by_key="pair_id",
+            target_max_value=9.0,
+            ref_max_value=8.0,
+            bounds_fill_missing_paired_only=True,
+            save_source_values_obsm=True,
+        )
+
+        assert_allclose(result.X, np.array([[2.0], [np.nan], [-2.0]]), equal_nan=True)
+        assert_allclose(
+            result.obsm["post_values"].to_numpy(),
+            np.array([[9.0], [np.nan], [6.0]]),
+            equal_nan=True,
+        )
+        assert_allclose(
+            result.obsm["pre_values"].to_numpy(),
+            np.array([[7.0], [np.nan], [8.0]]),
+            equal_nan=True,
+        )
+
     def test_bounds_fill_missing_fills_all_missing_bounded_values(self):
         obs = pd.DataFrame(
             {

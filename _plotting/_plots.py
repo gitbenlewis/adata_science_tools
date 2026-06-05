@@ -949,7 +949,9 @@ def paired_datapoints(
 
     ref_bounds_requested = ref_min_value is not None or ref_max_value is not None
     target_bounds_requested = target_min_value is not None or target_max_value is not None
-    bounds_missing_requested = bounds_fill_missing or bounds_fill_missing_paired_only
+    bounds_missing_requested = (ref_bounds_requested or target_bounds_requested) and (
+        bounds_fill_missing or bounds_fill_missing_paired_only
+    )
     if ref_bounds_requested or bounds_missing_requested:
         ref_values_df = ref_values_df.apply(pd.to_numeric, errors="coerce")
     if target_bounds_requested or bounds_missing_requested:

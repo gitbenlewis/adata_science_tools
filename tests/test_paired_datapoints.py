@@ -316,6 +316,127 @@ class PairedDatapointsTests(unittest.TestCase):
             if fig is not None:
                 plt.close(fig)
 
+    def test_bounds_fill_missing_paired_only_without_bounds_is_noop(self):
+        obs = pd.DataFrame(
+            {
+                "Pre_or_Post_obs_col": ["Pre", "Post", "Pre", "Post"],
+                "Subject_ID": ["S1", "S1", "S2", "S2"],
+            },
+            index=["s1_pre", "s1_post", "s2_pre", "s2_post"],
+        )
+        var = pd.DataFrame(index=["A_v1"])
+        adata = ad.AnnData(
+            X=np.array([[10.0], [np.nan], [np.nan], [np.nan]]),
+            obs=obs,
+            var=var,
+        )
+
+        fig = None
+        try:
+            fig, _, plot_df = adtl.paired_datapoints(
+                adata=adata,
+                var_names=["A_v1"],
+                pair_by_key="Subject_ID",
+                bounds_fill_missing_paired_only=True,
+                dropna=False,
+                show=False,
+            )
+
+            ref_values = plot_df.loc[plot_df["x_label"] == "Pre", "value"].tolist()
+            target_values = plot_df.loc[plot_df["x_label"] == "Post", "value"].tolist()
+            self.assertEqual(ref_values[0], 10.0)
+            self.assertTrue(np.isnan(ref_values[1]))
+            self.assertTrue(np.isnan(target_values[0]))
+            self.assertTrue(np.isnan(target_values[1]))
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_bounds_fill_missing_paired_only_uses_max_when_min_absent(self):
+        obs = pd.DataFrame(
+            {
+                "Pre_or_Post_obs_col": ["Pre", "Post", "Pre", "Post", "Pre", "Post"],
+                "Subject_ID": ["S1", "S1", "S2", "S2", "S3", "S3"],
+            },
+            index=["s1_pre", "s1_post", "s2_pre", "s2_post", "s3_pre", "s3_post"],
+        )
+        var = pd.DataFrame(index=["A_v1"])
+        adata = ad.AnnData(
+            X=np.array([[7.0], [np.nan], [np.nan], [np.nan], [np.nan], [6.0]]),
+            obs=obs,
+            var=var,
+        )
+
+        fig = None
+        try:
+            fig, _, plot_df = adtl.paired_datapoints(
+                adata=adata,
+                var_names=["A_v1"],
+                pair_by_key="Subject_ID",
+                ref_max_value=8.0,
+                target_max_value=9.0,
+                bounds_fill_missing_paired_only=True,
+                dropna=False,
+                show=False,
+            )
+
+            ref_values = plot_df.loc[plot_df["x_label"] == "Pre", "value"].tolist()
+            target_values = plot_df.loc[plot_df["x_label"] == "Post", "value"].tolist()
+            self.assertEqual(ref_values[0], 7.0)
+            self.assertTrue(np.isnan(ref_values[1]))
+            self.assertEqual(ref_values[2], 8.0)
+            self.assertEqual(target_values[0], 9.0)
+            self.assertTrue(np.isnan(target_values[1]))
+            self.assertEqual(target_values[2], 6.0)
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_ref_vs_target_source_values_keep_paired_only_bounds(self):
+        obs = pd.DataFrame(
+            {
+                "Pre_or_Post_obs_col": ["Post", "Pre", "Post", "Pre", "Post", "Pre"],
+                "Subject_ID": ["S1", "S1", "S2", "S2", "S3", "S3"],
+            },
+            index=["s1_post", "s1_pre", "s2_post", "s2_pre", "s3_post", "s3_pre"],
+        )
+        var = pd.DataFrame(index=["A_v1"])
+        adata = ad.AnnData(
+            X=np.array([[np.nan], [10.0], [np.nan], [np.nan], [20.0], [np.nan]]),
+            obs=obs,
+            var=var,
+        )
+        result = adtl.ref_vs_target_adata(
+            adata,
+            pair_by_key="Subject_ID",
+            target_min_value=1.0,
+            ref_min_value=2.0,
+            bounds_fill_missing_paired_only=True,
+            save_source_values_obsm=True,
+        )
+
+        fig = None
+        try:
+            fig, _, plot_df = adtl.paired_datapoints(
+                adata=result,
+                var_names=["A_v1"],
+                pair_by_key="Subject_ID",
+                dropna=False,
+                show=False,
+            )
+
+            ref_values = plot_df.loc[plot_df["x_label"] == "Pre", "value"].tolist()
+            target_values = plot_df.loc[plot_df["x_label"] == "Post", "value"].tolist()
+            self.assertEqual(ref_values[0], 10.0)
+            self.assertTrue(np.isnan(ref_values[1]))
+            self.assertEqual(ref_values[2], 2.0)
+            self.assertEqual(target_values[0], 1.0)
+            self.assertTrue(np.isnan(target_values[1]))
+            self.assertEqual(target_values[2], 20.0)
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
     def test_duplicate_pairs_raise_and_incomplete_pairs_log_and_drop(self):
         duplicate_adata = self.make_adata()
         duplicate_adata.obs.loc["s3_pre", "Subject_ID"] = "S1"

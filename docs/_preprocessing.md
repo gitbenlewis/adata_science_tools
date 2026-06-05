@@ -184,7 +184,9 @@ the side's min value when present, otherwise the side's max value.
 Set `bounds_fill_missing_paired_only=True` to fill missing values only when the
 opposite side of the same pair and variable is present. If both missing-fill
 flags are `True`, paired-only fill behavior is used. Numeric clipping of
-present values is unchanged.
+present values is unchanged. A missing side is filled only when that side has a
+min or max bound; if no bound is provided for that side, the missing value stays
+missing.
 
 For one variable with `ref_min_value=2`, `target_min_value=1`, and
 `bounds_fill_missing_paired_only=True`:
