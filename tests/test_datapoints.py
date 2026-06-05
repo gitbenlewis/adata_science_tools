@@ -178,6 +178,47 @@ class DatapointsTests(unittest.TestCase):
             if fig is not None:
                 plt.close(fig)
 
+    def test_subplot_by_var_key_missing_value_routes_to_fallback_panel(self):
+        adata = self.make_adata()
+        adata.var.loc["C_v1", "assay"] = np.nan
+
+        fig = None
+        try:
+            fig, axes, plot_df = adtl.datapoints(
+                adata=adata,
+                var_names=["A_v1", "C_v1"],
+                subplot_by_var_key="assay",
+                show=False,
+            )
+
+            self.assertEqual(list(axes), ["protein_panel", "Missing"])
+            missing_df = plot_df.loc[plot_df["source_variable"] == "C_v1"]
+            self.assertEqual(missing_df["panel"].unique().tolist(), ["Missing"])
+            self.assertEqual(missing_df["assay"].unique().tolist(), ["Missing"])
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_subplot_by_var_key_custom_missing_label(self):
+        adata = self.make_adata()
+        adata.var.loc["C_v1", "assay"] = np.nan
+
+        fig = None
+        try:
+            fig, axes, plot_df = adtl.datapoints(
+                adata=adata,
+                var_names=["C_v1"],
+                subplot_by_var_key="assay",
+                subplot_by_var_missing_label="Unannotated",
+                show=False,
+            )
+
+            self.assertEqual(list(axes), ["Unannotated"])
+            self.assertEqual(plot_df["assay"].unique().tolist(), ["Unannotated"])
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
     def test_subplot_by_obs_key_splits_observations_into_obs_panels(self):
         fig = None
         try:
@@ -267,6 +308,40 @@ class DatapointsTests(unittest.TestCase):
                 var_groupby_key="feature_type",
                 var_names=["protein"],
                 subplot_by_var_key="Gene",
+                show=False,
+            )
+
+    def test_grouped_aggregate_all_missing_var_subplot_routes_to_fallback_panel(self):
+        adata = self.make_adata()
+        adata.var.loc[["A_v1", "A_v2"], "assay"] = np.nan
+
+        fig = None
+        try:
+            fig, axes, plot_df = adtl.datapoints(
+                adata=adata,
+                var_groupby_key="Gene",
+                var_names=["GENE_A"],
+                subplot_by_var_key="assay",
+                show=False,
+            )
+
+            self.assertEqual(list(axes), ["Missing"])
+            self.assertEqual(plot_df["panel"].unique().tolist(), ["Missing"])
+            self.assertEqual(plot_df["assay"].unique().tolist(), ["Missing"])
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_grouped_aggregate_multiple_nonmissing_var_subplot_values_raise(self):
+        adata = self.make_adata()
+        adata.var.loc["A_v2", "assay"] = "second_panel"
+
+        with self.assertRaisesRegex(ValueError, "exactly one nonmissing"):
+            adtl.datapoints(
+                adata=adata,
+                var_groupby_key="Gene",
+                var_names=["GENE_A"],
+                subplot_by_var_key="assay",
                 show=False,
             )
 
