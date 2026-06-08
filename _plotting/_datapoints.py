@@ -524,11 +524,19 @@ def datapoints(
     subset_hue_order: list[Any] = []
     subset_palette_map: dict[Any, Any] | None = None
     if subset_obs_key is not None:
-        subset_hue_order = _ordered_values(
-            plot_df[subset_obs_key],
-            subset_order,
-            filtered_obs_df[subset_obs_key],
-        )
+        if subset_obs_key == x_by_obs_key:
+            display_subset_order = (
+                [str(value) for value in subset_order]
+                if subset_order is not None
+                else [str(value) for value in _ordered_values(plot_df["x_label"], display_x_order)]
+            )
+            subset_hue_order = _ordered_values(plot_df[subset_obs_key], display_subset_order)
+        else:
+            subset_hue_order = _ordered_values(
+                plot_df[subset_obs_key],
+                subset_order,
+                filtered_obs_df[subset_obs_key],
+            )
         subset_palette_to_use = subset_palette or palette
         if subset_palette_to_use is not None and subset_hue_order:
             if isinstance(subset_palette_to_use, str):

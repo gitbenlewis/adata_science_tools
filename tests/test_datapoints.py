@@ -380,6 +380,136 @@ class DatapointsTests(unittest.TestCase):
             if fig is not None:
                 plt.close(fig)
 
+    def test_x_by_obs_key_subset_legend_and_palette_follow_x_order(self):
+        dose_order = [200, 600, 900, 1200, 1600]
+        subset_palette = ["red", "green", "blue", "orange", "purple"]
+        adata = ad.AnnData(
+            X=np.arange(5.0).reshape(5, 1),
+            obs=pd.DataFrame(
+                {"dose": [600, 200, 1600, 900, 1200]},
+                index=[f"s{idx}" for idx in range(5)],
+            ),
+            var=pd.DataFrame(index=["signal"]),
+        )
+
+        fig = None
+        try:
+            fig, axes, _ = adtl.datapoints(
+                adata=adata,
+                var_names=["signal"],
+                x_by_obs_key="dose",
+                x_order=dose_order,
+                subset_obs_key="dose",
+                subset_palette=subset_palette,
+                legend_metrics=None,
+                show=False,
+            )
+
+            ax = axes["all"]
+            self.assertEqual(
+                [label.get_text() for label in ax.get_xticklabels()],
+                [str(value) for value in dose_order],
+            )
+            handles, labels = ax.get_legend_handles_labels()
+            self.assertEqual(labels, [str(value) for value in dose_order])
+            for handle, expected_color in zip(handles, subset_palette):
+                np.testing.assert_allclose(
+                    handle.get_facecolors()[0],
+                    matplotlib.colors.to_rgba(expected_color, alpha=0.85),
+                )
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_x_by_obs_key_explicit_subset_order_overrides_legend_order(self):
+        dose_order = [200, 600, 900, 1200, 1600]
+        subset_order = [1600, 1200, 900, 600, 200]
+        subset_palette = ["red", "green", "blue", "orange", "purple"]
+        adata = ad.AnnData(
+            X=np.arange(5.0).reshape(5, 1),
+            obs=pd.DataFrame(
+                {"dose": [600, 200, 1600, 900, 1200]},
+                index=[f"s{idx}" for idx in range(5)],
+            ),
+            var=pd.DataFrame(index=["signal"]),
+        )
+
+        fig = None
+        try:
+            fig, axes, _ = adtl.datapoints(
+                adata=adata,
+                var_names=["signal"],
+                x_by_obs_key="dose",
+                x_order=dose_order,
+                subset_obs_key="dose",
+                subset_order=subset_order,
+                subset_palette=subset_palette,
+                legend_metrics=None,
+                show=False,
+            )
+
+            ax = axes["all"]
+            self.assertEqual(
+                [label.get_text() for label in ax.get_xticklabels()],
+                [str(value) for value in dose_order],
+            )
+            handles, labels = ax.get_legend_handles_labels()
+            self.assertEqual(labels, [str(value) for value in subset_order])
+            for handle, expected_color in zip(handles, subset_palette):
+                np.testing.assert_allclose(
+                    handle.get_facecolors()[0],
+                    matplotlib.colors.to_rgba(expected_color, alpha=0.85),
+                )
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_x_by_obs_key_subset_colors_stay_synced_across_obs_subplots(self):
+        dose_order = [200, 600, 900, 1200, 1600]
+        subset_palette = ["red", "green", "blue", "orange", "purple"]
+        adata = ad.AnnData(
+            X=np.arange(8.0).reshape(8, 1),
+            obs=pd.DataFrame(
+                {
+                    "dose": [600, 200, 1600, 200, 600, 900, 1200, 1600],
+                    "panel": ["left", "left", "left", "right", "right", "right", "right", "right"],
+                },
+                index=[f"s{idx}" for idx in range(8)],
+            ),
+            var=pd.DataFrame(index=["signal"]),
+        )
+
+        fig = None
+        try:
+            fig, axes, _ = adtl.datapoints(
+                adata=adata,
+                var_names=["signal"],
+                x_by_obs_key="dose",
+                x_order=dose_order,
+                subset_obs_key="dose",
+                subset_palette=subset_palette,
+                subplot_by_obs_key="panel",
+                legend_metrics=None,
+                show=False,
+            )
+
+            expected_colors = {
+                str(value): matplotlib.colors.to_rgba(color, alpha=0.85)
+                for value, color in zip(dose_order, subset_palette)
+            }
+            expected_labels_by_panel = {
+                "left": ["200", "600", "1600"],
+                "right": ["200", "600", "900", "1200", "1600"],
+            }
+            for panel_name, expected_labels in expected_labels_by_panel.items():
+                handles, labels = axes[panel_name].get_legend_handles_labels()
+                self.assertEqual(labels, expected_labels)
+                for handle, label in zip(handles, labels):
+                    np.testing.assert_allclose(handle.get_facecolors()[0], expected_colors[label])
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
     def test_x_by_obs_key_multiple_variables_panel_by_variable_by_default(self):
         fig = None
         try:
