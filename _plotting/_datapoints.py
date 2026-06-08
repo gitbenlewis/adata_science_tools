@@ -498,10 +498,12 @@ def datapoints(
     if figsize is None:
         figsize = (4.8 * plot_ncols, 4.0 * plot_nrows)
 
+    # x_label is stored as displayed text, so typed config values need the same normalization.
+    display_x_order = [str(value) for value in x_order] if x_order is not None else None
     x_orders_by_panel: dict[str, dict[str, int]] = {}
     for panel_name in panel_names:
         panel_x_values = plot_df.loc[plot_df["panel"] == panel_name, "x_label"]
-        ordered_x_values = [str(value) for value in _ordered_values(panel_x_values, x_order)]
+        ordered_x_values = [str(value) for value in _ordered_values(panel_x_values, display_x_order)]
         x_orders_by_panel[panel_name] = {
             x_value: idx + 1
             for idx, x_value in enumerate(ordered_x_values)
