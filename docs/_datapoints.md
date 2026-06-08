@@ -54,6 +54,9 @@ fig, axes, plot_df = adtl.datapoints(
    source variable names. Set `x_by_obs_key="column"` to use observation
    metadata groups as x-axis categories instead. Missing `x_by_obs_key` values
    are routed to `x_by_obs_missing_label`, which defaults to `"Missing"`.
+   `x_order` orders the displayed x-axis labels; for config-driven calls, raw
+   typed values such as `[2, 1]` and string labels such as `["2", "1"]` both
+   match displayed labels.
 
 5. OBS-GROUP X-AXIS: With `x_by_obs_key` and multiple selected variables or
    groups, `x_by_obs_multi_var_mode="panel_by_variable"` is the default and

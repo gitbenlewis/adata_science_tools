@@ -334,6 +334,52 @@ class DatapointsTests(unittest.TestCase):
             if fig is not None:
                 plt.close(fig)
 
+    def test_x_by_obs_key_x_order_matches_numeric_obs_values(self):
+        adata = self.make_adata()
+        adata.obs["numeric_group"] = [1, 2, 1, 2]
+
+        fig = None
+        try:
+            fig, axes, plot_df = adtl.datapoints(
+                adata=adata,
+                var_names=["A_v1"],
+                x_by_obs_key="numeric_group",
+                x_order=[2, 1],
+                show=False,
+            )
+
+            self.assertEqual([label.get_text() for label in axes["all"].get_xticklabels()], ["2", "1"])
+            self.assertEqual(plot_df.loc[plot_df["obs_name"] == "s1", "x_order"].tolist(), [2])
+            self.assertEqual(plot_df.loc[plot_df["obs_name"] == "s2", "x_order"].tolist(), [1])
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_x_order_matches_numeric_dataframe_column_labels(self):
+        df = pd.DataFrame(
+            {
+                1: [1.0, 2.0],
+                2: [3.0, 4.0],
+            },
+            index=["s1", "s2"],
+        )
+
+        fig = None
+        try:
+            fig, axes, plot_df = adtl.datapoints(
+                df=df,
+                var_names=[1, 2],
+                x_order=[2, 1],
+                show=False,
+            )
+
+            self.assertEqual([label.get_text() for label in axes["all"].get_xticklabels()], ["2", "1"])
+            self.assertEqual(plot_df.loc[plot_df["source_variable"] == 1, "x_order"].tolist(), [2, 2])
+            self.assertEqual(plot_df.loc[plot_df["source_variable"] == 2, "x_order"].tolist(), [1, 1])
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
     def test_x_by_obs_key_multiple_variables_panel_by_variable_by_default(self):
         fig = None
         try:
