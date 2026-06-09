@@ -147,6 +147,105 @@ class RefVsTargetAdataTests(unittest.TestCase):
                 )
                 assert_allclose(result.X, expected_matrix, atol=1e-8, rtol=1e-8)
 
+    def test_operation_list_adds_layers_and_sets_x_to_first_operation(self):
+        result = ref_vs_target_adata(
+            self.make_adata(),
+            pair_by_key="pair_id",
+            opperation_flavor=["subtraction", "relative_change_pct", "relative_change_l2fc"],
+            epsilon=0.0,
+        )
+        expected_subtraction = np.array([[3.0, 6.0], [5.0, -2.0]])
+        expected_pct = np.array([[300.0, 300.0], [50.0, -10.0]])
+        expected_l2fc = np.log2(np.array([[4.0, 4.0], [1.5, 0.9]]))
+
+        assert_allclose(result.X, expected_subtraction, atol=1e-8, rtol=1e-8)
+        self.assertEqual(
+            set(result.layers.keys()),
+            {"subtraction", "relative_change_pct", "relative_change_l2fc"},
+        )
+        assert_allclose(result.layers["subtraction"], expected_subtraction, atol=1e-8, rtol=1e-8)
+        assert_allclose(result.layers["relative_change_pct"], expected_pct, atol=1e-8, rtol=1e-8)
+        assert_allclose(result.layers["relative_change_l2fc"], expected_l2fc, atol=1e-8, rtol=1e-8)
+
+        meta = result.uns["ref_vs_target_adata"]
+        self.assertEqual(meta["operation_flavor"], "subtraction")
+        self.assertEqual(meta["operation_flavors"], ["subtraction", "relative_change_pct", "relative_change_l2fc"])
+        self.assertEqual(meta["base_operation_layer"], "subtraction")
+        self.assertEqual(meta["operation_layer_keys"], ["subtraction", "relative_change_pct", "relative_change_l2fc"])
+
+    def test_operation_list_cross_product_uses_source_operation_layer_names(self):
+        result = ref_vs_target_adata(
+            self.make_adata(),
+            pair_by_key="pair_id",
+            opperation_flavor=["subtraction", "relative_change_pct"],
+            layers_to_compute=[None, "alt"],
+            base_layer="alt",
+            epsilon=0.0,
+        )
+        expected_subtraction = np.array([[3.0, 6.0], [5.0, -2.0]])
+        expected_x_pct = np.array([[300.0, 300.0], [50.0, -10.0]])
+        expected_alt_pct = np.array(
+            [
+                [(3.0 / 101.0) * 100.0, (6.0 / 202.0) * 100.0],
+                [(5.0 / 110.0) * 100.0, (-2.0 / 220.0) * 100.0],
+            ]
+        )
+
+        assert_allclose(result.X, expected_subtraction, atol=1e-8, rtol=1e-8)
+        self.assertEqual(
+            set(result.layers.keys()),
+            {"X__subtraction", "X__relative_change_pct", "alt__subtraction", "alt__relative_change_pct"},
+        )
+        assert_allclose(result.layers["X__subtraction"], expected_subtraction, atol=1e-8, rtol=1e-8)
+        assert_allclose(result.layers["X__relative_change_pct"], expected_x_pct, atol=1e-8, rtol=1e-8)
+        assert_allclose(result.layers["alt__subtraction"], expected_subtraction, atol=1e-8, rtol=1e-8)
+        assert_allclose(result.layers["alt__relative_change_pct"], expected_alt_pct, atol=1e-8, rtol=1e-8)
+
+        meta = result.uns["ref_vs_target_adata"]
+        self.assertEqual(meta["base_layer"], "alt")
+        self.assertEqual(meta["base_operation_layer"], "alt__subtraction")
+        self.assertEqual(meta["operation_layer_key_by_source_operation"][".X"]["subtraction"], "X__subtraction")
+        self.assertEqual(meta["operation_layer_key_by_source_operation"]["alt"]["relative_change_pct"], "alt__relative_change_pct")
+
+    def test_operation_list_accepts_aliases_and_rejects_duplicates(self):
+        result = ref_vs_target_adata(
+            self.make_adata(),
+            pair_by_key="pair_id",
+            operation_flavor=["diff", "pct"],
+            epsilon=0.0,
+        )
+        expected_subtraction = np.array([[3.0, 6.0], [5.0, -2.0]])
+        expected_pct = np.array([[300.0, 300.0], [50.0, -10.0]])
+        assert_allclose(result.X, expected_subtraction, atol=1e-8, rtol=1e-8)
+        assert_allclose(result.layers["relative_change_pct"], expected_pct, atol=1e-8, rtol=1e-8)
+        self.assertEqual(result.uns["ref_vs_target_adata"]["operation_flavors"], ["subtraction", "relative_change_pct"])
+
+        with self.assertRaisesRegex(ValueError, "Duplicate opperation_flavor"):
+            ref_vs_target_adata(
+                self.make_adata(),
+                pair_by_key="pair_id",
+                opperation_flavor=["subtraction", "diff"],
+            )
+
+        with self.assertRaisesRegex(ValueError, "non-empty"):
+            ref_vs_target_adata(
+                self.make_adata(),
+                pair_by_key="pair_id",
+                opperation_flavor=[],
+            )
+
+    def test_operation_list_rejects_generated_layer_key_collisions(self):
+        adata = self.make_adata()
+        adata.layers["X"] = adata.X.copy()
+
+        with self.assertRaisesRegex(ValueError, "Generated layer key collision"):
+            ref_vs_target_adata(
+                adata,
+                pair_by_key="pair_id",
+                opperation_flavor=["subtraction"],
+                layers_to_compute=[None, "X"],
+            )
+
     def test_relative_operation_uses_lod_clamping(self):
         result = ref_vs_target_adata(
             self.make_adata(),

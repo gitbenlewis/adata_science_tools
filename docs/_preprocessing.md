@@ -31,7 +31,7 @@ def ref_vs_target_adata(
     groupby_key: str = "Pre_or_Post_obs_col",
     groupby_key_target_value: str = "Post",
     groupby_key_ref_value: str = "Pre",
-    opperation_flavor: str = "subtraction",
+    opperation_flavor: str | Sequence[str] = "subtraction",
     obs_dfs: str = "merge",
     ref_obs_suffix: str = ".src_pre",
     target_obs_suffix: str = ".src_post",
@@ -48,7 +48,7 @@ result = adtl.ref_vs_target_adata(
     groupby_key="Pre_or_Post_obs_col",
     groupby_key_target_value="Post",
     groupby_key_ref_value="Pre",
-    opperation_flavor="subtraction",
+    opperation_flavor="subtraction",  # or a list of operation strings
     obs_dfs="merge",
     ref_obs_suffix=".src_pre",
     target_obs_suffix=".src_post",
@@ -120,6 +120,20 @@ Supported operation names are:
 - `relative_change_fc`
 - `relative_change_l2fc`
 
+`opperation_flavor` can also be a non-empty sequence of operation names. In
+that mode, each requested operation is computed and stored as a layer in the
+returned object. The returned `.X` uses the first requested operation for the
+selected base source, so `["subtraction", "relative_change_pct"]` keeps
+`subtraction` in `.X`.
+
+```python
+post_minus_pre = adtl.ref_vs_target_adata(
+    adata,
+    pair_by_key="SubjectID",
+    opperation_flavor=["subtraction", "relative_change_pct", "relative_change_l2fc"],
+)
+```
+
 The corrected parameter alias `operation_flavor` is accepted through `**params`,
 but the public signature keeps the existing typo-compatible
 `opperation_flavor`.
@@ -160,6 +174,30 @@ post_minus_pre = adtl.ref_vs_target_adata(
 
 When a layer source is requested, the computed values for that source are also
 stored in `result.layers[source]`.
+
+When multiple operations are requested for one source, operation names become
+layer keys:
+
+- `result.layers["subtraction"]`
+- `result.layers["relative_change_pct"]`
+
+When multiple operations and multiple sources are requested together, layers are
+named as `source__operation`. The `.X` source is labeled `X` in layer keys:
+
+```python
+post_minus_pre = adtl.ref_vs_target_adata(
+    adata,
+    pair_by_key="SubjectID",
+    opperation_flavor=["subtraction", "relative_change_l2fc"],
+    layers_to_compute=[None, "RFU"],
+    base_layer="RFU",
+)
+```
+
+This creates layers such as `X__subtraction`, `X__relative_change_l2fc`,
+`RFU__subtraction`, and `RFU__relative_change_l2fc`. The returned `.X` is
+`RFU__subtraction` because `base_layer="RFU"` and `subtraction` is the first
+requested operation.
 
 ### Bounds and LOD-style clamping
 
@@ -206,6 +244,8 @@ The returned object stores:
 - `ref_obs_name`, `target_obs_name`, `pair_order`, source group labels, and the
   operation name in `.obs`;
 - operation and source metadata in `.uns["ref_vs_target_adata"]`;
+- multi-operation metadata such as `operation_flavors`, `operation_layer_keys`,
+  `operation_layer_key_by_source_operation`, and `base_operation_layer`;
 - dropped unmatched pair IDs in both `.uns["ref_vs_target_adata"]` and flat
   convenience keys;
 - copied `adata.var` plus operation metadata when `keep_var_df=True`;
@@ -220,7 +260,8 @@ in both sources are collapsed to one column. `obs_dfs="keep_ref"` and
 ### Optional source-value `obsm`
 
 Set `save_source_values_obsm=True` to store the paired, ordered source values
-used for the returned `.X` before the final operation result is returned:
+used for the returned `.X` base source before the final operation result is
+returned:
 
 ```python
 post_minus_pre = adtl.ref_vs_target_adata(
