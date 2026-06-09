@@ -21,6 +21,50 @@ This is the most test-backed plotting module in the package. Direct regression t
 
 `corr_dotplot(...)` is the primary public API.
 
+### Full signature
+
+```python
+def corr_dotplot(
+    df: pd.DataFrame | None = None,
+    *,
+    adata: anndata.AnnData | None = None,
+    layer: str | None = None,
+    x_df: Any | None = None,
+    var_df: pd.DataFrame | None = None,
+    obs_df: pd.DataFrame | None = None,
+    column_key_x: str | None = None,
+    column_key_y: str | None = None,
+    hue: str | None = None,
+    subset_key: str | None = None,
+    figsize: tuple[float, float] = (20, 10),
+    xlabel: str | None = None,
+    ylabel: str | None = None,
+    axes_title: str | None = None,
+    axes_lines: bool = True,
+    show_y_intercept: bool = True,
+    palette: Sequence[Any] | str | None = palettes.godsnot_102,
+    subset_palette: Sequence[Any] | str | None = None,
+    dot_size: float = 200,
+    title_fontsize: int = 20,
+    stats_fontsize: int | None = None,
+    axes_title_y: float | None = None,
+    axis_label_fontsize: int = 20,
+    tick_label_fontsize: int | None = None,
+    legend_fontsize: int | None = None,
+    fit_legend_bbox_to_anchor: Sequence[float] | None = None,
+    hue_legend_bbox_to_anchor: Sequence[float] | None = None,
+    show_all_obs_fit: bool = False,
+    show_fit_legend: bool = True,
+    show_hue_legend: bool = True,
+    show_stats_text: bool = True,
+    nas2zeros: bool = False,
+    dropna: bool = False,
+    dropzeros: bool = False,
+    method: Literal["spearman", "pearson"] = "pearson",
+    show: bool = True,
+):
+```
+
 ```python
 import adata_science_tools as adtl
 
@@ -90,6 +134,62 @@ The current regression tests lock in several details:
 
 `corr_dotplot_dev(...)` is the experimental variant that adds optional top and right marginal histograms while mostly keeping the same filtered-data correlation and fit behavior as `corr_dotplot(...)`.
 
+### Full signature
+
+```python
+def corr_dotplot_dev(
+    df: pd.DataFrame | None = None,
+    *,
+    adata: anndata.AnnData | None = None,
+    layer: str | None = None,
+    x_df: Any | None = None,
+    var_df: pd.DataFrame | None = None,
+    obs_df: pd.DataFrame | None = None,
+    column_key_x: str | None = None,
+    column_key_y: str | None = None,
+    hue: str | None = None,
+    subset_key: str | None = None,
+    figsize: tuple[float, float] = (20, 10),
+    xlabel: str | None = None,
+    ylabel: str | None = None,
+    axes_title: str | None = None,
+    axes_lines: bool = True,
+    show_y_intercept: bool = True,
+    palette: Sequence[Any] | str | None = palettes.godsnot_102,
+    subset_palette: Sequence[Any] | str | None = None,
+    dot_size: float = 200,
+    title_fontsize: int = 20,
+    stats_fontsize: int | None = None,
+    axes_title_y: float | None = None,
+    axis_label_fontsize: int = 20,
+    tick_label_fontsize: int | None = None,
+    legend_fontsize: int | None = None,
+    fit_legend_bbox_to_anchor: Sequence[float] | None = None,
+    hue_legend_bbox_to_anchor: Sequence[float] | None = None,
+    show_all_obs_fit: bool = False,
+    show_fit_legend: bool = True,
+    show_hue_legend: bool = True,
+    show_stats_text: bool = True,
+    nas2zeros: bool = False,
+    dropna: bool = False,
+    dropzeros: bool = False,
+    method: Literal["spearman", "pearson"] = "pearson",
+    show_x_marginal_hist: bool = False,
+    show_y_marginal_hist: bool = False,
+    x_marginal_hist_bins: int | Sequence[float] = 20,
+    y_marginal_hist_bins: int | Sequence[float] = 20,
+    x_marginal_hist_fill: bool = True,
+    x_marginal_hist_KDE: bool = True,
+    y_marginal_hist_fill: bool = True,
+    y_marginal_hist_KDE: bool = True,
+    show_all_obs_x_hist: bool = False,
+    show_all_obs_y_hist: bool = False,
+    x_marginal_hist_height_ratio: float = 0.18,
+    y_marginal_hist_width_ratio: float = 0.18,
+    show: bool = True,
+):
+```
+
 ```python
 fig, axes, fit, corr_value, corr_pvalue = adtl.corr_dotplot_dev(
     df=df,
@@ -134,6 +234,12 @@ The generated example figure is available at [`baseline.png`](../example_simulat
 
 `spearman_cor_dotplot(...)` is a backward-compatible wrapper around `corr_dotplot(...)`.
 
+### Full signature
+
+```python
+def spearman_cor_dotplot(*args, **kwargs):
+```
+
 ```python
 fig, ax, fit, corr_value, corr_pvalue = adtl.spearman_cor_dotplot(
     df,
@@ -154,6 +260,12 @@ Important behavior:
 ### `spearman_cor_dotplot_2`
 
 Creates a two-panel scatter plot of the same x/y pair with two different hue columns. It returns `(figure, axes)`.
+
+#### Full signature
+
+```python
+def spearman_cor_dotplot_2(df, column_key_x, column_key_y, hue, hue_right, figsize=(20, 10)):
+```
 
 ### Rank-comparison helpers
 

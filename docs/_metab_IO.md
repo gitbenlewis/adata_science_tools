@@ -16,6 +16,37 @@ It is a high-level parser that:
 
 This page is based on the current implementation in [\_metab_IO.py](_io/_metab_IO.py). There do not appear to be direct `_io` regression tests for this function in this repo.
 
+## Full signature
+
+```python
+def metabolon_excel_2_adata_h5ad_csv(
+    metabolon_excel_file:  str | None = None,
+    excel_sheet_for_assay_data: str = "Batch-norm Imputed Data",
+    excel_sheet_for_obs_metadata: str = "Sample Meta Data",
+    excel_sheet_for_var_metadata: str = "Chemical Annotation",
+    index_col_for_var_metadata='CHEM_ID',
+    excel_sheet_list_for_layers: list = ["Volume-normalized Data","Log Transformed Data", "Batch-normalized Data", "Batch-norm Imputed Data", "Peak Area Data"],
+    output_dir: Path | None = None,
+    save_h5ad: bool = True,
+    output_filename: str | None ='dataset.metab',
+    also_save_csvs: bool = True,
+    logger: logging.Logger | None = None,
+    ######## new parameters for mergeing external metadata to adata.obs can be added here ########
+    merge_external_metadata: bool = False,
+    save_plus_metadata_h5ad: bool = False,
+    also_plus_metadata_save_csvs: bool = False,
+    external_obs_metadata_2_merge_file: str | None = None,
+    external_var_metadata_2_merge_file: str | None = None,
+    merge_key_in_external_obs_metadata: str | None = None,
+    merge_key_in_raw_obs_metadata: str | None = None,
+    column_in_metadata_to_set_as_index: str | None = None,
+    merge_key_in_external_var_metadata: str | None = None,
+    merge_key_in_raw_var_metadata: str | None = None,
+    columns_in_external_var_metadata_to_use: list | None = None,
+    plus_metadata_file_name: str | None = 'dataset.plus_metadata',
+) -> ad.AnnData:
+```
+
 ## Basic parsing workflow
 
 ```python

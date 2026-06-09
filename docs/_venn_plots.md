@@ -19,6 +19,13 @@ from adata_science_tools._plotting._venn_plots import venn_plot_2list
 
 Creates a two-set Venn diagram and optionally returns a summary `DataFrame`.
 
+### Full signature
+
+```python
+def venn_plot_2list(list1, list2,  set_label_list, plot_title,show_plot=True,return_df=True):
+
+```
+
 ```python
 overlap_df = venn_plot_2list(
     list1=genes_a,
@@ -40,6 +47,13 @@ Important behavior:
 
 Creates a three-set Venn diagram and optionally returns an overlap summary `DataFrame`.
 
+### Full signature
+
+```python
+def venn_plot_3list(list1, list2, list3, set_label_list, plot_title,show_plot=False,return_df=False):
+
+```
+
 Important behavior:
 
 - Inputs are converted to sets.
@@ -49,6 +63,17 @@ Important behavior:
 ## `geneset_enrichment_venn`
 
 Computes a hypergeometric enrichment p-value and displays a Venn diagram for:
+
+### Full signature
+
+```python
+def geneset_enrichment_venn(universe, geneset, hits,
+                            dataset_label="DEGs",
+                            geneset_label="GeneSet",
+                            plot_title="",
+                            shift_overlap=True,
+                            shift_overlap_labely=0.1):
+```
 
 - `universe`
 - `geneset`
@@ -72,6 +97,19 @@ Important behavior:
 ## `geneset_enrichemnt_ol_ven_M_n_N_x`
 
 This legacy helper also computes a hypergeometric enrichment display from three sets.
+
+### Full signature
+
+```python
+def geneset_enrichemnt_ol_ven_M_n_N_x(
+    M_set, n_set, N_set,
+    dataset_label="dataset_label",
+    geneset_label="geneset_label",
+    plot_title="plot_title",
+    shift_overlap=True,
+    shift_overlap_labely=0.1
+        ):
+```
 
 Important behavior:
 

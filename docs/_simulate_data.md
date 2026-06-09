@@ -14,6 +14,20 @@ The current simulation API lives in [`_simulate_data/covar_dependent_feature.py`
 
 `sim_observations_covars(...)` creates an `obs_df` with one column per requested covariate.
 
+### Full signature
+
+```python
+def sim_observations_covars(
+    obs_key_list: Sequence[str] | None = None,
+    obs_covar_dist_params: dict[str, dict[str, float | str]] | None = None,
+    n_obs: int = 100,
+    obs_names_prefix: str = "obs_",
+    save_obs_df: bool = False,
+    save_obs_df_path: str | Path = "obs_df",
+    random_seed: int | None = None,
+) -> pd.DataFrame:
+```
+
 ```python
 from adata_science_tools._simulate_data import sim_observations_covars
 
@@ -41,6 +55,24 @@ Important behavior:
 `sim_covar_dependent_features(...)` treats the columns of `obs_df` as predictors, coerces them to numeric values, and generates a linear feature matrix with optional additive residual noise:
 
 `X = obs_matrix @ beta_matrix.T + yint + residual`
+
+### Full signature
+
+```python
+def sim_covar_dependent_features(
+    obs_df: pd.DataFrame,
+    var_names: Sequence[str] | str = ("covar_dependent_feature",),
+    betas: Sequence[float] | Sequence[Sequence[float]] = (0.05, 5.0),
+    yints: float | Sequence[float] = 10,
+    also_return_adata: bool = True,
+    save_adata_dataset: bool = True,
+    output_path: str | Path | None = None,
+    residual_dist: str = "normal",
+    residual_mean: float | Sequence[float] = 0.0,
+    residual_stdev: float | Sequence[float] = 0.0,
+    random_seed: int | None = None,
+) -> tuple[np.ndarray, pd.DataFrame, pd.DataFrame, ad.AnnData | None]:
+```
 
 ```python
 from adata_science_tools._simulate_data import sim_covar_dependent_features
@@ -71,6 +103,29 @@ Important behavior:
 ## `sim_covar_dependent_dataset`
 
 `sim_covar_dependent_dataset(...)` is the wrapper that first simulates covariates and then simulates features from those covariates.
+
+### Full signature
+
+```python
+def sim_covar_dependent_dataset(
+    obs_key_list: Sequence[str] | None = None,
+    obs_covar_dist_params: dict[str, dict[str, float | str]] | None = None,
+    n_obs: int = 100,
+    obs_names_prefix: str = "obs_",
+    save_obs_df: bool = False,
+    save_obs_df_path: str | Path = "obs_df",
+    random_seed: int | None = None,
+    var_names: Sequence[str] | str = ("covar_dependent_feature",),
+    betas: Sequence[float] | Sequence[Sequence[float]] = (0.05, 5.0),
+    yints: float | Sequence[float] = 10,
+    also_return_adata: bool = True,
+    save_adata_dataset: bool = True,
+    output_path: str | Path | None = None,
+    residual_dist: str = "normal",
+    residual_mean: float | Sequence[float] = 0.0,
+    residual_stdev: float | Sequence[float] = 0.0,
+) -> tuple[np.ndarray, pd.DataFrame, pd.DataFrame, ad.AnnData | None]:
+```
 
 ```python
 from adata_science_tools._simulate_data import sim_covar_dependent_dataset

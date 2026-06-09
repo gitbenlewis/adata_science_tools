@@ -10,6 +10,12 @@ This module currently exposes a single function:
 
 Use `plot_columns(...)` to render a one-row panel of grouped bar plots with swarm overlays from a plain `DataFrame`.
 
+### Full signature
+
+```python
+def plot_columns(df,columns2plot,columns2plot_titles,y_groupby,figsize,sharex,sharey):
+```
+
 ```python
 import adata_science_tools as adtl
 
