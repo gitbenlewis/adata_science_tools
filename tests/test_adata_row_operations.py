@@ -246,6 +246,48 @@ class RefVsTargetAdataTests(unittest.TestCase):
                 layers_to_compute=[None, "X"],
             )
 
+    def test_logs_input_summary_and_scalar_x_selection(self):
+        logger_name = "adata_science_tools._preprocessing._adata_row_operations"
+        with self.assertLogs(logger_name, level="INFO") as logs:
+            ref_vs_target_adata(
+                self.make_adata(),
+                pair_by_key="pair_id",
+                layer="alt",
+            )
+
+        log_text = "\n".join(logs.output)
+        self.assertIn("ref_vs_target_adata args:", log_text)
+        self.assertIn("'shape': (7, 2)", log_text)
+        self.assertIn("'X_type': 'ndarray'", log_text)
+        self.assertIn("'layers': ['alt']", log_text)
+        self.assertIn("pair_by_key: pair_id", log_text)
+        self.assertIn("layer: alt", log_text)
+        self.assertIn("unused_params: {}", log_text)
+        self.assertIn(
+            "ref_vs_target_adata final adata.X selected: "
+            "base_layer=alt, base_operation=subtraction, operation_layer_key=None",
+            log_text,
+        )
+        self.assertNotIn("[15.0, 18.0]", log_text)
+
+    def test_logs_multi_operation_x_selection_layer_key(self):
+        logger_name = "adata_science_tools._preprocessing._adata_row_operations"
+        with self.assertLogs(logger_name, level="INFO") as logs:
+            ref_vs_target_adata(
+                self.make_adata(),
+                pair_by_key="pair_id",
+                opperation_flavor=["subtraction", "relative_change_pct"],
+                epsilon=0.0,
+            )
+
+        log_text = "\n".join(logs.output)
+        self.assertIn(
+            "ref_vs_target_adata final adata.X selected: "
+            "base_layer=.X, base_operation=subtraction, operation_layer_key=subtraction",
+            log_text,
+        )
+        self.assertIn("ref_vs_target_adata generated operation layer keys: ['subtraction', 'relative_change_pct']", log_text)
+
     def test_relative_operation_uses_lod_clamping(self):
         result = ref_vs_target_adata(
             self.make_adata(),
