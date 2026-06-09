@@ -106,6 +106,8 @@ def ref_vs_target_adata(
     one observation per overlapping pair ID, indexed by the stringified pair ID.
     `opperation_flavor` may be a string or sequence of operation strings.
     """
+    original_params = dict(params)
+    original_opperation_flavor = opperation_flavor
     params = dict(params)
     operation_flavor = params.pop("operation_flavor", None)
     if operation_flavor is not None:
@@ -132,12 +134,56 @@ def ref_vs_target_adata(
     target_values_obsm_key = params.pop("target_values_obsm_key", "post_values")
     ref_values_obsm_key = params.pop("ref_values_obsm_key", "pre_values")
 
-    if params and not allow_unused_params:
-        raise ValueError(f"Unused params: {sorted(params)}")
-
     log = logger or logging.getLogger(__name__)
     if log_level is not None:
         log.setLevel(log_level)
+
+    if log.isEnabledFor(logging.INFO):
+        adata_summary = {
+            "shape": adata.shape,
+            "X_type": type(adata.X).__name__,
+            "layers": list(adata.layers.keys()),
+            "obs_columns": list(adata.obs.columns),
+            "var_columns": list(adata.var.columns),
+        }
+        args_items = [
+            ("adata", adata_summary),
+            ("groupby_key", groupby_key),
+            ("groupby_key_target_value", groupby_key_target_value),
+            ("groupby_key_ref_value", groupby_key_ref_value),
+            ("opperation_flavor", original_opperation_flavor),
+            ("operation_flavor", operation_flavor),
+            ("obs_dfs", obs_dfs),
+            ("ref_obs_suffix", ref_obs_suffix),
+            ("target_obs_suffix", target_obs_suffix),
+            ("keep_var_df", keep_var_df),
+            ("pair_by_key", pair_by_key),
+            ("layer", layer),
+            ("layers_to_compute", layers_to_compute),
+            ("base_layer", base_layer),
+            ("epsilon", epsilon),
+            ("target_min_value", target_min_value),
+            ("target_max_value", target_max_value),
+            ("ref_min_value", ref_min_value),
+            ("ref_max_value", ref_max_value),
+            ("bounds_fill_missing", bounds_fill_missing),
+            ("bounds_fill_missing_paired_only", bounds_fill_missing_paired_only),
+            ("merge_shared_obs_cols", merge_shared_obs_cols),
+            ("return_df", return_df),
+            ("allow_unused_params", allow_unused_params),
+            ("logger", logger),
+            ("log_level", log_level),
+            ("save_source_values_obsm", save_source_values_obsm),
+            ("target_values_obsm_key", target_values_obsm_key),
+            ("ref_values_obsm_key", ref_values_obsm_key),
+            ("unused_params", params),
+            ("raw_params", original_params),
+        ]
+        args_lines = "\n".join([f"  {key}: {value}" for key, value in args_items])
+        log.info("ref_vs_target_adata args:\n%s", args_lines)
+
+    if params and not allow_unused_params:
+        raise ValueError(f"Unused params: {sorted(params)}")
 
     if pair_by_key is None:
         raise ValueError("pair_by_key is required.")
@@ -192,6 +238,12 @@ def ref_vs_target_adata(
         )
     requested_operation = requested_operations[0]
     operation = operations[0]
+    log.info(
+        "ref_vs_target_adata normalized operations: requested=%s, canonical=%s, multi_operation_mode=%s",
+        requested_operations,
+        operations,
+        multi_operation_mode,
+    )
 
     if layers_to_compute is None:
         sources_to_compute = [layer]
@@ -209,10 +261,28 @@ def ref_vs_target_adata(
         if source is not None and source not in adata.layers:
             raise KeyError(f"layer '{source}' not found in adata.layers.")
 
+    def _source_label(source):
+        return ".X" if source is None else str(source)
+
+    def _source_layer_label(source):
+        return "X" if source is None else str(source)
+
+    source_labels = [_source_label(source) for source in sources_to_compute]
+    log.info(
+        "ref_vs_target_adata selected sources: layers_to_compute=%s, base_layer=%s",
+        source_labels,
+        _source_label(base_layer),
+    )
+
     target_mask = adata.obs[groupby_key] == groupby_key_target_value
     ref_mask = adata.obs[groupby_key] == groupby_key_ref_value
     target_obs = adata.obs.loc[target_mask].copy()
     ref_obs = adata.obs.loc[ref_mask].copy()
+    log.info(
+        "ref_vs_target_adata selected observations: target_count=%d, ref_count=%d",
+        int(target_mask.sum()),
+        int(ref_mask.sum()),
+    )
 
     target_missing_pair_ids = target_obs.index[target_obs[pair_by_key].isna()].tolist()
     ref_missing_pair_ids = ref_obs.index[ref_obs[pair_by_key].isna()].tolist()
@@ -240,6 +310,12 @@ def ref_vs_target_adata(
 
     dropped_target_only_pair_ids = sorted(target_pair_id_set.difference(ref_pair_id_set))
     dropped_ref_only_pair_ids = sorted(ref_pair_id_set.difference(target_pair_id_set))
+    log.info(
+        "ref_vs_target_adata matched pairs: n_matched=%d, dropped_target_only=%d, dropped_ref_only=%d",
+        len(matched_pair_ids),
+        len(dropped_target_only_pair_ids),
+        len(dropped_ref_only_pair_ids),
+    )
     if dropped_target_only_pair_ids or dropped_ref_only_pair_ids:
         log.info(
             "Dropping unmatched pair IDs: target_only=%s, ref_only=%s",
@@ -289,12 +365,6 @@ def ref_vs_target_adata(
             return adata.X
         return adata.layers[source]
 
-    def _source_label(source):
-        return ".X" if source is None else str(source)
-
-    def _source_layer_label(source):
-        return "X" if source is None else str(source)
-
     def _compute_source_values(source):
         matrix = _get_source_matrix(source)
         target_values = matrix[target_positions, :].copy()
@@ -332,6 +402,8 @@ def ref_vs_target_adata(
     base_target_values = None
     base_ref_values = None
     for source in sources_to_compute:
+        source_label = _source_label(source)
+        log.info("ref_vs_target_adata computing source '%s'.", source_label)
         target_values, ref_values = _compute_source_values(source)
         dense_target_values = None
         dense_ref_values = None
@@ -367,6 +439,11 @@ def ref_vs_target_adata(
             else:
                 layer_results[source] = result_values
 
+        log.info(
+            "ref_vs_target_adata computed source '%s' for operations=%s.",
+            source_label,
+            operations,
+        )
         if source == base_layer:
             if not multi_operation_mode:
                 base_result_values = layer_results[source]
@@ -374,6 +451,9 @@ def ref_vs_target_adata(
             base_ref_values = ref_values
         if multi_operation_mode:
             operation_layer_key_by_source_operation[_source_label(source)] = source_operation_layer_keys
+
+    if multi_operation_mode:
+        log.info("ref_vs_target_adata generated operation layer keys: %s", operation_layer_keys)
 
     matched_index = pd.Index(matched_pair_ids, name=pair_by_key)
     target_aligned_obs = adata.obs.loc[target_obs_names].copy()
@@ -432,7 +512,16 @@ def ref_vs_target_adata(
             if source is not None:
                 result_adata.layers[source] = layer_results[source]
 
-    source_labels = [_source_label(source) for source in sources_to_compute]
+    log.info(
+        "ref_vs_target_adata final adata.X selected: base_layer=%s, base_operation=%s, "
+        "operation_layer_key=%s, shape=%s, dtype=%s",
+        _source_label(base_layer),
+        operation,
+        base_operation_layer,
+        result_adata.X.shape,
+        getattr(result_adata.X, "dtype", None),
+    )
+
     result_adata.uns["ref_vs_target_adata"] = {
         "pair_by_key": pair_by_key,
         "groupby_key": groupby_key,
@@ -475,6 +564,11 @@ def ref_vs_target_adata(
     result_adata.uns["ref_vs_target_dropped_ref_only_pair_ids"] = dropped_ref_only_pair_ids
 
     if save_source_values_obsm:
+        log.info(
+            "ref_vs_target_adata saving source values to obsm: target_key=%s, ref_key=%s",
+            target_values_obsm_key,
+            ref_values_obsm_key,
+        )
         result_adata.obsm[target_values_obsm_key] = pd.DataFrame(
             _as_dense_array(base_target_values),
             index=result_adata.obs_names.copy(),
@@ -487,6 +581,7 @@ def ref_vs_target_adata(
         )
 
     if return_df:
+        log.info("ref_vs_target_adata returning result AnnData and DataFrame.")
         result_df = pd.DataFrame(
             _as_dense_array(base_result_values),
             index=result_adata.obs_names.copy(),

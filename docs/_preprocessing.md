@@ -287,6 +287,14 @@ default as `.obsm.<key>.csv` files, for example
 `result.obsm.pre_values.csv` and `result.obsm.post_values.csv` when the
 default keys are used.
 
+### Logging
+
+`logger` and `log_level` control `INFO`-level argument summaries, progress
+messages, and the final `.X` source selection. The argument summary reports
+`AnnData` shape, matrix type, layer keys, and column names without logging
+matrix values or full `obs`/`var` tables. The final `.X` log records the base
+source, base operation, operation-layer key when applicable, shape, and dtype.
+
 ### DataFrame return
 
 Set `return_df=True` to return both the result object and a feature matrix
