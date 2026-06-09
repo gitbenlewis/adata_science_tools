@@ -20,6 +20,35 @@ The `old_fit_smf_ols_models_and_summarize_adata` and `old_fit_smf_mixedlm_models
 
 Use `fit_smf_ols_models_and_summarize_adata(...)` to fit one OLS model per feature.
 
+### Full signature
+
+```python
+def fit_smf_ols_models_and_summarize_adata(
+        adata,
+        layer=None,
+        use_raw=False,
+        feature_columns=None,
+        predictors=None,
+        model_name='OLS_predictors',
+        add_adata_var_column_key_list=None,
+        save_table=False,
+        save_model_spec_yaml: bool = False,
+        save_path=None,
+        save_result_to_adata_uns_as_dict=False,
+        include_fdr=True,
+        # --- new filter args ---
+        dataset_cfg=None,
+        filter_obs_boolean_column=None,
+        filter_obs_column_key=None,
+        filter_obs_column_values_list=None,
+        filter_obs_copy=True,
+        # when filtered internally, optionally also write results into the original adata.uns
+        save_results_to_original_adata_uns: bool = False,
+        # whether to return the filtered adata (work_adata) in addition to results
+        return_filtered_adata: bool = False,
+    ):
+```
+
 ```python
 import adata_science_tools as adtl
 
@@ -46,6 +75,37 @@ Important behavior:
 ## MixedLM workflow
 
 Use `fit_smf_mixedlm_models_and_summarize_adata(...)` to fit one mixed-effects model per feature.
+
+### Full signature
+
+```python
+def fit_smf_mixedlm_models_and_summarize_adata(
+        adata,
+        layer=None,
+        use_raw=False,
+        feature_columns=None,
+        predictors=None,
+        group=None,
+        model_name='mixedlm_predictors',
+        reml=True,
+        add_adata_var_column_key_list=None,
+        save_table=False,
+        save_model_spec_yaml: bool = False,
+        save_path=None,
+        save_result_to_adata_uns_as_dict=False,
+        include_fdr=True,
+        # --- new filter args ---
+        dataset_cfg=None,
+        filter_obs_boolean_column=None,
+        filter_obs_column_key=None,
+        filter_obs_column_values_list=None,
+        filter_obs_copy=True,
+        # when filtered internally, optionally also write results into the original adata.uns
+        save_results_to_original_adata_uns: bool = False,
+        # whether to return the filtered adata (work_adata) in addition to results
+        return_filtered_adata: bool = False,
+    ):
+```
 
 ```python
 mixedlm_results = adtl.fit_smf_mixedlm_models_and_summarize_adata(
@@ -106,6 +166,30 @@ The wide functions operate on a single `obs_X_df` table that contains:
 
 - one column per feature, and
 - one column per predictor, plus `group` for MixedLM.
+
+### Full signatures
+
+```python
+def fit_smf_ols_models_and_summarize_wide(
+        obs_X_df,
+        feature_columns=None,
+        predictors=None,
+        model_name='OLS',
+        include_fdr=True,
+    ):
+```
+
+```python
+def fit_smf_mixedlm_models_and_summarize_wide(
+        obs_X_df,
+        feature_columns=None,
+        predictors=None,
+        group=None,
+        model_name='mixedlm',
+        reml=True,
+        include_fdr=True,
+    ):
+```
 
 Use them when the combined table already exists or when you want to bypass `AnnData` handling:
 

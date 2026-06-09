@@ -17,6 +17,41 @@ and [`_paired_datapoints.md`](_paired_datapoints.md). Older replacements live in
 
 Use `volcano_plot_generic(...)` to render a volcano plot from a results `DataFrame`.
 
+### Full signature
+
+```python
+def volcano_plot_generic(
+        _df,
+        l2fc_col: str | None = 'log2FoldChange',
+        set_xlabel: str | None = 'log2fc model',
+        xlimit: str | None = None,
+        pvalue_col: str | None = 'pvalue',
+        set_ylabel: str | None = '-log10(pvalue)',
+        ylimit: str | None = None,
+        title_text: str | None = 'volcano_plot',
+        comparison_label: str | None = ' Comparison',
+        hue_column: str | None = None,
+        hue_palette_color_list: list | None = None,
+        log2FoldChange_threshold: float | None = .1,
+        pvalue_threshold: float | None = None,
+        figsize: tuple | None = (15, 10),
+        legend_bbox_to_anchor: tuple | None = (1.15, 1),
+        title_fontsize: int | None = None,
+        axis_label_and_tick_fontsize: int | None = None,
+        legend_fontsize: int | None = None,
+        label_top_features: bool | None = False,
+        only_label_hue_dots: bool | None = True,
+        label_top_features_fontsize: int | None = None,
+        label_features_char_limit: int | None = 40,
+        feature_label_col: str | None = 'gene_names',
+        n_top_features: int | None = 50,
+        dot_size_shrink_factor: int | None = 300,
+        savefig: bool | None = False,
+        file_name: str | None = 'volcano_plot.png',
+                     ):
+
+```
+
 ```python
 import adata_science_tools as adtl
 
@@ -51,6 +86,27 @@ ax = adtl.volcano_plot_generic(
 ## `qqplot`
 
 Use `qqplot(...)` to compare observed versus expected `-log10(p)` values.
+
+### Full signature
+
+```python
+def qqplot(
+    data,
+    pvalue_column: str | None = None,
+    *,
+    source: str = "auto",      # "auto" | "var" | "obs" (for AnnData) | "df"
+    title: str | None = None,
+    pvalue_column_plot_label: str | None = None,
+    ax: plt.Axes | None = None,
+    figsize: tuple = (5, 5),
+    show: bool = True,
+    return_points: bool = False,
+    annotate_lambda: bool = True,
+    savefig: bool = False,
+    filename: str = "qqplot_pvalues.png",
+    plotting_position: str = "Blom"  # "Blom" or "Weibull"
+):
+```
 
 ```python
 out = adtl.qqplot(
@@ -93,6 +149,63 @@ out = adtl.qqplot(
 ## `timeseries_paired_datapoints`
 
 Use `timeseries_paired_datapoints(...)` for per-feature paired datapoint plots across ordered time or condition labels from `adata.obs`.
+
+### Full signature
+
+```python
+def timeseries_paired_datapoints(
+    adata,
+    feature_name,
+    x_col='TimePoint',
+    feature_name_label_col=None,
+    layer='norm',
+    Hue='Treatment_unique',
+    subplotby=None,
+    analyte_label='analyte_Level',
+    savefig=False,
+    file_name='test',
+    pvalue_label1='paired-ttest',
+    pvalue_col_in_var1=None,
+    pvalue_label2=None,
+    pvalue_col_in_var2=None,
+    pvalue_label3=None,
+    pvalue_col_in_var3=None,
+    pvalue_label4=None,
+    pvalue_col_in_var4=None,
+    pvalue_label5=None,
+    pvalue_col_in_var5=None,
+    pvalue_label6=None,
+    pvalue_col_in_var6=None,
+    pvalue_label7=None,
+    pvalue_col_in_var7=None,
+    pvalue_label8=None,
+    pvalue_col_in_var8=None,
+    pvalue_label9=None,
+    pvalue_col_in_var9=None,
+    pvalue_label10=None,
+    pvalue_col_in_var10=None,
+    pvalue_label11=None,
+    pvalue_col_in_var11=None,
+    pvalue_label12=None,
+    pvalue_col_in_var12=None,
+    pvalue_label13=None,
+    pvalue_col_in_var13=None,
+    pvalue_label14=None,
+    pvalue_col_in_var14=None,
+    pvalue_label15=None,
+    pvalue_col_in_var15=None,
+    pvalue_label16=None,
+    pvalue_col_in_var16=None,
+
+    subject_col='Subject_ID',
+    connect_lines=True,
+    jitter_amount=0.2,
+    legend=False,
+    figsize=(10, 6),
+    color_list=["#88CCEE", "#AA4499", "#117733", "#44AA99", "#332288", "#999933", "#DDCC77", "#661100", "#CC6677", "#882255"],
+    jump_n_colors=0,
+):
+```
 
 ```python
 adtl.timeseries_paired_datapoints(

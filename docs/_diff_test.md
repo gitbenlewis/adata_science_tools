@@ -14,6 +14,33 @@ This module exposes one public API:
 
 It returns a feature-indexed `pandas.DataFrame` and can optionally save results to CSV, write a log file, and store a copy in `adata.uns`.
 
+## Full signature
+
+```python
+def diff_test(adata, layer=None, use_raw=False,
+            groupby_key=None, groupby_key_target_values=[None], groupby_key_ref_values=[None],
+            comparison_col_tag='_target_ref',
+            nested_groupby_key_target_values=[(None,None)], nested_groupby_key_ref_values= [(None,None)],
+            nested_comparison_col_tag='_target_con_ref_con',
+            sortby=None,ascending=False,
+            tests=['ttest_ind', 'ttest_rel','mannwhitneyu', 'WilcoxonSigned','ttest_rel_nested','WilcoxonSigned_nested'],
+            pair_by_key=None ,
+            add_values2results= False,
+            add_adata_var_column_key_list=None,
+            save_table=False,
+            save_path=None,
+            save_result_to_adata_uns_as_dict=False,
+            logger=None,
+            log_inputs=True,
+            log_level="INFO",
+            save_log=True,
+            x_df=None,
+            var_df=None,
+            obs_df=None,
+
+            ):
+```
+
 ## Supported test families
 
 The `tests` argument accepts these values:

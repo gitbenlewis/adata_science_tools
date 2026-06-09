@@ -15,6 +15,12 @@ These functions are parser- and dataset-specific. Unlike the `_tools` module doc
 
 `read_adat_2_AnnData(...)` parses a SomaLogic `.adat` file into an `AnnData` object.
 
+### Full signature
+
+```python
+def read_adat_2_AnnData(path_or_buf: Union[str, TextIO]) -> AnnData:
+```
+
 ```python
 import adata_science_tools as adtl
 
@@ -54,6 +60,18 @@ The example comments in the source show the intended next steps:
 
 `soma_fill_sampletype_obs_values(...)` copies values from one donor obs column into one or more target obs columns for specific sample types.
 
+### Full signature
+
+```python
+def soma_fill_sampletype_obs_values(
+    adata: AnnData,
+    donor_obs_column: str = 'SampleType',
+    donor_obs_col_values_to_paste: list[str] | None = None,
+    obs_columns_toFix: list[str] | None = None,
+    make_copy: bool = False
+):
+```
+
 ```python
 adata = adtl.soma_fill_sampletype_obs_values(
     adata,
@@ -85,6 +103,19 @@ The function uses `print(...)` for its status notes rather than structured loggi
 
 `soma_make_adata_index_unique_by_merge(...)` makes `adata.obs_names` more unique by appending another obs column value to selected rows.
 
+### Full signature
+
+```python
+def soma_make_adata_index_unique_by_merge(
+    adata: AnnData,
+    donor_obs_column: str = 'Barcode2d',
+    mask: pd.Series | None = None,
+    duplicates_index_only: bool = True,
+    ensure_global_unique: bool = False,
+    make_copy: bool = False,
+) -> AnnData:
+```
+
 ```python
 adata = adtl.soma_make_adata_index_unique_by_merge(
     adata,
@@ -112,6 +143,12 @@ adata = adtl.soma_make_adata_index_unique_by_merge(
 ## `make_df_obs_adataX_soma`
 
 `make_df_obs_adataX_soma(...)` is a SomaScan-specific variant of the generic DataFrame helper from [`_IO.md`](_IO.md).
+
+### Full signature
+
+```python
+def make_df_obs_adataX_soma(adata,layer=None,index=None,varcolumns=None,include_obs=True):
+```
 
 ```python
 df = adtl.make_df_obs_adataX_soma(

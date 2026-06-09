@@ -13,6 +13,12 @@ This module contains convenience functions for previewing color palettes.
 
 Use `show_tol_colors(...)` to preview Paul Tol's 10-color palette, or a supplied list of colors, as a labeled bar strip.
 
+### Full signature
+
+```python
+def show_tol_colors(colors=None):
+```
+
 ```python
 import adata_science_tools as adtl
 
@@ -29,6 +35,16 @@ Important behavior:
 ## `show_colors`
 
 Use `show_colors(...)` to preview an arbitrary color list and optionally save the figure.
+
+### Full signature
+
+```python
+def show_colors(colors=None,
+                title_text=' Color Palette',
+                save_plot=False,
+                save_file_dir=None,
+                save_file_name='color_palette.png'):
+```
 
 ```python
 adtl.show_colors(

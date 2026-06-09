@@ -13,6 +13,18 @@ These helpers are used by higher-level workflows such as model fitting and expec
 
 `save_dataset(...)` writes one `AnnData` object to a bundle of files with a shared basename.
 
+### Full signature
+
+```python
+def save_dataset(
+    _adata: ad.AnnData,
+    output_path: str | Path,
+    logger: logging.Logger | None = None,
+    save_obsm: bool = True,
+    obsm_keys: Sequence[str] | None = None,
+) -> None:
+```
+
 ```python
 import adata_science_tools as adtl
 
@@ -97,6 +109,19 @@ This writes:
 ## `make_df_obs_adataX`
 
 `make_df_obs_adataX(...)` builds a `pandas.DataFrame` from `AnnData` expression data and, optionally, prepends `adata.obs`.
+
+### Full signature
+
+```python
+def make_df_obs_adataX(
+    adata,
+    layer: str | None = None,
+    index: str | None = None,
+    varcolumns: list[str] | str | None = None,
+    include_obs: bool = True,
+    use_raw: bool = False
+):
+```
 
 ```python
 df = adtl.make_df_obs_adataX(

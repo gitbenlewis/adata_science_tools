@@ -35,6 +35,30 @@ Categorical predictors are expanded through the Patsy design matrix, so coeffici
 
 Use `calculate_expectations(...)` to fit the model and return the expectation coefficient table.
 
+### Full signature
+
+```python
+def calculate_expectations(
+    adata: ad.AnnData,
+    covariates: list[str] | tuple[str, ...] | None = None,
+    *,
+    predictors: list[str] | tuple[str, ...] | None = None,
+    layer: str | None = None,
+    use_raw: bool = False,
+    fit_method: str = "ols",
+    feature_columns: list[str] | tuple[str, ...] | None = None,
+    dataset_cfg: dict[str, Any] | None = None,
+    filter_obs_boolean_column: str | None = None,
+    filter_obs_column_key: str | None = None,
+    filter_obs_column_values_list: list[Any] | tuple[Any, ...] | None = None,
+    save_path: str | None = None,
+    save_result_to_adata_uns_as_dict: bool | None = None,
+    model_name: str | None = None,
+    add_adata_var_column_key_list: list[str] | tuple[str, ...] | None = None,
+    include_metadata: bool = True,
+) -> pd.DataFrame:
+```
+
 ```python
 import adata_science_tools as adtl
 
@@ -133,6 +157,18 @@ This matters because a plain CSV reload loses `DataFrame.attrs`. If you reload t
 
 Use `save_expectation_model_files(...)` to write both artifacts together:
 
+### Full signature
+
+```python
+def save_expectation_model_files(
+    expectation_df: pd.DataFrame,
+    csv_path: str | Path,
+    *,
+    model_spec: dict[str, Any] | str | Path | None = None,
+    model_spec_path: str | Path | None = None,
+) -> tuple[Path, Path]:
+```
+
 ```python
 csv_path, model_spec_path = adtl.save_expectation_model_files(
     expectation_df,
@@ -146,6 +182,17 @@ This writes:
 - `results/expectation_table.model_spec.yaml`
 
 Then either of these round-trips is valid:
+
+```python
+def predict_expectation(
+    adata: ad.AnnData,
+    expectation_df: pd.DataFrame | str | Path,
+    *,
+    model_spec: dict[str, Any] | str | Path | None = None,
+    include_intercept: bool = True,
+    baseline: dict[str, Any] | None = None,
+) -> np.ndarray:
+```
 
 ```python
 predicted = adtl.predict_expectation(adata, "results/expectation_table.csv")
@@ -164,6 +211,19 @@ If you only reload the CSV into a `DataFrame` and do not supply a `model_spec`, 
 ## `predict_expectation`
 
 `predict_expectation(...)` returns a dense `numpy.ndarray` with shape `(adata.n_obs, adata.n_vars)`.
+
+### Full signature
+
+```python
+def predict_expectation(
+    adata: ad.AnnData,
+    expectation_df: pd.DataFrame | str | Path,
+    *,
+    model_spec: dict[str, Any] | str | Path | None = None,
+    include_intercept: bool = True,
+    baseline: dict[str, Any] | None = None,
+) -> np.ndarray:
+```
 
 ```python
 predicted = adtl.predict_expectation(adata, expectation_df)
@@ -195,6 +255,22 @@ This is mainly used by `regress_out(..., flavor="obs_minus_exp_covar_baseline")`
 ## `regress_out`
 
 `regress_out(...)` writes a corrected matrix into `adata.layers[output_layer]` and returns either a copy or the original object, depending on `inplace`.
+
+### Full signature
+
+```python
+def regress_out(
+    adata: ad.AnnData,
+    expectation_df: pd.DataFrame | str | Path,
+    *,
+    model_spec: dict[str, Any] | str | Path | None = None,
+    baseline: dict[str, Any] | None = None,
+    flavor: str = "obs_minus_exp_covar",
+    input_layer: str | None = None,
+    output_layer: str | None = None,
+    inplace: bool = False,
+) -> ad.AnnData:
+```
 
 Supported flavors:
 
@@ -234,6 +310,24 @@ corrected = adtl.regress_out(
 ## `excess_expectation`
 
 `excess_expectation(...)` computes residual or ratio-based transforms and stores the result in `adata.layers[output_layer]`.
+
+### Full signature
+
+```python
+def excess_expectation(
+    adata: ad.AnnData,
+    expectation_df: pd.DataFrame | str | Path,
+    *,
+    model_spec: dict[str, Any] | str | Path | None = None,
+    flavor: str = "obs_minus_exp_val",
+    input_layer: str | None = None,
+    output_layer: str | None = None,
+    inplace: bool = False,
+    eps: float | None = None,
+    ratio_input_transform: str | None = None,
+    nonpositive_policy: str = "raise",
+) -> ad.AnnData:
+```
 
 Supported flavors:
 
@@ -293,6 +387,23 @@ values, or non-positive observed values for log outputs, are written as `NaN`.
 
 If you already have an OLS summary table from `fit_smf_ols_models_and_summarize_adata(...)`, you can convert it into an expectation table:
 
+### Full signature
+
+```python
+def convert_ols_summary_to_expectation_df(
+    ols_summary_df: pd.DataFrame,
+    predictors: list[str] | tuple[str, ...],
+    *,
+    model_name: str,
+    layer: str | None = None,
+    use_raw: bool = False,
+    include_metadata: bool = True,
+    categorical_levels: dict[str, list[Any]] | None = None,
+    reference_adata: ad.AnnData | None = None,
+    reference_obs_df: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+```
+
 ```python
 ols_summary_df = adtl.fit_smf_ols_models_and_summarize_adata(
     adata,
@@ -317,6 +428,22 @@ This is useful when model fitting and expectation export happen in separate step
 
 Use `reconstruct_expectation_model_spec(...)` when you have a loaded expectation table but no saved YAML sidecar:
 
+### Full signature
+
+```python
+def reconstruct_expectation_model_spec(
+    expectation_df: pd.DataFrame,
+    predictors: list[str] | tuple[str, ...],
+    *,
+    model_name: str | None = None,
+    layer: str | None = None,
+    use_raw: bool = False,
+    categorical_levels: dict[str, list[Any]] | None = None,
+    reference_adata: ad.AnnData | None = None,
+    reference_obs_df: pd.DataFrame | None = None,
+) -> dict[str, Any]:
+```
+
 ```python
 model_spec = adtl.reconstruct_expectation_model_spec(
     loaded_df,
@@ -332,6 +459,24 @@ model_spec = adtl.reconstruct_expectation_model_spec(
 ## Wrapper workflow
 
 `regression_expectation_correction_adata(...)` is the config-oriented wrapper for fit-plus-correct workflows.
+
+### Full signature
+
+```python
+def regression_expectation_correction_adata(
+    adata: ad.AnnData,
+    *,
+    calculate_expectations_params: dict[str, Any] | None = None,
+    regress_out_params: dict[str, Any] | None = None,
+    predict_expectation_params: dict[str, Any] | None = None,
+    excess_expectation_params: dict[str, Any] | None = None,
+    expectation_save_path: str | Path | None = None,
+    output_h5ad_path: str | Path | None = None,
+    dataset_cfg: dict[str, Any] | None = None,
+    logger: logging.Logger | None = None,
+    **kwargs: Any,
+) -> ad.AnnData:
+```
 
 Minimal dict-driven example:
 
