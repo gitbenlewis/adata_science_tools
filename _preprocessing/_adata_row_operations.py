@@ -92,7 +92,7 @@ def ref_vs_target_adata(
     groupby_key: str = "Pre_or_Post_obs_col",
     groupby_key_target_value: str = "Post",
     groupby_key_ref_value: str = "Pre",
-    opperation_flavor: str = "subtraction",
+    opperation_flavor: str | Sequence[str] = "subtraction",
     obs_dfs: str = "merge",
     ref_obs_suffix: str = ".src_pre",
     target_obs_suffix: str = ".src_post",
@@ -104,6 +104,7 @@ def ref_vs_target_adata(
 
     Pairing is controlled by `pair_by_key` in `params`. The returned AnnData has
     one observation per overlapping pair ID, indexed by the stringified pair ID.
+    `opperation_flavor` may be a string or sequence of operation strings.
     """
     params = dict(params)
     operation_flavor = params.pop("operation_flavor", None)
@@ -164,10 +165,33 @@ def ref_vs_target_adata(
         "log2fc": "relative_change_l2fc",
         "l2fc": "relative_change_l2fc",
     }
-    requested_operation = str(opperation_flavor)
-    operation = operation_aliases.get(requested_operation.lower())
-    if operation is None:
-        raise ValueError(f"Unsupported opperation_flavor '{opperation_flavor}'.")
+    if isinstance(opperation_flavor, (str, bytes)):
+        requested_operations = [str(opperation_flavor)]
+        multi_operation_mode = False
+    else:
+        try:
+            requested_operations = [str(operation_name) for operation_name in list(opperation_flavor)]
+            multi_operation_mode = True
+        except TypeError:
+            requested_operations = [str(opperation_flavor)]
+            multi_operation_mode = False
+    if not requested_operations:
+        raise ValueError("opperation_flavor must be a non-empty string or sequence.")
+
+    operations = []
+    for requested_operation_name in requested_operations:
+        operation_name = operation_aliases.get(requested_operation_name.lower())
+        if operation_name is None:
+            raise ValueError(f"Unsupported opperation_flavor '{requested_operation_name}'.")
+        operations.append(operation_name)
+    duplicate_operations = sorted({operation_name for operation_name in operations if operations.count(operation_name) > 1})
+    if duplicate_operations:
+        raise ValueError(
+            "Duplicate opperation_flavor entries after alias normalization: "
+            f"{duplicate_operations}"
+        )
+    requested_operation = requested_operations[0]
+    operation = operations[0]
 
     if layers_to_compute is None:
         sources_to_compute = [layer]
@@ -265,7 +289,13 @@ def ref_vs_target_adata(
             return adata.X
         return adata.layers[source]
 
-    def _compute_operation(source):
+    def _source_label(source):
+        return ".X" if source is None else str(source)
+
+    def _source_layer_label(source):
+        return "X" if source is None else str(source)
+
+    def _compute_source_values(source):
         matrix = _get_source_matrix(source)
         target_values = matrix[target_positions, :].copy()
         ref_values = matrix[ref_positions, :].copy()
@@ -289,30 +319,61 @@ def ref_vs_target_adata(
                         ref_values[np.isnan(ref_values)] = ref_missing_fill_value
             target_values = _apply_bounds(target_values, target_min_value, target_max_value)
             ref_values = _apply_bounds(ref_values, ref_min_value, ref_max_value)
+        return target_values, ref_values
 
-        if operation == "subtraction":
-            return target_values - ref_values, target_values, ref_values
-
-        target_values = _as_dense_array(target_values).astype(float, copy=False)
-        ref_values = _as_dense_array(ref_values).astype(float, copy=False)
-        with np.errstate(divide="ignore", invalid="ignore"):
-            if operation == "relative_change_pct":
-                result_values = ((target_values - ref_values) / (ref_values + epsilon)) * 100
-            elif operation == "relative_change_fc":
-                result_values = (target_values + epsilon) / (ref_values + epsilon)
-            else:
-                result_values = np.log2((target_values + epsilon) / (ref_values + epsilon))
-        return result_values, target_values, ref_values
-
+    multi_source_mode = len(sources_to_compute) > 1
     layer_results = {}
+    operation_layer_results = {}
+    operation_layer_keys = []
+    operation_layer_key_by_source_operation = {}
+    generated_layer_keys = set()
+    base_operation_layer = None
+    base_result_values = None
     base_target_values = None
     base_ref_values = None
     for source in sources_to_compute:
-        result_values, target_values, ref_values = _compute_operation(source)
-        layer_results[source] = result_values
+        target_values, ref_values = _compute_source_values(source)
+        dense_target_values = None
+        dense_ref_values = None
+        source_operation_layer_keys = {}
+        for operation_name in operations:
+            if operation_name == "subtraction":
+                result_values = target_values - ref_values
+            else:
+                if dense_target_values is None:
+                    dense_target_values = _as_dense_array(target_values).astype(float, copy=False)
+                    dense_ref_values = _as_dense_array(ref_values).astype(float, copy=False)
+                with np.errstate(divide="ignore", invalid="ignore"):
+                    if operation_name == "relative_change_pct":
+                        result_values = ((dense_target_values - dense_ref_values) / (dense_ref_values + epsilon)) * 100
+                    elif operation_name == "relative_change_fc":
+                        result_values = (dense_target_values + epsilon) / (dense_ref_values + epsilon)
+                    else:
+                        result_values = np.log2((dense_target_values + epsilon) / (dense_ref_values + epsilon))
+
+            if multi_operation_mode:
+                layer_key = operation_name
+                if multi_source_mode:
+                    layer_key = f"{_source_layer_label(source)}__{operation_name}"
+                if layer_key in generated_layer_keys:
+                    raise ValueError(f"Generated layer key collision: '{layer_key}'.")
+                generated_layer_keys.add(layer_key)
+                operation_layer_results[layer_key] = result_values
+                operation_layer_keys.append(layer_key)
+                source_operation_layer_keys[operation_name] = layer_key
+                if source == base_layer and operation_name == operation:
+                    base_result_values = result_values
+                    base_operation_layer = layer_key
+            else:
+                layer_results[source] = result_values
+
         if source == base_layer:
+            if not multi_operation_mode:
+                base_result_values = layer_results[source]
             base_target_values = target_values
             base_ref_values = ref_values
+        if multi_operation_mode:
+            operation_layer_key_by_source_operation[_source_label(source)] = source_operation_layer_keys
 
     matched_index = pd.Index(matched_pair_ids, name=pair_by_key)
     target_aligned_obs = adata.obs.loc[target_obs_names].copy()
@@ -358,17 +419,18 @@ def ref_vs_target_adata(
     result_var["ref_vs_target_ref_value"] = groupby_key_ref_value
     result_var["ref_vs_target_pair_by_key"] = pair_by_key
 
-    def _source_label(source):
-        return ".X" if source is None else str(source)
-
     result_adata = ad.AnnData(
-        X=layer_results[base_layer],
+        X=base_result_values,
         obs=result_obs,
         var=result_var,
     )
-    for source in sources_to_compute:
-        if source is not None:
-            result_adata.layers[source] = layer_results[source]
+    if multi_operation_mode:
+        for layer_key, result_values in operation_layer_results.items():
+            result_adata.layers[layer_key] = result_values
+    else:
+        for source in sources_to_compute:
+            if source is not None:
+                result_adata.layers[source] = layer_results[source]
 
     source_labels = [_source_label(source) for source in sources_to_compute]
     result_adata.uns["ref_vs_target_adata"] = {
@@ -377,7 +439,13 @@ def ref_vs_target_adata(
         "groupby_key_target_value": groupby_key_target_value,
         "groupby_key_ref_value": groupby_key_ref_value,
         "requested_operation_flavor": requested_operation,
+        "requested_operation_flavors": requested_operations,
         "operation_flavor": operation,
+        "operation_flavors": operations,
+        "base_operation": operation,
+        "base_operation_layer": base_operation_layer,
+        "operation_layer_keys": operation_layer_keys,
+        "operation_layer_key_by_source_operation": operation_layer_key_by_source_operation,
         "obs_dfs": obs_dfs,
         "ref_obs_suffix": ref_obs_suffix,
         "target_obs_suffix": target_obs_suffix,
@@ -420,7 +488,7 @@ def ref_vs_target_adata(
 
     if return_df:
         result_df = pd.DataFrame(
-            _as_dense_array(layer_results[base_layer]),
+            _as_dense_array(base_result_values),
             index=result_adata.obs_names.copy(),
             columns=result_adata.var_names.copy(),
         )
