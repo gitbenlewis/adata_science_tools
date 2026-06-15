@@ -133,6 +133,15 @@ def ref_vs_target_adata(
     save_source_values_obsm = params.pop("save_source_values_obsm", False)
     target_values_obsm_key = params.pop("target_values_obsm_key", "post_values")
     ref_values_obsm_key = params.pop("ref_values_obsm_key", "pre_values")
+    select_max_ref_value_var_groupby_key = params.pop("select_max_ref_value_var_groupby_key", None)
+    select_max_ref_value_filter_vars_by_isin_lists = params.pop(
+        "select_max_ref_value_filter_vars_by_isin_lists",
+        None,
+    )
+    select_max_ref_value_source_obsm_key = params.pop(
+        "select_max_ref_value_source_obsm_key",
+        "selected_source_variable",
+    )
 
     log = logger or logging.getLogger(__name__)
     if log_level is not None:
@@ -176,6 +185,9 @@ def ref_vs_target_adata(
             ("save_source_values_obsm", save_source_values_obsm),
             ("target_values_obsm_key", target_values_obsm_key),
             ("ref_values_obsm_key", ref_values_obsm_key),
+            ("select_max_ref_value_var_groupby_key", select_max_ref_value_var_groupby_key),
+            ("select_max_ref_value_filter_vars_by_isin_lists", select_max_ref_value_filter_vars_by_isin_lists),
+            ("select_max_ref_value_source_obsm_key", select_max_ref_value_source_obsm_key),
             ("unused_params", params),
             ("raw_params", original_params),
         ]
@@ -273,6 +285,42 @@ def ref_vs_target_adata(
         source_labels,
         _source_label(base_layer),
     )
+
+    select_max_ref_value_enabled = select_max_ref_value_var_groupby_key is not None
+    select_max_ref_value_filters = None
+    if select_max_ref_value_filter_vars_by_isin_lists is not None:
+        if not select_max_ref_value_enabled:
+            raise ValueError(
+                "select_max_ref_value_var_groupby_key is required when "
+                "select_max_ref_value_filter_vars_by_isin_lists is provided."
+            )
+        select_max_ref_value_filters = {}
+        for filter_key, filter_values in select_max_ref_value_filter_vars_by_isin_lists.items():
+            if filter_key not in adata.var.columns:
+                raise KeyError(
+                    "Column "
+                    f"'{filter_key}' from select_max_ref_value_filter_vars_by_isin_lists "
+                    "not found in adata.var."
+                )
+            if isinstance(filter_values, (str, bytes)):
+                select_max_ref_value_filters[filter_key] = [filter_values]
+            else:
+                select_max_ref_value_filters[filter_key] = list(filter_values)
+    if select_max_ref_value_enabled:
+        if select_max_ref_value_var_groupby_key not in adata.var.columns:
+            raise KeyError(
+                "Column "
+                f"'{select_max_ref_value_var_groupby_key}' from "
+                "select_max_ref_value_var_groupby_key not found in adata.var."
+            )
+        if (
+            save_source_values_obsm
+            and select_max_ref_value_source_obsm_key in {target_values_obsm_key, ref_values_obsm_key}
+        ):
+            raise ValueError(
+                "select_max_ref_value_source_obsm_key must not match target_values_obsm_key "
+                "or ref_values_obsm_key."
+            )
 
     target_mask = adata.obs[groupby_key] == groupby_key_target_value
     ref_mask = adata.obs[groupby_key] == groupby_key_ref_value
@@ -391,6 +439,96 @@ def ref_vs_target_adata(
             ref_values = _apply_bounds(ref_values, ref_min_value, ref_max_value)
         return target_values, ref_values
 
+    matched_index = pd.Index(matched_pair_ids, name=pair_by_key)
+    source_values_by_source = {}
+    for source in sources_to_compute:
+        source_label = _source_label(source)
+        log.info("ref_vs_target_adata computing source '%s'.", source_label)
+        source_values_by_source[source] = _compute_source_values(source)
+
+    selected_group_values = []
+    selected_group_labels = []
+    select_max_ref_value_group_source_counts = []
+    selected_source_positions = None
+    selected_source_variable_df = None
+    select_max_ref_value_tied_selection_count = 0
+    if select_max_ref_value_enabled:
+        var_mask = pd.Series(True, index=adata.var_names)
+        for filter_key, filter_values in (select_max_ref_value_filters or {}).items():
+            var_mask &= adata.var[filter_key].isin(filter_values)
+        grouped_var = adata.var.loc[
+            var_mask & adata.var[select_max_ref_value_var_groupby_key].notna()
+        ]
+        if grouped_var.empty:
+            raise ValueError("No variables remain after select_max_ref_value filtering.")
+
+        selected_group_values = list(pd.unique(grouped_var[select_max_ref_value_var_groupby_key]))
+        selected_group_labels = [str(group_value) for group_value in selected_group_values]
+        if len(set(selected_group_labels)) != len(selected_group_labels):
+            raise ValueError("select_max_ref_value group labels must be unique after string conversion.")
+
+        base_ref_values_for_selection = _as_dense_array(source_values_by_source[base_layer][1]).astype(float, copy=False)
+        selected_source_positions = np.full(
+            (len(matched_pair_ids), len(selected_group_labels)),
+            -1,
+            dtype=int,
+        )
+        selected_source_variable_values = np.full(
+            selected_source_positions.shape,
+            "",
+            dtype=object,
+        )
+        source_var_names = np.asarray(adata.var_names)
+        for group_idx, group_value in enumerate(selected_group_values):
+            group_var_names = grouped_var.index[
+                grouped_var[select_max_ref_value_var_groupby_key] == group_value
+            ]
+            group_var_positions = adata.var_names.get_indexer(group_var_names)
+            select_max_ref_value_group_source_counts.append(len(group_var_positions))
+            group_ref_values = base_ref_values_for_selection[:, group_var_positions]
+            valid_ref_values = ~np.isnan(group_ref_values)
+            pairs_with_values = valid_ref_values.any(axis=1)
+            if not pairs_with_values.any():
+                continue
+
+            masked_ref_values = np.where(valid_ref_values, group_ref_values, -np.inf)
+            local_selected_positions = np.argmax(masked_ref_values, axis=1)
+            pair_indices = np.flatnonzero(pairs_with_values)
+            selected_var_positions = group_var_positions[local_selected_positions[pair_indices]]
+            selected_source_positions[pair_indices, group_idx] = selected_var_positions
+            selected_source_variable_values[pair_indices, group_idx] = source_var_names[selected_var_positions]
+
+            selected_ref_values = masked_ref_values[pair_indices, local_selected_positions[pair_indices]]
+            tied_counts = (
+                (masked_ref_values[pair_indices] == selected_ref_values[:, None])
+                & valid_ref_values[pair_indices]
+            ).sum(axis=1)
+            select_max_ref_value_tied_selection_count += int((tied_counts > 1).sum())
+
+        selected_source_variable_df = pd.DataFrame(
+            selected_source_variable_values,
+            index=matched_index,
+            columns=selected_group_labels,
+        )
+        log.info(
+            "ref_vs_target_adata select_max_ref_value enabled: groups=%d, tied_selections=%d.",
+            len(selected_group_labels),
+            select_max_ref_value_tied_selection_count,
+        )
+
+    def _select_max_ref_value_columns(values):
+        dense_values = _as_dense_array(values).astype(float, copy=False)
+        collapsed_values = np.full(selected_source_positions.shape, np.nan, dtype=float)
+        pair_indices = np.arange(selected_source_positions.shape[0])
+        for group_idx in range(selected_source_positions.shape[1]):
+            source_positions = selected_source_positions[:, group_idx]
+            pairs_with_selection = source_positions >= 0
+            collapsed_values[pairs_with_selection, group_idx] = dense_values[
+                pair_indices[pairs_with_selection],
+                source_positions[pairs_with_selection],
+            ]
+        return collapsed_values
+
     multi_source_mode = len(sources_to_compute) > 1
     layer_results = {}
     operation_layer_results = {}
@@ -403,8 +541,10 @@ def ref_vs_target_adata(
     base_ref_values = None
     for source in sources_to_compute:
         source_label = _source_label(source)
-        log.info("ref_vs_target_adata computing source '%s'.", source_label)
-        target_values, ref_values = _compute_source_values(source)
+        target_values, ref_values = source_values_by_source[source]
+        if select_max_ref_value_enabled:
+            target_values = _select_max_ref_value_columns(target_values)
+            ref_values = _select_max_ref_value_columns(ref_values)
         dense_target_values = None
         dense_ref_values = None
         source_operation_layer_keys = {}
@@ -455,7 +595,6 @@ def ref_vs_target_adata(
     if multi_operation_mode:
         log.info("ref_vs_target_adata generated operation layer keys: %s", operation_layer_keys)
 
-    matched_index = pd.Index(matched_pair_ids, name=pair_by_key)
     target_aligned_obs = adata.obs.loc[target_obs_names].copy()
     ref_aligned_obs = adata.obs.loc[ref_obs_names].copy()
     target_aligned_obs.index = matched_index
@@ -492,7 +631,15 @@ def ref_vs_target_adata(
     result_obs["target_groupby_value"] = groupby_key_target_value
     result_obs["ref_vs_target_operation"] = operation
 
-    result_var = adata.var.copy() if keep_var_df else pd.DataFrame(index=adata.var_names.copy())
+    if select_max_ref_value_enabled:
+        result_var = pd.DataFrame(
+            index=pd.Index(selected_group_labels, name=adata.var_names.name),
+        )
+        if keep_var_df:
+            result_var[select_max_ref_value_var_groupby_key] = selected_group_values
+            result_var["select_max_ref_value_n_source_variables"] = select_max_ref_value_group_source_counts
+    else:
+        result_var = adata.var.copy() if keep_var_df else pd.DataFrame(index=adata.var_names.copy())
     result_var["ref_vs_target_operation"] = operation
     result_var["ref_vs_target_groupby_key"] = groupby_key
     result_var["ref_vs_target_target_value"] = groupby_key_target_value
@@ -559,6 +706,14 @@ def ref_vs_target_adata(
         "save_source_values_obsm": save_source_values_obsm,
         "target_values_obsm_key": target_values_obsm_key if save_source_values_obsm else None,
         "ref_values_obsm_key": ref_values_obsm_key if save_source_values_obsm else None,
+        "select_max_ref_value_enabled": select_max_ref_value_enabled,
+        "select_max_ref_value_var_groupby_key": select_max_ref_value_var_groupby_key,
+        "select_max_ref_value_filter_vars_by_isin_lists": select_max_ref_value_filters,
+        "select_max_ref_value_source_obsm_key": (
+            select_max_ref_value_source_obsm_key if select_max_ref_value_enabled else None
+        ),
+        "select_max_ref_value_n_output_groups": len(selected_group_labels),
+        "select_max_ref_value_tied_selection_count": select_max_ref_value_tied_selection_count,
     }
     result_adata.uns["ref_vs_target_dropped_target_only_pair_ids"] = dropped_target_only_pair_ids
     result_adata.uns["ref_vs_target_dropped_ref_only_pair_ids"] = dropped_ref_only_pair_ids
@@ -579,6 +734,9 @@ def ref_vs_target_adata(
             index=result_adata.obs_names.copy(),
             columns=result_adata.var_names.copy(),
         )
+
+    if select_max_ref_value_enabled:
+        result_adata.obsm[select_max_ref_value_source_obsm_key] = selected_source_variable_df
 
     if return_df:
         log.info("ref_vs_target_adata returning result AnnData and DataFrame.")

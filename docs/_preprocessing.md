@@ -72,6 +72,9 @@ result = adtl.ref_vs_target_adata(
     save_source_values_obsm=False,
     target_values_obsm_key="post_values",
     ref_values_obsm_key="pre_values",
+    select_max_ref_value_var_groupby_key=None,
+    select_max_ref_value_filter_vars_by_isin_lists=None,
+    select_max_ref_value_source_obsm_key="selected_source_variable",
 )
 ```
 
@@ -286,6 +289,38 @@ used for computation.
 default as `.obsm.<key>.csv` files, for example
 `result.obsm.pre_values.csv` and `result.obsm.post_values.csv` when the
 default keys are used.
+
+### Optional max-reference variable selection
+
+Set `select_max_ref_value_var_groupby_key` to collapse variables by a column in
+`adata.var` after target/reference rows are paired and bounds are applied, but
+before the requested operation is computed. For each matched pair and variable
+group, the function selects the first variable with the maximum bounded
+reference value and uses that same selected variable for every requested source
+and operation.
+
+```python
+grouped_post_minus_pre = adtl.ref_vs_target_adata(
+    adata,
+    pair_by_key="SubjectID",
+    save_source_values_obsm=True,
+    select_max_ref_value_var_groupby_key="feature_group",
+    select_max_ref_value_filter_vars_by_isin_lists={"feature_type": ["primary"]},
+    select_max_ref_value_source_obsm_key="selected_source_variable",
+)
+```
+
+The returned variables are the stringified group labels. Saved source-value
+`obsm` tables are collapsed to those same labels, and
+`result.obsm["selected_source_variable"]` records which original variable was
+selected for each returned observation and group. Empty selected-source entries
+mean that all reference values were missing for that observation and group; the
+collapsed numeric values remain missing.
+
+Selection metadata is stored in `result.uns["ref_vs_target_adata"]`, including
+whether selection was enabled, the grouping key, the normalized filter config,
+the selected-source `obsm` key, the number of output groups, and the number of
+pair/group selections with tied maximum reference values.
 
 ### Logging
 
