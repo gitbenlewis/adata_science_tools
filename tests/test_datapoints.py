@@ -510,6 +510,71 @@ class DatapointsTests(unittest.TestCase):
             if fig is not None:
                 plt.close(fig)
 
+    def test_x_order_include_unobserved_keeps_empty_panel_ticks_without_table_rows(self):
+        x_order = ["dose_a", "dose_b", "dose_c"]
+        adata = ad.AnnData(
+            X=np.array(
+                [
+                    [1.0, 10.0],
+                    [2.0, np.nan],
+                    [np.nan, 30.0],
+                ]
+            ),
+            obs=pd.DataFrame(
+                {"dose_group": ["dose_a", "dose_b", "dose_c"]},
+                index=["sample_1", "sample_2", "sample_3"],
+            ),
+            var=pd.DataFrame(
+                {"feature_group": ["group_a", "group_b"]},
+                index=["feature_1", "feature_2"],
+            ),
+        )
+
+        default_fig = None
+        include_fig = None
+        try:
+            default_fig, default_axes, default_plot_df = adtl.datapoints(
+                adata=adata,
+                var_groupby_key="feature_group",
+                collapse_mode="stack",
+                x_by_obs_key="dose_group",
+                x_order=x_order,
+                show=False,
+            )
+            include_fig, include_axes, include_plot_df = adtl.datapoints(
+                adata=adata,
+                var_groupby_key="feature_group",
+                collapse_mode="stack",
+                x_by_obs_key="dose_group",
+                x_order=x_order,
+                x_order_include_unobserved=True,
+                show=False,
+            )
+
+            self.assertEqual(
+                [label.get_text() for label in default_axes["group_a"].get_xticklabels()],
+                ["dose_a", "dose_b"],
+            )
+            self.assertEqual(
+                [label.get_text() for label in default_axes["group_b"].get_xticklabels()],
+                ["dose_a", "dose_c"],
+            )
+            for axes in include_axes.values():
+                self.assertEqual(
+                    [label.get_text() for label in axes.get_xticklabels()],
+                    x_order,
+                )
+            pd.testing.assert_frame_equal(
+                default_plot_df.drop(columns=["x_order"]).reset_index(drop=True),
+                include_plot_df.drop(columns=["x_order"]).reset_index(drop=True),
+            )
+            self.assertEqual(include_plot_df["value"].isna().sum(), 0)
+        finally:
+            if default_fig is not None:
+                plt.close(default_fig)
+            if include_fig is not None:
+                plt.close(include_fig)
+
     def test_x_by_obs_key_multiple_variables_panel_by_variable_by_default(self):
         fig = None
         try:
