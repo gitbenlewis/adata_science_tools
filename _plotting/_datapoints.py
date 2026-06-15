@@ -40,6 +40,7 @@ def datapoints(
     subplot_by_var_missing_label: str = "Missing",
     subplot_order: Sequence[Any] | None = None,
     x_order: Sequence[Any] | None = None,
+    x_order_include_unobserved: bool = False,
     x_by_obs_key: str | None = None,
     x_by_obs_missing_label: str = "Missing",
     x_by_obs_multi_var_mode: Literal[
@@ -503,7 +504,13 @@ def datapoints(
     x_orders_by_panel: dict[str, dict[str, int]] = {}
     for panel_name in panel_names:
         panel_x_values = plot_df.loc[plot_df["panel"] == panel_name, "x_label"]
-        ordered_x_values = [str(value) for value in _ordered_values(panel_x_values, display_x_order)]
+        if x_order_include_unobserved and display_x_order is not None:
+            observed_x_values = [str(value) for value in pd.unique(panel_x_values.dropna())]
+            ordered_x_values = display_x_order + [
+                value for value in observed_x_values if value not in set(display_x_order)
+            ]
+        else:
+            ordered_x_values = [str(value) for value in _ordered_values(panel_x_values, display_x_order)]
         x_orders_by_panel[panel_name] = {
             x_value: idx + 1
             for idx, x_value in enumerate(ordered_x_values)
@@ -611,12 +618,18 @@ def datapoints(
             panel_df.loc[panel_df["x_label"] == x_label, "value"].dropna().to_numpy()
             for x_label in x_labels
         ]
-        nonempty_grouped_values = [values for values in grouped_values if len(values)]
+        nonempty_grouped = [
+            (x_position, values)
+            for x_position, values in zip(x_positions, grouped_values)
+            if len(values)
+        ]
+        nonempty_x_positions = [x_position for x_position, _values in nonempty_grouped]
+        nonempty_grouped_values = [values for _x_position, values in nonempty_grouped]
 
         if violinplot and nonempty_grouped_values:
             violin_parts = ax.violinplot(
-                grouped_values,
-                positions=x_positions,
+                nonempty_grouped_values,
+                positions=nonempty_x_positions,
                 widths=violin_width,
                 showmeans=False,
                 showmedians=False,
@@ -630,8 +643,8 @@ def datapoints(
 
         if boxplot and nonempty_grouped_values:
             boxplot_artists = ax.boxplot(
-                grouped_values,
-                positions=x_positions,
+                nonempty_grouped_values,
+                positions=nonempty_x_positions,
                 patch_artist=False,
                 showfliers=boxplot_showfliers,
                 widths=boxplot_width,

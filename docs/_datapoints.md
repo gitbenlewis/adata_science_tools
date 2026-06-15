@@ -34,6 +34,7 @@ def datapoints(
     subplot_by_var_missing_label: str = "Missing",
     subplot_order: Sequence[Any] | None = None,
     x_order: Sequence[Any] | None = None,
+    x_order_include_unobserved: bool = False,
     x_by_obs_key: str | None = None,
     x_by_obs_missing_label: str = "Missing",
     x_by_obs_multi_var_mode: Literal[
@@ -131,9 +132,12 @@ fig, axes, plot_df = adtl.datapoints(
    are routed to `x_by_obs_missing_label`, which defaults to `"Missing"`.
    `x_order` orders the displayed x-axis labels; for config-driven calls, raw
    typed values such as `[2, 1]` and string labels such as `["2", "1"]` both
-   match displayed labels. When `subset_obs_key` and `x_by_obs_key` are the
-   same obs column, legend and color order follow `x_order` unless
-   `subset_order` is supplied; the same rule applies inside
+   match displayed labels. Set `x_order_include_unobserved=True` to keep every
+   requested `x_order` label as a tick in each panel even when no post-filter
+   datapoints exist for that label; this reserves axis positions only and does
+   not add placeholder rows to the returned table. When `subset_obs_key` and
+   `x_by_obs_key` are the same obs column, legend and color order follow
+   `x_order` unless `subset_order` is supplied; the same rule applies inside
    `subplot_by_obs_key` panels.
 
 5. OBS-GROUP X-AXIS: With `x_by_obs_key` and multiple selected variables or
