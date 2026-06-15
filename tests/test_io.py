@@ -153,6 +153,48 @@ class SaveDatasetTests(unittest.TestCase):
             assert_frame_equal(ref_values, result.obsm["pre_values"])
             assert_frame_equal(target_values, result.obsm["post_values"])
 
+    def test_save_dataset_exports_selected_source_variable_obsm(self):
+        obs = pd.DataFrame(
+            {
+                "Pre_or_Post_obs_col": ["Pre", "Post", "Pre", "Post"],
+                "pair_id": ["pair_A", "pair_A", "pair_B", "pair_B"],
+            },
+            index=["reference_pair_A", "target_pair_A", "reference_pair_B", "target_pair_B"],
+        )
+        var = pd.DataFrame(
+            {"feature_group": ["group_a", "group_a", "group_b"]},
+            index=["feature_1", "feature_2", "feature_3"],
+        )
+        source_adata = ad.AnnData(
+            X=np.array(
+                [
+                    [1.0, 3.0, 5.0],
+                    [2.0, 4.0, 6.0],
+                    [7.0, 7.0, 1.0],
+                    [9.0, 8.0, 2.0],
+                ]
+            ),
+            obs=obs,
+            var=var,
+        )
+
+        result = adtl.ref_vs_target_adata(
+            source_adata,
+            pair_by_key="pair_id",
+            select_max_ref_value_var_groupby_key="feature_group",
+            save_source_values_obsm=True,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            adtl.save_dataset(result, Path(tmpdir) / "grouped_result")
+
+            selected_source_variable = pd.read_csv(
+                Path(tmpdir) / "grouped_result.obsm.selected_source_variable.csv",
+                index_col=0,
+            )
+
+            assert_frame_equal(selected_source_variable, result.obsm["selected_source_variable"])
+
 
 if __name__ == "__main__":
     unittest.main()

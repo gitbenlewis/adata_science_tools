@@ -44,8 +44,183 @@ class RefVsTargetAdataTests(unittest.TestCase):
         adata.layers["alt"] = X + np.array([100.0, 200.0])
         return adata
 
+    def make_grouped_adata(self, include_filtered_feature: bool = False) -> ad.AnnData:
+        obs = pd.DataFrame(
+            {
+                "Pre_or_Post_obs_col": ["Post", "Pre", "Post", "Pre", "Post", "Pre"],
+                "pair_id": ["pair_A", "pair_A", "pair_B", "pair_B", "pair_C", "pair_C"],
+            },
+            index=[
+                "target_pair_A",
+                "reference_pair_A",
+                "target_pair_B",
+                "reference_pair_B",
+                "target_pair_C",
+                "reference_pair_C",
+            ],
+        )
+        X = np.array(
+            [
+                [8.0, 20.0, 7.0, 10.0],
+                [5.0, 2.0, 1.0, 4.0],
+                [3.0, 9.0, 4.0, 8.0],
+                [1.0, 7.0, 3.0, 3.0],
+                [11.0, 12.0, 5.0, 9.0],
+                [np.nan, np.nan, 2.0, 5.0],
+            ]
+        )
+        var = pd.DataFrame(
+            {
+                "feature_group": ["group_a", "group_a", "group_b", "group_b"],
+                "include_in_selection": ["yes", "yes", "yes", "yes"],
+            },
+            index=["feature_1", "feature_2", "feature_3", "feature_4"],
+        )
+        if include_filtered_feature:
+            X = np.column_stack([X, np.array([100.0, 99.0, 100.0, 99.0, 100.0, 99.0])])
+            var.loc["feature_5"] = {
+                "feature_group": "group_a",
+                "include_in_selection": "no",
+            }
+        adata = ad.AnnData(X=X, obs=obs, var=var)
+        adata.layers["scaled"] = X * 10.0
+        return adata
+
     def test_subpackage_exports_function(self):
         self.assertTrue(hasattr(pp, "ref_vs_target_adata"))
+
+    def test_select_max_ref_value_collapses_to_grouped_source_variables(self):
+        result = ref_vs_target_adata(
+            self.make_grouped_adata(),
+            pair_by_key="pair_id",
+            select_max_ref_value_var_groupby_key="feature_group",
+            save_source_values_obsm=True,
+        )
+
+        expected_result = np.array([[3.0, 6.0], [2.0, 1.0], [np.nan, 4.0]])
+        expected_target_values = np.array([[8.0, 10.0], [9.0, 4.0], [np.nan, 9.0]])
+        expected_ref_values = np.array([[5.0, 4.0], [7.0, 3.0], [np.nan, 5.0]])
+        expected_source_variables = [
+            ["feature_1", "feature_4"],
+            ["feature_2", "feature_3"],
+            ["", "feature_4"],
+        ]
+
+        self.assertEqual(result.obs_names.tolist(), ["pair_A", "pair_B", "pair_C"])
+        self.assertEqual(result.var_names.tolist(), ["group_a", "group_b"])
+        assert_allclose(result.X, expected_result, equal_nan=True)
+        assert_allclose(result.obsm["post_values"].to_numpy(), expected_target_values, equal_nan=True)
+        assert_allclose(result.obsm["pre_values"].to_numpy(), expected_ref_values, equal_nan=True)
+        self.assertEqual(result.obsm["selected_source_variable"].values.tolist(), expected_source_variables)
+        self.assertEqual(result.var["select_max_ref_value_n_source_variables"].tolist(), [2, 2])
+
+        meta = result.uns["ref_vs_target_adata"]
+        self.assertTrue(meta["select_max_ref_value_enabled"])
+        self.assertEqual(meta["select_max_ref_value_var_groupby_key"], "feature_group")
+        self.assertIsNone(meta["select_max_ref_value_filter_vars_by_isin_lists"])
+        self.assertEqual(meta["select_max_ref_value_source_obsm_key"], "selected_source_variable")
+        self.assertEqual(meta["select_max_ref_value_n_output_groups"], 2)
+        self.assertEqual(meta["select_max_ref_value_tied_selection_count"], 1)
+
+    def test_select_max_ref_value_multi_operation_uses_same_selection(self):
+        result = ref_vs_target_adata(
+            self.make_grouped_adata(),
+            pair_by_key="pair_id",
+            opperation_flavor=["subtraction", "relative_change_l2fc"],
+            epsilon=0.0,
+            select_max_ref_value_var_groupby_key="feature_group",
+        )
+
+        expected_subtraction = np.array([[3.0, 6.0], [2.0, 1.0], [np.nan, 4.0]])
+        expected_l2fc = np.log2(np.array([[8.0 / 5.0, 10.0 / 4.0], [9.0 / 7.0, 4.0 / 3.0], [np.nan, 9.0 / 5.0]]))
+
+        assert_allclose(result.X, expected_subtraction, equal_nan=True)
+        assert_allclose(result.layers["subtraction"], expected_subtraction, equal_nan=True)
+        assert_allclose(result.layers["relative_change_l2fc"], expected_l2fc, equal_nan=True)
+        self.assertEqual(
+            result.obsm["selected_source_variable"].values.tolist(),
+            [["feature_1", "feature_4"], ["feature_2", "feature_3"], ["", "feature_4"]],
+        )
+
+    def test_select_max_ref_value_multi_layer_uses_same_selection(self):
+        adata = self.make_grouped_adata()
+        adata.layers["scaled"][1, 1] = 900.0
+        adata.layers["scaled"][3, 3] = 900.0
+
+        result = ref_vs_target_adata(
+            adata,
+            pair_by_key="pair_id",
+            layers_to_compute=[None, "scaled"],
+            select_max_ref_value_var_groupby_key="feature_group",
+        )
+
+        expected_x = np.array([[3.0, 6.0], [2.0, 1.0], [np.nan, 4.0]])
+        expected_scaled = expected_x * 10.0
+
+        assert_allclose(result.X, expected_x, equal_nan=True)
+        assert_allclose(result.layers["scaled"], expected_scaled, equal_nan=True)
+        self.assertEqual(
+            result.obsm["selected_source_variable"].values.tolist(),
+            [["feature_1", "feature_4"], ["feature_2", "feature_3"], ["", "feature_4"]],
+        )
+
+    def test_select_max_ref_value_filters_variables_before_grouping(self):
+        result = ref_vs_target_adata(
+            self.make_grouped_adata(include_filtered_feature=True),
+            pair_by_key="pair_id",
+            select_max_ref_value_var_groupby_key="feature_group",
+            select_max_ref_value_filter_vars_by_isin_lists={"include_in_selection": ["yes"]},
+        )
+
+        assert_allclose(result.X, np.array([[3.0, 6.0], [2.0, 1.0], [np.nan, 4.0]]), equal_nan=True)
+        self.assertEqual(
+            result.obsm["selected_source_variable"].values.tolist(),
+            [["feature_1", "feature_4"], ["feature_2", "feature_3"], ["", "feature_4"]],
+        )
+        self.assertEqual(
+            result.uns["ref_vs_target_adata"]["select_max_ref_value_filter_vars_by_isin_lists"],
+            {"include_in_selection": ["yes"]},
+        )
+
+    def test_select_max_ref_value_validates_group_and_filter_columns(self):
+        with self.assertRaisesRegex(KeyError, "select_max_ref_value_var_groupby_key"):
+            ref_vs_target_adata(
+                self.make_grouped_adata(),
+                pair_by_key="pair_id",
+                select_max_ref_value_var_groupby_key="missing_group",
+            )
+
+        with self.assertRaisesRegex(KeyError, "select_max_ref_value_filter_vars_by_isin_lists"):
+            ref_vs_target_adata(
+                self.make_grouped_adata(),
+                pair_by_key="pair_id",
+                select_max_ref_value_var_groupby_key="feature_group",
+                select_max_ref_value_filter_vars_by_isin_lists={"missing_filter": ["yes"]},
+            )
+
+        with self.assertRaisesRegex(ValueError, "No variables remain"):
+            ref_vs_target_adata(
+                self.make_grouped_adata(),
+                pair_by_key="pair_id",
+                select_max_ref_value_var_groupby_key="feature_group",
+                select_max_ref_value_filter_vars_by_isin_lists={"include_in_selection": ["missing"]},
+            )
+
+    def test_select_max_ref_value_default_behavior_unchanged(self):
+        result = ref_vs_target_adata(self.make_grouped_adata(), pair_by_key="pair_id")
+
+        expected = np.array(
+            [
+                [3.0, 18.0, 6.0, 6.0],
+                [2.0, 2.0, 1.0, 5.0],
+                [np.nan, np.nan, 3.0, 4.0],
+            ]
+        )
+
+        self.assertEqual(result.var_names.tolist(), ["feature_1", "feature_2", "feature_3", "feature_4"])
+        assert_allclose(result.X, expected, equal_nan=True)
+        self.assertNotIn("selected_source_variable", result.obsm)
+        self.assertFalse(result.uns["ref_vs_target_adata"]["select_max_ref_value_enabled"])
 
     def test_pairs_shuffled_pre_post_and_computes_target_minus_ref(self):
         result = ref_vs_target_adata(self.make_adata(), pair_by_key="pair_id")
