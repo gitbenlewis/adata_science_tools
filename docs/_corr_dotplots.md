@@ -113,6 +113,7 @@ The returned `fit`, `corr_value`, and `corr_pvalue` always describe the overall 
 - `nas2zeros`, `dropna`, and `dropzeros` control x/y cleanup before statistics.
 - `palette` colors `hue`-driven scatter points, while `subset_palette` colors `subset_key`-driven subgroup fit lines.
 - `subset_key` draws one fit line per subgroup when fitting succeeds.
+- `subset_key` order follows categorical order for categorical columns, ascending sorted order for non-categorical numeric columns, and first-seen order for other non-categorical columns.
 - `show_all_obs_fit=True` adds the overall fit line in subset mode.
 - `show_fit_legend` and `show_hue_legend` can be toggled independently.
 - `fit_legend_bbox_to_anchor` and `hue_legend_bbox_to_anchor` accept either 2-item or 4-item sequences.
@@ -126,7 +127,7 @@ The current regression tests lock in several details:
 - Observation columns that collide with feature names are renamed to `<name>_obs` before concatenation.
 - Public styling kwargs such as `dot_size`, `title_fontsize`, `stats_fontsize`, `axes_title_y`, `axis_label_fontsize`, `tick_label_fontsize`, and `legend_fontsize` affect the final figure.
 - `show_stats_text=False` suppresses the footer text without suppressing the returned statistics.
-- Non-categorical `subset_key` columns are supported.
+- Non-categorical `subset_key` columns are supported, including numeric columns whose subgroup order matches seaborn's numeric hue order.
 - Subsets that cannot produce a fit are reported as `fit unavailable` in the footer and omitted from the fit legend.
 - The fit legend title changes with method, for example `batch fit\nPearson_corr` versus `batch fit\nSpearman_corr`.
 

@@ -420,6 +420,8 @@ def corr_dotplot(
         non_null_subset = subset_series.dropna()
         if _is_categorical_series(subset_series):
             subset_values = list(subset_series.cat.categories)
+        elif pd.api.types.is_numeric_dtype(non_null_subset):
+            subset_values = sorted(pd.unique(non_null_subset))
         else:
             subset_values = list(pd.unique(non_null_subset))
 
@@ -859,6 +861,8 @@ def corr_dotplot_dev(
         non_null_subset = subset_series.dropna()
         if _is_categorical_series(subset_series):
             subset_values = list(subset_series.cat.categories)
+        elif pd.api.types.is_numeric_dtype(non_null_subset):
+            subset_values = sorted(pd.unique(non_null_subset))
         else:
             subset_values = list(pd.unique(non_null_subset))
 
