@@ -838,6 +838,94 @@ class CorrDotplotRegressionTests(unittest.TestCase):
             if fig is not None:
                 plt.close(fig)
 
+    def test_corr_dotplot_sorts_numeric_subset_values_to_match_numeric_hue(self):
+        df = pd.DataFrame(
+            {
+                "x": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+                "y": [1.2, 2.1, 2.8, 4.2, 5.1, 5.9],
+                "dose": [30, 10, 20, 30, 10, 20],
+            }
+        )
+
+        fig = None
+        try:
+            fig, axes, _, _, _ = adtl.corr_dotplot(
+                df=df,
+                column_key_x="x",
+                column_key_y="y",
+                hue="dose",
+                subset_key="dose",
+                palette=["#ff0000", "#00ff00", "#0000ff"],
+                subset_palette=["#ff0000", "#00ff00", "#0000ff"],
+                axes_lines=False,
+                show_y_intercept=False,
+                show=False,
+            )
+            fig.canvas.draw()
+
+            fit_legend = axes.get_legend()
+            hue_legend = [artist for artist in axes.artists if isinstance(artist, Legend)][0]
+            self.assertEqual(
+                [text.get_text().split("\n")[0] for text in fit_legend.get_texts()],
+                ["dose=10", "dose=20", "dose=30"],
+            )
+            self.assertEqual([text.get_text() for text in hue_legend.get_texts()], ["10", "20", "30"])
+            self.assertEqual(
+                [to_hex(handle.get_color()) for handle in fit_legend.legend_handles],
+                ["#ff0000", "#00ff00", "#0000ff"],
+            )
+            self.assertEqual(
+                [to_hex(handle.get_markerfacecolor()) for handle in hue_legend.legend_handles],
+                ["#ff0000", "#00ff00", "#0000ff"],
+            )
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_corr_dotplot_dev_sorts_numeric_subset_values_to_match_numeric_hue(self):
+        df = pd.DataFrame(
+            {
+                "x": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+                "y": [1.2, 2.1, 2.8, 4.2, 5.1, 5.9],
+                "dose": [30, 10, 20, 30, 10, 20],
+            }
+        )
+
+        fig = None
+        try:
+            fig, axes, _, _, _ = adtl.corr_dotplot_dev(
+                df=df,
+                column_key_x="x",
+                column_key_y="y",
+                hue="dose",
+                subset_key="dose",
+                palette=["#ff0000", "#00ff00", "#0000ff"],
+                subset_palette=["#ff0000", "#00ff00", "#0000ff"],
+                axes_lines=False,
+                show_y_intercept=False,
+                show=False,
+            )
+            fig.canvas.draw()
+
+            fit_legend = axes["main"].get_legend()
+            hue_legend = [artist for artist in axes["main"].artists if isinstance(artist, Legend)][0]
+            self.assertEqual(
+                [text.get_text().split("\n")[0] for text in fit_legend.get_texts()],
+                ["dose=10", "dose=20", "dose=30"],
+            )
+            self.assertEqual([text.get_text() for text in hue_legend.get_texts()], ["10", "20", "30"])
+            self.assertEqual(
+                [to_hex(handle.get_color()) for handle in fit_legend.legend_handles],
+                ["#ff0000", "#00ff00", "#0000ff"],
+            )
+            self.assertEqual(
+                [to_hex(handle.get_markerfacecolor()) for handle in hue_legend.legend_handles],
+                ["#ff0000", "#00ff00", "#0000ff"],
+            )
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
     def test_corr_dotplot_still_returns_single_axes_object(self):
         df = pd.DataFrame(
             {
