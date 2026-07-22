@@ -54,9 +54,14 @@ def corr_dotplot(
     fit_legend_bbox_to_anchor: Sequence[float] | None = None,
     hue_legend_bbox_to_anchor: Sequence[float] | None = None,
     show_all_obs_fit: bool = False,
+    show_fit: bool = True,
     show_fit_legend: bool = True,
     show_hue_legend: bool = True,
     show_stats_text: bool = True,
+    show_identity_line: bool = False,
+    identity_line_label: str | None = "Identity",
+    identity_line_style: Mapping[str, Any] | None = None,
+    identity_limits: Literal["shared_axes", "data"] = "shared_axes",
     nas2zeros: bool = False,
     dropna: bool = False,
     dropzeros: bool = False,
@@ -73,8 +78,22 @@ def corr_dotplot(
     show_all_obs_y_hist: bool = False,
     x_marginal_hist_height_ratio: float = 0.18,
     y_marginal_hist_width_ratio: float = 0.18,
+    xscale: str = "linear",
+    yscale: str = "linear",
+    xlims: Sequence[float] | None = None,
+    ylims: Sequence[float] | None = None,
+    xlim_padding_fraction: float | None = None,
+    ylim_padding_fraction: float | None = None,
+    x_reference_lines: Sequence[Mapping[str, Any]] | None = None,
+    y_reference_lines: Sequence[Mapping[str, Any]] | None = None,
     show: bool = True,
-):
+) -> tuple[
+    plt.Figure,
+    plt.Axes | dict[str, plt.Axes | None],
+    Any,
+    float,
+    float,
+]:
 ```
 
 ```python
@@ -122,6 +141,18 @@ When `df` is provided, the AnnData-derived path is ignored. `column_key_x` and `
 - `subset_key` draws one fit line per subgroup when fitting succeeds.
 - Subgroup order follows categorical order for categorical columns, ascending order for non-categorical numeric columns, and first-seen order for other columns.
 - `show_all_obs_fit=True` adds the overall fit line in subset mode.
+- `show_fit=False` hides fit artists without changing returned fit or correlation statistics.
+- `show_identity_line=True` draws y=x over the shared visible interval or combined finite data range.
+- `xscale` and `yscale` accept `"linear"`, `"log"`, `"log2"`, and `"log1p"`; enabled marginals use the same scale and limits as the main axes.
+- `"log"` uses Matplotlib's default logarithmic base, while `"log2"` uses a base-2 logarithmic scale.
+- `"log1p"` uses `log1p`/`expm1` function scaling, accepts finite values strictly greater than -1, and keeps the legacy origin line valid.
+- On nonlinear axes, fit and identity artists sample their raw-coordinate linear relation densely; correlation and regression statistics still use the untransformed values.
+- Automatic and fractionally padded `"log1p"` ranges include the data plus active fit endpoints and axis-reference values, including a legacy origin line, before applying transformed-space padding that stays above -1.
+- Explicit limits still win; an explicit reference sequence replaces the legacy origin on that axis, and an empty sequence draws none.
+- Explicit limits take precedence over padding; padding is calculated in the configured transformed space for all three logarithmic modes.
+- Data, limits, references, fit endpoints, and identity coordinates must satisfy each configured scale's domain.
+- When identity coordinates span two transformed axes, the stricter lower domain bound applies.
+- Reference entries are drawn in caller order and accept `value`, `label`, `color`, `linestyle`, `linewidth`, `alpha`, and `zorder`.
 - `show_fit_legend`, `show_hue_legend`, and `show_stats_text` are independent display controls.
 - `fit_legend_bbox_to_anchor` and `hue_legend_bbox_to_anchor` accept 2-item or 4-item sequences.
 - If no valid subgroup values remain, `corr_dotplot(...)` falls back to the all-data fit and statistics; enabled marginals also show the all-data distributions.
@@ -142,7 +173,7 @@ When `df` is provided, the AnnData-derived path is ignored. `column_key_x` and `
 
 ### Tested behaviors
 
-Regression tests cover observation/feature name collisions, styling controls, optional footer text, subgroup fit failures, independent legends, separate palettes, numeric subgroup ordering, all four layouts, grouped and all-observation marginals, filtering parity, integer and explicit bins, fill/KDE controls, subplot ratios, title ownership, footer spacing, legend placement, main-limit preservation, the empty-subset fallback, and Spearman forwarding.
+Regression tests cover observation/feature name collisions, generic and sparse matrix extraction, full matrix-shape validation, styling controls, optional footer text, subgroup fit failures, independent legends, separate palettes, numeric subgroup ordering, all four layouts, grouped and all-observation marginals, filtering parity, integer and explicit bins, fill/KDE controls, subplot ratios, title ownership, footer spacing, legend placement, main-limit preservation, the empty-subset fallback, Spearman forwarding, early scale validation, and synchronized `log`, `log2`, and `log1p` axes.
 
 ### Repo example with simulated data
 

@@ -44,8 +44,14 @@ def adata_histograms(
     filter_obs_by_isin_lists: Mapping[str, Sequence[Any]] | None = None,
     subset_obs_key: str | None = None,
     subset_order: Sequence[Any] | None = None,
+    subset_min_count: int | None = None,
+    subset_small_group_policy: Literal["exclude", "error", "keep"] = "exclude",
+    subset_legend_metrics: Sequence[
+        Literal["count", "mean", "median"]
+    ] | None = None,
+    subset_label_format: str | None = None,
     palette: Sequence[Any] | str | None = palettes.tol_colors,
-    subset_palette: Sequence[Any] | str | None = None,
+    subset_palette: Mapping[Any, Any] | Sequence[Any] | str | None = None,
     show_all_obs_hist: bool = True,
     all_obs_color: Any = "0.7",
     all_obs_alpha: float = 0.20,
@@ -57,6 +63,9 @@ def adata_histograms(
     add_mean_line: bool = True,
     add_mean_to_legend: bool = True,
     highlight_negative_mean_legend: bool = True,
+    zero_line_style: Mapping[str, Any] | None = None,
+    mean_line_style: Mapping[str, Any] | None = None,
+    x_reference_lines: Sequence[Mapping[str, Any]] | None = None,
     bins: int | str | Sequence[float] = "auto",
     binwidth: float | None = None,
     binrange: tuple[float, float] | None = None,
@@ -65,6 +74,9 @@ def adata_histograms(
     element: Literal["bars", "step", "poly"] | None = None,
     fill: bool | None = True,
     kde: bool = True,
+    kde_bw_method: str | float | None = None,
+    kde_grid_points: int | None = None,
+    kde_clip: tuple[float, float] | None = None,
     common_bins: bool = True,
     common_norm: bool = False,
     discrete: bool | None = None,
@@ -88,6 +100,23 @@ def adata_histograms(
     show: bool = True,
 ) -> tuple[plt.Figure, dict[str, plt.Axes]]:
 ```
+
+## Existing and new arguments
+
+| Argument | Status | Purpose |
+|---|---|---|
+| `subset_min_count` | New | Minimum finite plotted values required per subgroup and panel |
+| `subset_small_group_policy` | New | Exclude, reject, or retain subgroups below the minimum |
+| `subset_legend_metrics` | New | Add subgroup count, mean, and/or median to labels |
+| `subset_label_format` | New | Format subgroup labels from the supported metric fields |
+| Mapping form of `subset_palette` | New | Keep explicit category colors stable when groups are excluded |
+| `zero_line_style` | New | Override the existing zero-line style |
+| `mean_line_style` | New | Override the existing mean-line style |
+| `x_reference_lines` | New | Draw ordered, optionally labeled vertical references |
+| `kde_bw_method` | New | Forward a shared KDE bandwidth method |
+| `kde_grid_points` | New | Forward a shared KDE grid size |
+| `kde_clip` | New | Forward shared KDE support bounds |
+| All remaining arguments in the signature | Existing | Preserve the prior input, filtering, grouping, plotting, legend, and return behavior |
 
 ## Basic example
 
@@ -240,6 +269,90 @@ adtl.adata_histograms(
 
 10. Missing `subset_obs_key` values are ignored for grouped histogram layers; variables with no plottable subgroup rows get an annotated empty panel instead of stopping the full figure.
 
+## Subgroup eligibility, colors, and labels
+
+1. `subset_min_count` is evaluated separately for each panel. Counts include only finite values after `nas2zeros`, `dropna`, and `dropzeros` have been applied.
+
+2. `subset_small_group_policy="exclude"` removes groups below the minimum from drawing only. `"error"` raises with the panel and finite group counts, while `"keep"` draws the resolved groups regardless of the minimum.
+
+3. `subset_min_count=0` keeps every representable resolved group eligible, including an observed resolved group with no finite values in a particular panel.
+
+4. Eligibility does not mutate the caller input. Group order and the complete color mapping are resolved before per-panel exclusion, so a surviving group does not change color between panels. A mapping supplied through `subset_palette` must cover every resolved subgroup.
+
+5. `subset_legend_metrics` accepts `count`, `mean`, and `median` in the requested order. Metrics are calculated from the exact finite values eligible for that subgroup layer.
+
+6. `subset_label_format` may reference only `{group}`, `{count}`, `{mean}`, and `{median}` and supports normal Python format specifications, for example `"{group}: n={count}, median={median:.2f}"`.
+
+7. The neutral all-observation overlay is not a subgroup and does not use subgroup metrics or `subset_label_format`. Its existing `All data (mean=...)` label remains unchanged.
+
+```python
+import pandas as pd
+import adata_science_tools as adtl
+
+measurements = pd.DataFrame(
+    {
+        "response": [0.2, 0.5, 0.7, 1.1, 1.3],
+        "cohort": ["A", "A", "B", "C", "C"],
+    }
+)
+
+fig, axes = adtl.adata_histograms(
+    df=measurements,
+    var_names=["response"],
+    subset_obs_key="cohort",
+    subset_order=["A", "B", "C"],
+    subset_min_count=2,
+    subset_small_group_policy="exclude",
+    subset_palette={"A": "#4477AA", "B": "#EE6677", "C": "#228833"},
+    subset_label_format="{group}: n={count}, median={median:.2f}",
+    bins=5,
+    show=False,
+)
+```
+
+In this example, group `B` is excluded from the histogram because its finite count is one. Groups `A` and `C` retain their explicitly mapped colors.
+
+## KDE controls
+
+1. `kde_bw_method`, `kde_grid_points`, and `kde_clip` are forwarded as the same KDE configuration for all rendered distributions. They correspond to seaborn KDE `bw_method`, `gridsize`, and `clip` settings.
+
+2. A subgroup with fewer than two distinct finite values still draws its histogram layer and skips only its KDE curve. Other eligible groups retain KDE when their values support it.
+
+```python
+adtl.adata_histograms(
+    df=measurements,
+    var_names=["response"],
+    subset_obs_key="cohort",
+    kde=True,
+    kde_bw_method=0.5,
+    kde_grid_points=128,
+    kde_clip=(0.0, 2.0),
+    show=False,
+)
+```
+
+## Line styles and references
+
+1. `zero_line_style` and `mean_line_style` accept `color`, `linestyle`, `linewidth`, `alpha`, and `zorder`. Supplied values override the existing zero- and mean-line defaults without changing their switches.
+
+2. `x_reference_lines` is an ordered sequence of mappings. Each mapping requires a finite numeric `value` and may include `label`, `color`, `linestyle`, `linewidth`, `alpha`, and `zorder`. Unsupported keys raise `ValueError`.
+
+3. Labeled references are appended to the legend in configured order. A reference exactly equal after numeric conversion to an enabled zero line, overall mean line, all-observation mean line, subgroup mean line, or earlier reference is not drawn again. Nearby but unequal scientific thresholds remain distinct.
+
+```python
+adtl.adata_histograms(
+    df=measurements,
+    var_names=["response"],
+    zero_line_style={"color": "0.4", "linestyle": "--"},
+    mean_line_style={"color": "#4477AA", "linewidth": 2},
+    x_reference_lines=[
+        {"value": 0.75, "label": "Review threshold", "color": "#CC6677"},
+        {"value": 1.25, "label": "Upper threshold", "color": "#AA3377"},
+    ],
+    show=False,
+)
+```
+
 ## Important behavior
 
 1. AnnData extraction is column-focused for the selected variables and does not densify the full matrix.
@@ -252,4 +365,4 @@ adtl.adata_histograms(
 
 5. `show=False` closes the figure before returning, matching the package's other test-backed plotting APIs.
 
-6. The return value is `(fig, axes)` where `axes` is a dict keyed by selected variable name, selected group name, or `"all"` for `collapse_mode="all"`.
+6. The unchanged return value is `(fig, axes)` where `axes` is a dict keyed by selected variable name, selected group name, or `"all"` for `collapse_mode="all"`.

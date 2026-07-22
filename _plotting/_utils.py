@@ -1,6 +1,10 @@
 ''' utils for plotting subpackage '''
 
 # module level imports
+from collections.abc import Mapping, Sequence
+from numbers import Real as _Real
+from typing import Any, Literal
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -103,3 +107,68 @@ def show_colors(colors=None,
         else:
             full_path = save_file_name
         fig.savefig(full_path, dpi=300)
+
+
+_REFERENCE_LINE_KEYS = {
+    "value",
+    "label",
+    "color",
+    "linestyle",
+    "linewidth",
+    "alpha",
+    "zorder",
+}
+
+
+def _normalize_reference_lines(
+    reference_lines: Sequence[Mapping[str, Any]] | None,
+    *,
+    param_name: str,
+) -> list[dict[str, Any]]:
+    """Validate and copy an ordered public reference-line specification."""
+
+    normalized: list[dict[str, Any]] = []
+    for index, line in enumerate(reference_lines or ()):
+        if not isinstance(line, Mapping):
+            raise ValueError(f"'{param_name}[{index}]' must be a mapping.")
+        unsupported = sorted(set(line).difference(_REFERENCE_LINE_KEYS))
+        if unsupported:
+            raise ValueError(
+                f"Unsupported key(s) in '{param_name}[{index}]': {unsupported}."
+            )
+        if "value" not in line:
+            raise ValueError(f"'{param_name}[{index}]' must define 'value'.")
+        value = line["value"]
+        if isinstance(value, (bool, np.bool_)) or not isinstance(value, _Real):
+            raise ValueError(f"'{param_name}[{index}].value' must be numeric.")
+        value = float(value)
+        if not np.isfinite(value):
+            raise ValueError(f"'{param_name}[{index}].value' must be finite.")
+        normalized_line = dict(line)
+        normalized_line["value"] = value
+        normalized.append(normalized_line)
+    return normalized
+
+
+def _draw_reference_lines(
+    ax: plt.Axes,
+    reference_lines: Sequence[Mapping[str, Any]] | None,
+    *,
+    axis: Literal["x", "y"],
+    param_name: str,
+    skip_values: Sequence[float] = (),
+) -> list[Any]:
+    """Draw validated reference lines and return artists in configured order."""
+
+    artists: list[Any] = []
+    skipped = {float(value) for value in skip_values}
+    for line in _normalize_reference_lines(reference_lines, param_name=param_name):
+        value = line.pop("value")
+        if value in skipped:
+            continue
+        if axis == "x":
+            artists.append(ax.axvline(value, **line))
+        else:
+            artists.append(ax.axhline(value, **line))
+        skipped.add(value)
+    return artists

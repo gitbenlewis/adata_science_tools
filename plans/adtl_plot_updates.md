@@ -922,29 +922,29 @@ This is a live engineering record. Append implementation evidence and move resol
 
 8. Prefer structural tests; reserve image tests for combined encodings that artist/data inspection cannot verify.
 
-### 16.3 Decisions to resolve before the affected stage
+9. Missing waterfall values or labels raise because no drop policy authorizes silent removal.
 
-1. Stage 1: missing waterfall values/labels. Recommended: raise because no `dropna` parameter authorizes silent removal.
+10. A composition `missing_label` that collides with a real category raises rather than merging meanings.
 
-2. Stage 1: collision between `missing_label` and a real composition category. Recommended: raise rather than merge meanings.
+11. An explicit empty reference sequence draws no configured lines; only `None` invokes an applicable legacy fallback.
 
-3. Stage 1: explicit empty reference sequence. Recommended: treat it as an instruction to draw no lines on that axis; only `None` invokes legacy fallback.
+12. `subset_min_count=0` makes every representable resolved subgroup eligible.
 
-4. Stage 2: `subset_min_count=0`. Recommended: make every representable resolved group eligible.
+13. The all-observation histogram overlay is excluded from subgroup labels and metrics, preserving its legacy label.
 
-5. Stage 2: all-observation overlay participation in subgroup labels/metrics. Recommended: exclude it and preserve current all-observation labeling.
+14. Marker styles accept `marker`, `filled`, `label`, `facecolor`, `edgecolor`, `size`, and `alpha`. Defaults cycle deterministic symbols, use filled markers, inherit point color, size, and alpha, and render open markers without a face.
 
-6. Stage 3: finalize allowed marker-style keys/defaults before code. Minimum fields are symbol, open/filled mode, label, optional face/edge colors, size, and alpha.
+15. Unobserved reserved x categories retain their position and omit data-derived annotations.
 
-7. Stage 3: annotations for unobserved reserved x categories. Recommended: retain the x position and omit data-derived annotations.
+16. Longitudinal segment endpoints with conflicting configured line colors raise.
 
-8. Stage 4: line color when segment endpoints disagree. Recommended: require equality and raise instead of choosing an endpoint silently.
+17. Longitudinal `segment_ids` are deterministic tuples, with an empty tuple for points in no segment.
 
-9. Stage 4: points belonging to multiple segments. Recommended: return a deterministic tuple in `segment_ids`, with an empty tuple for no segment.
+18. Longitudinal input x values absent from `x_order` raise rather than being silently excluded.
 
-10. Stage 4: input x values absent from `x_order`. Recommended: raise rather than silently exclude auditable rows.
+### 16.3 Decisions resolved during stage review
 
-Resolve each item during its stage review and record the chosen contract in Section 16.2 before implementation.
+All ten pre-implementation questions were resolved as approved and are recorded in Section 16.2, items 9 through 18.
 
 ### 16.4 Risk register
 
@@ -972,10 +972,36 @@ For each stage append: date/status; approved scope and resolved decisions; basel
 
 ### 16.6 Current status
 
-1. Planning completed on 2026-07-22.
+1. Planning and all four implementation stages completed on 2026-07-22.
 
-2. Implementation has not started.
+2. The roadmap is implemented additively; existing defaults, scientific calculations, and public return-tuple shapes remain unchanged unless a new keyword is used.
 
-3. Baseline commands have not yet been run for this roadmap.
+3. The broad compatibility gate passes all 293 discovered tests.
 
-4. Next action: review and approve Stage 1 implementation after resolving its Section 16.3 decisions.
+4. The implementation is ready for final diff review and a user-directed commit.
+
+### 16.7 Implementation log
+
+1. Scope and decisions: implementation was authorized with `approve_2_through_9`; the ten stage decisions were resolved as recorded in Section 16.2.
+
+2. Baselines: `python tests/test_corr_dotplots.py` passed 25 tests, `python tests/test_histograms.py` passed 43, `python tests/test_datapoints.py` passed 33, and `python tests/test_paired_datapoints.py` passed 28. Per-module elapsed times were not captured.
+
+3. Stage 1: added shared reference normalization/drawing helpers; extended correlation plots with fit visibility, identity, scale, limit, padding, and reference controls; added ranked waterfall, category composition, and residual diagnostic APIs; used selected-column AnnData extraction to avoid whole-matrix densification.
+
+4. Stage 2: extended histograms with finite subgroup eligibility, small-group policies, subgroup metrics, mapping palettes, KDE controls, styles, and ordered references while retaining the all-observation overlay contract.
+
+5. Stage 3: extended datapoints with summary-only inclusion, independent marker styles, annotations, scale/limit validation, ordered references, deterministic legend blocks, and auditable returned fields; `paired_datapoints()` was left unchanged.
+
+6. Stage 4: added longitudinal trajectories with exact/display values, adjacent/all/none connection modes, deterministic segment tuples, independent color/marker channels, gap rules, log validation, and auditable prepared output.
+
+7. Focused post-change results: new correlation 16/16, histogram 12/12, datapoints 15/15, tabular 8/8, longitudinal 14/14, and cross-roadmap edge coverage 7/7. Legacy correlation, histogram, datapoints, and paired-datapoints modules also remained green.
+
+8. Broad gate: `/usr/bin/time -p python -m unittest discover -s tests` passed 293 tests in 18.843 test seconds and 20.65 wall seconds.
+
+9. Static and security checks: changed Python modules and tests compile; exact public signatures and exports pass focused assertions; `git diff --check` passes; intended APIs resolve identically from both public namespaces; helper imports remain private; changed and new files contain no detected credentials, email addresses, private paths, internal hosts, or sensitive organizational information.
+
+10. Warnings and deviations: only pre-existing seaborn long-palette warnings and small-sample SciPy/statsmodels warnings were observed. No statistical models, thresholds, biological assumptions, external dependencies, or paired-plot semantics were changed. No roadmap deviations remain.
+
+11. Post-review hardening added finite-only histogram rendering, collision-safe mixed-type subgroup legends, strict mean-legend switches, numeric subgroup formatting, generic correlation matrix shape validation, early scale checks, collision-safe datapoint scratch fields, pre-draw result-field collision errors, annotation error normalization, and private helper imports.
+
+12. Correlation scales now include base-2 `log2` and `log1p`/`expm1`. Nonlinear fit and identity artists densely sample their raw-coordinate relations; drawable subgroup fits validate before figure creation; automatic limits include active fit, reference, and applicable origin coordinates; marginals stay synchronized; and returned statistics remain on the untransformed values.
