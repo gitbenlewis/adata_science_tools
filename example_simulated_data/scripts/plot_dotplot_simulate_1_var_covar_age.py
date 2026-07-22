@@ -191,7 +191,7 @@ if __name__ == "__main__":
 
         fig = None
         try:
-            fig, axes, fit, corr_value, corr_pvalue = adtl.corr_dotplot_dev(
+            fig, axes, fit, corr_value, corr_pvalue = adtl.corr_dotplot(
                 adata=adata,
                 layer=chained_params.get("layer"),
                 column_key_x=column_key_x,

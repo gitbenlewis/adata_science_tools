@@ -161,6 +161,35 @@ class CorrDotplotRegressionTests(unittest.TestCase):
             if fig is not None:
                 plt.close(fig)
 
+    def test_spearman_cor_dotplot_forwards_marginal_kwargs(self):
+        df = pd.DataFrame(
+            {
+                "x": [1.0, 2.0, 3.0, 4.0],
+                "y": [1.0, 4.0, 9.0, 16.0],
+            }
+        )
+
+        fig = None
+        try:
+            fig, axes, _, corr_value, _ = adtl.spearman_cor_dotplot(
+                df=df,
+                column_key_x="x",
+                column_key_y="y",
+                method="pearson",
+                show_x_marginal_hist=True,
+                show=False,
+            )
+
+            self.assertIsInstance(axes, dict)
+            self.assertIsInstance(axes["main"], Axes)
+            self.assertIsInstance(axes["x_marginal"], Axes)
+            self.assertIsNone(axes["y_marginal"])
+            self.assertAlmostEqual(corr_value, 1.0)
+            self.assertIn("Spearman Corr =", fig.texts[0].get_text())
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
     def test_corr_dotplot_can_hide_stats_text(self):
         df = pd.DataFrame({"x": [1.0, 2.0, 3.0], "y": [2.0, 3.0, 4.0]})
 
@@ -436,7 +465,7 @@ class CorrDotplotRegressionTests(unittest.TestCase):
             if fig_fallback is not None:
                 plt.close(fig_fallback)
 
-    def test_corr_dotplot_dev_returns_axes_dict_for_all_layout_modes(self):
+    def test_corr_dotplot_returns_expected_axes_for_all_layout_modes(self):
         df = pd.DataFrame({"x": [1.0, 2.0, 3.0], "y": [3.0, 2.0, 1.0]})
 
         for show_x_hist, show_y_hist in (
@@ -447,7 +476,7 @@ class CorrDotplotRegressionTests(unittest.TestCase):
         ):
             fig = None
             try:
-                fig, axes, _, _, _ = adtl.corr_dotplot_dev(
+                fig, axes, _, _, _ = adtl.corr_dotplot(
                     df=df,
                     column_key_x="x",
                     column_key_y="y",
@@ -456,21 +485,24 @@ class CorrDotplotRegressionTests(unittest.TestCase):
                     show=False,
                 )
 
-                self.assertIsInstance(axes, dict)
-                self.assertEqual(set(axes), {"main", "x_marginal", "y_marginal"})
-                self.assertIsInstance(axes["main"], Axes)
-                self.assertEqual(axes["x_marginal"] is None, not show_x_hist)
-                self.assertEqual(axes["y_marginal"] is None, not show_y_hist)
                 self.assertFalse(plt.fignum_exists(fig.number))
-                if show_x_hist:
-                    self.assertIsInstance(axes["x_marginal"], Axes)
-                if show_y_hist:
-                    self.assertIsInstance(axes["y_marginal"], Axes)
+                if not show_x_hist and not show_y_hist:
+                    self.assertIsInstance(axes, Axes)
+                else:
+                    self.assertIsInstance(axes, dict)
+                    self.assertEqual(set(axes), {"main", "x_marginal", "y_marginal"})
+                    self.assertIsInstance(axes["main"], Axes)
+                    self.assertEqual(axes["x_marginal"] is None, not show_x_hist)
+                    self.assertEqual(axes["y_marginal"] is None, not show_y_hist)
+                    if show_x_hist:
+                        self.assertIsInstance(axes["x_marginal"], Axes)
+                    if show_y_hist:
+                        self.assertIsInstance(axes["y_marginal"], Axes)
             finally:
                 if fig is not None:
                     plt.close(fig)
 
-    def test_corr_dotplot_dev_grouped_marginals_and_all_obs_overlays(self):
+    def test_corr_dotplot_grouped_marginals_and_all_obs_overlays(self):
         df = pd.DataFrame(
             {
                 "x": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
@@ -481,7 +513,7 @@ class CorrDotplotRegressionTests(unittest.TestCase):
 
         fig = None
         try:
-            fig, axes, _, _, _ = adtl.corr_dotplot_dev(
+            fig, axes, _, _, _ = adtl.corr_dotplot(
                 df=df,
                 column_key_x="x",
                 column_key_y="y",
@@ -502,7 +534,7 @@ class CorrDotplotRegressionTests(unittest.TestCase):
             if fig is not None:
                 plt.close(fig)
 
-    def test_corr_dotplot_dev_falls_back_to_all_data_when_subset_values_missing(self):
+    def test_corr_dotplot_falls_back_to_all_data_when_subset_values_missing(self):
         df = pd.DataFrame(
             {
                 "x": [1.0, 2.0, 3.0, 4.0],
@@ -513,8 +545,9 @@ class CorrDotplotRegressionTests(unittest.TestCase):
 
         fig = None
         fig_no_text = None
+        fig_no_marginal = None
         try:
-            fig, axes, _, corr_value, _ = adtl.corr_dotplot_dev(
+            fig, axes, _, corr_value, _ = adtl.corr_dotplot(
                 df=df,
                 column_key_x="x",
                 column_key_y="y",
@@ -554,7 +587,7 @@ class CorrDotplotRegressionTests(unittest.TestCase):
             self.assertEqual(len(axes["y_marginal"].lines), 1)
             self.assertEqual(len(axes["y_marginal"].collections), 1)
 
-            fig_no_text, axes_no_text, _, _, _ = adtl.corr_dotplot_dev(
+            fig_no_text, axes_no_text, _, _, _ = adtl.corr_dotplot(
                 df=df,
                 column_key_x="x",
                 column_key_y="y",
@@ -579,18 +612,45 @@ class CorrDotplotRegressionTests(unittest.TestCase):
             self.assertEqual(len(axes_no_text["x_marginal"].collections), 1)
             self.assertEqual(len(axes_no_text["y_marginal"].lines), 1)
             self.assertEqual(len(axes_no_text["y_marginal"].collections), 1)
+
+            fig_no_marginal, axes_no_marginal, _, no_marginal_corr, _ = adtl.corr_dotplot(
+                df=df,
+                column_key_x="x",
+                column_key_y="y",
+                subset_key="treatment",
+                show_all_obs_fit=False,
+                show_fit_legend=True,
+                axes_lines=False,
+                show_y_intercept=False,
+                show=False,
+            )
+            fig_no_marginal.canvas.draw()
+
+            self.assertIsInstance(axes_no_marginal, Axes)
+            self.assertAlmostEqual(no_marginal_corr, 1.0)
+            self.assertEqual(len(axes_no_marginal.lines), 1)
+            self.assertEqual(
+                axes_no_marginal.get_legend().get_title().get_text(),
+                "All data fit\nPearson_corr",
+            )
+            self.assertIn(
+                "No valid treatment groups after filtering; showing All data fit.",
+                fig_no_marginal.texts[0].get_text(),
+            )
         finally:
             if fig is not None:
                 plt.close(fig)
             if fig_no_text is not None:
                 plt.close(fig_no_text)
+            if fig_no_marginal is not None:
+                plt.close(fig_no_marginal)
 
-    def test_corr_dotplot_dev_moves_title_to_x_marginal_when_enabled(self):
+    def test_corr_dotplot_moves_title_to_x_marginal_when_enabled(self):
         df = pd.DataFrame({"x": [1.0, 2.0, 3.0], "y": [3.0, 2.0, 1.0]})
 
         fig = None
         try:
-            fig, axes, _, _, _ = adtl.corr_dotplot_dev(
+            fig, axes, _, _, _ = adtl.corr_dotplot(
                 df=df,
                 column_key_x="x",
                 column_key_y="y",
@@ -606,12 +666,12 @@ class CorrDotplotRegressionTests(unittest.TestCase):
             if fig is not None:
                 plt.close(fig)
 
-    def test_corr_dotplot_dev_applies_axes_title_y_to_x_marginal_title(self):
+    def test_corr_dotplot_applies_axes_title_y_to_x_marginal_title(self):
         df = pd.DataFrame({"x": [1.0, 2.0, 3.0], "y": [3.0, 2.0, 1.0]})
 
         fig = None
         try:
-            fig, axes, _, _, _ = adtl.corr_dotplot_dev(
+            fig, axes, _, _, _ = adtl.corr_dotplot(
                 df=df,
                 column_key_x="x",
                 column_key_y="y",
@@ -628,12 +688,12 @@ class CorrDotplotRegressionTests(unittest.TestCase):
             if fig is not None:
                 plt.close(fig)
 
-    def test_corr_dotplot_dev_keeps_title_on_main_axes_without_x_marginal(self):
+    def test_corr_dotplot_keeps_title_on_main_axes_without_x_marginal(self):
         df = pd.DataFrame({"x": [1.0, 2.0, 3.0], "y": [3.0, 2.0, 1.0]})
 
         fig = None
         try:
-            fig, axes, _, _, _ = adtl.corr_dotplot_dev(
+            fig, axes, _, _, _ = adtl.corr_dotplot(
                 df=df,
                 column_key_x="x",
                 column_key_y="y",
@@ -649,7 +709,7 @@ class CorrDotplotRegressionTests(unittest.TestCase):
             if fig is not None:
                 plt.close(fig)
 
-    def test_corr_dotplot_dev_uses_filtered_data_for_scatter_and_marginals(self):
+    def test_corr_dotplot_uses_filtered_data_for_scatter_and_marginals(self):
         df = pd.DataFrame(
             {
                 "x": [1.0, 2.0, np.nan, 4.0],
@@ -659,7 +719,7 @@ class CorrDotplotRegressionTests(unittest.TestCase):
 
         fig = None
         try:
-            fig, axes, _, corr_value, _ = adtl.corr_dotplot_dev(
+            fig, axes, _, corr_value, _ = adtl.corr_dotplot(
                 df=df,
                 column_key_x="x",
                 column_key_y="y",
@@ -685,7 +745,7 @@ class CorrDotplotRegressionTests(unittest.TestCase):
             if fig is not None:
                 plt.close(fig)
 
-    def test_corr_dotplot_dev_custom_bins_and_footer_spacing(self):
+    def test_corr_dotplot_custom_bins_and_footer_spacing(self):
         df = pd.DataFrame(
             {
                 "x": [1.0, 2.0, 3.0, 4.0],
@@ -695,7 +755,7 @@ class CorrDotplotRegressionTests(unittest.TestCase):
 
         fig = None
         try:
-            fig, axes, _, _, _ = adtl.corr_dotplot_dev(
+            fig, axes, _, _, _ = adtl.corr_dotplot(
                 df=df,
                 column_key_x="x",
                 column_key_y="y",
@@ -731,7 +791,66 @@ class CorrDotplotRegressionTests(unittest.TestCase):
             if fig is not None:
                 plt.close(fig)
 
-    def test_corr_dotplot_dev_legends_can_coexist_with_y_marginal_and_custom_anchors(self):
+    def test_corr_dotplot_explicit_bins_ratios_and_main_limits(self):
+        df = pd.DataFrame(
+            {
+                "x": [1.0, 2.0, 3.0, 4.0],
+                "y": [4.0, 1.0, 3.0, 2.0],
+            }
+        )
+        x_bins = [0.5, 2.5, 4.5]
+        y_bins = [0.5, 1.5, 3.0, 4.5]
+
+        fig_main = None
+        fig_marginal = None
+        try:
+            fig_main, main_axes, _, _, _ = adtl.corr_dotplot(
+                df=df,
+                column_key_x="x",
+                column_key_y="y",
+                axes_lines=False,
+                show_y_intercept=False,
+                show_stats_text=False,
+                show=False,
+            )
+            fig_marginal, axes, _, _, _ = adtl.corr_dotplot(
+                df=df,
+                column_key_x="x",
+                column_key_y="y",
+                axes_lines=False,
+                show_y_intercept=False,
+                show_stats_text=False,
+                show_x_marginal_hist=True,
+                show_y_marginal_hist=True,
+                x_marginal_hist_bins=x_bins,
+                y_marginal_hist_bins=y_bins,
+                x_marginal_hist_fill=False,
+                x_marginal_hist_KDE=False,
+                y_marginal_hist_fill=False,
+                y_marginal_hist_KDE=False,
+                x_marginal_hist_height_ratio=0.25,
+                y_marginal_hist_width_ratio=0.4,
+                show=False,
+            )
+            fig_marginal.canvas.draw()
+
+            np.testing.assert_allclose(axes["main"].get_xlim(), main_axes.get_xlim())
+            np.testing.assert_allclose(axes["main"].get_ylim(), main_axes.get_ylim())
+            np.testing.assert_allclose(axes["x_marginal"].lines[0].get_xdata(), x_bins)
+            np.testing.assert_allclose(axes["y_marginal"].lines[0].get_ydata(), y_bins)
+
+            main_position = axes["main"].get_position()
+            x_position = axes["x_marginal"].get_position()
+            y_position = axes["y_marginal"].get_position()
+            self.assertAlmostEqual(x_position.height / main_position.height, 0.25)
+            self.assertAlmostEqual(y_position.width / main_position.width, 0.4)
+        finally:
+            if fig_main is not None:
+                plt.close(fig_main)
+            if fig_marginal is not None:
+                plt.close(fig_marginal)
+
+    def test_corr_dotplot_legends_can_coexist_with_y_marginal_and_custom_anchors(self):
         df = pd.DataFrame(
             {
                 "x": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
@@ -743,7 +862,7 @@ class CorrDotplotRegressionTests(unittest.TestCase):
 
         fig = None
         try:
-            fig, axes, _, _, _ = adtl.corr_dotplot_dev(
+            fig, axes, _, _, _ = adtl.corr_dotplot(
                 df=df,
                 column_key_x="x",
                 column_key_y="y",
@@ -779,7 +898,7 @@ class CorrDotplotRegressionTests(unittest.TestCase):
             if fig is not None:
                 plt.close(fig)
 
-    def test_corr_dotplot_dev_supports_separate_hue_and_subset_palettes(self):
+    def test_corr_dotplot_marginals_support_separate_hue_and_subset_palettes(self):
         df = pd.DataFrame(
             {
                 "x": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
@@ -791,7 +910,7 @@ class CorrDotplotRegressionTests(unittest.TestCase):
 
         fig = None
         try:
-            fig, axes, _, _, _ = adtl.corr_dotplot_dev(
+            fig, axes, _, _, _ = adtl.corr_dotplot(
                 df=df,
                 column_key_x="x",
                 column_key_y="y",
@@ -882,7 +1001,7 @@ class CorrDotplotRegressionTests(unittest.TestCase):
             if fig is not None:
                 plt.close(fig)
 
-    def test_corr_dotplot_dev_sorts_numeric_subset_values_to_match_numeric_hue(self):
+    def test_corr_dotplot_marginals_sort_numeric_subset_values_to_match_numeric_hue(self):
         df = pd.DataFrame(
             {
                 "x": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
@@ -893,7 +1012,7 @@ class CorrDotplotRegressionTests(unittest.TestCase):
 
         fig = None
         try:
-            fig, axes, _, _, _ = adtl.corr_dotplot_dev(
+            fig, axes, _, _, _ = adtl.corr_dotplot(
                 df=df,
                 column_key_x="x",
                 column_key_y="y",
@@ -901,6 +1020,7 @@ class CorrDotplotRegressionTests(unittest.TestCase):
                 subset_key="dose",
                 palette=["#ff0000", "#00ff00", "#0000ff"],
                 subset_palette=["#ff0000", "#00ff00", "#0000ff"],
+                show_x_marginal_hist=True,
                 axes_lines=False,
                 show_y_intercept=False,
                 show=False,
@@ -950,6 +1070,41 @@ class CorrDotplotRegressionTests(unittest.TestCase):
         finally:
             if fig is not None:
                 plt.close(fig)
+
+    def test_corr_dotplot_dev_warns_and_preserves_axes_dict_contract(self):
+        df = pd.DataFrame({"x": [1.0, 2.0, 3.0], "y": [2.0, 3.0, 5.0]})
+
+        fig = None
+        corr_fig = None
+        try:
+            with self.assertWarnsRegex(DeprecationWarning, "use corr_dotplot"):
+                fig, axes, fit, corr_value, corr_pvalue = adtl.corr_dotplot_dev(
+                    df=df,
+                    column_key_x="x",
+                    column_key_y="y",
+                    show=False,
+                )
+            corr_fig, corr_axes, corr_fit, expected_corr, expected_pvalue = adtl.corr_dotplot(
+                df=df,
+                column_key_x="x",
+                column_key_y="y",
+                show=False,
+            )
+
+            self.assertIsInstance(axes, dict)
+            self.assertIsInstance(axes["main"], Axes)
+            self.assertIsNone(axes["x_marginal"])
+            self.assertIsNone(axes["y_marginal"])
+            self.assertIsInstance(corr_axes, Axes)
+            self.assertAlmostEqual(fit.slope, corr_fit.slope)
+            self.assertAlmostEqual(fit.intercept, corr_fit.intercept)
+            self.assertAlmostEqual(corr_value, expected_corr)
+            self.assertAlmostEqual(corr_pvalue, expected_pvalue)
+        finally:
+            if fig is not None:
+                plt.close(fig)
+            if corr_fig is not None:
+                plt.close(corr_fig)
 
 
 if __name__ == "__main__":
