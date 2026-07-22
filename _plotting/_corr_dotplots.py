@@ -1,21 +1,98 @@
 ''' correlation dotplots '''
 # module at _plotting/_corr_dotplots.py
 import warnings
-from collections.abc import Sequence
+from collections.abc import Mapping as _Mapping, Sequence
+from numbers import Real as _Real
 from typing import Any, Literal
 
 import anndata
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import seaborn as sns
 from scipy import stats
 from scipy.stats import linregress
 
 from . import palettes
+from ._utils import _draw_reference_lines, _normalize_reference_lines
+
+_NONLINEAR_LINE_SAMPLES = 257
 
 
 def _is_categorical_series(series: pd.Series) -> bool:
     return isinstance(series.dtype, pd.CategoricalDtype)
+
+
+def _scale_lower_bound(scale: str) -> float | None:
+    if scale in {"log", "log2"}:
+        return 0.0
+    if scale == "log1p":
+        return -1.0
+    return None
+
+
+def _log1p_forward(values: Any) -> Any:
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return np.log1p(values)
+
+
+def _forward_scale(values: Any, scale: str) -> np.ndarray:
+    numeric = np.asarray(values, dtype=float)
+    if scale == "log":
+        return np.log10(numeric)
+    if scale == "log2":
+        return np.log2(numeric)
+    if scale == "log1p":
+        return _log1p_forward(numeric)
+    return numeric
+
+
+def _inverse_scale(values: Any, scale: str) -> np.ndarray:
+    numeric = np.asarray(values, dtype=float)
+    if scale == "log":
+        return np.power(10.0, numeric)
+    if scale == "log2":
+        return np.exp2(numeric)
+    if scale == "log1p":
+        return np.expm1(numeric)
+    return numeric
+
+
+def _sample_linear_relation(
+    x_endpoints: Sequence[float],
+    *,
+    intercept: float,
+    slope: float,
+    x_scale: str,
+    y_scale: str,
+) -> tuple[Sequence[float], Sequence[float]]:
+    x_endpoints_array = np.asarray(x_endpoints, dtype=float)
+    y_endpoints_array = intercept + slope * x_endpoints_array
+    if x_scale == "linear" and y_scale == "linear":
+        return x_endpoints_array.tolist(), y_endpoints_array.tolist()
+
+    transformed_x = _forward_scale(x_endpoints_array, x_scale)
+    x_samples = _inverse_scale(
+        np.linspace(transformed_x[0], transformed_x[1], _NONLINEAR_LINE_SAMPLES),
+        x_scale,
+    )
+    sample_sets = [x_endpoints_array, x_samples]
+    if y_scale != "linear" and slope != 0:
+        transformed_y = _forward_scale(y_endpoints_array, y_scale)
+        y_samples = _inverse_scale(
+            np.linspace(transformed_y[0], transformed_y[1], _NONLINEAR_LINE_SAMPLES),
+            y_scale,
+        )
+        sample_sets.append((y_samples - intercept) / slope)
+
+    x_coordinates = np.unique(
+        np.clip(
+            np.concatenate(sample_sets),
+            x_endpoints_array[0],
+            x_endpoints_array[1],
+        )
+    )
+    return x_coordinates, intercept + slope * x_coordinates
 
 
 def _compute_corr_and_fit(
@@ -45,6 +122,31 @@ def _try_compute_corr_and_fit(
         return None, None, None
 
 
+def _fit_line_coordinates(
+    x_vals: pd.Series,
+    fit: Any,
+    x_scale: str,
+    y_scale: str,
+) -> tuple[Sequence[Any], Sequence[Any]]:
+    x_endpoints = [float(x_vals.min()), float(x_vals.max())]
+    y_endpoints = [fit.intercept + fit.slope * value for value in x_endpoints]
+    y_lower_bound = _scale_lower_bound(y_scale)
+    if y_lower_bound is not None and any(
+        not np.isfinite(value) or value <= y_lower_bound for value in y_endpoints
+    ):
+        raise ValueError(
+            "The rendered fit line must be finite and greater than "
+            f"{y_lower_bound:g} for '{y_scale}'."
+        )
+    return _sample_linear_relation(
+        x_endpoints,
+        intercept=fit.intercept,
+        slope=fit.slope,
+        x_scale=x_scale,
+        y_scale=y_scale,
+    )
+
+
 def _plot_fit_line(
     axes: plt.Axes,
     x_vals: pd.Series,
@@ -54,18 +156,24 @@ def _plot_fit_line(
     color: Any,
     linestyle: str,
     label: str | None,
+    use_data_range: bool = False,
+    x_scale: str = "linear",
+    y_scale: str = "linear",
+    coordinates: tuple[Sequence[Any], Sequence[Any]] | None = None,
 ):
     line_kwargs: dict[str, Any] = {"color": color, "linestyle": linestyle}
     if label is not None:
         line_kwargs["label"] = label
 
-    if show_y_intercept:
+    if show_y_intercept and not use_data_range:
         return axes.axline(xy1=(0, fit.intercept), slope=fit.slope, **line_kwargs)
 
-    x_min, x_max = x_vals.min(), x_vals.max()
+    if coordinates is None:
+        coordinates = _fit_line_coordinates(x_vals, fit, x_scale, y_scale)
+    x_coordinates, y_coordinates = coordinates
     (line,) = axes.plot(
-        [x_min, x_max],
-        [fit.intercept + fit.slope * x_min, fit.intercept + fit.slope * x_max],
+        x_coordinates,
+        y_coordinates,
         **line_kwargs,
     )
     return line
@@ -110,6 +218,99 @@ def _normalize_bbox_to_anchor(
     return bbox_tuple
 
 
+def _normalize_axis_limits(
+    limits: Sequence[float] | None,
+    *,
+    param_name: str,
+    scale: str,
+) -> tuple[float, float] | None:
+    if limits is None:
+        return None
+    values = tuple(limits)
+    if len(values) != 2:
+        raise ValueError(f"'{param_name}' must contain exactly two values.")
+    if any(isinstance(value, (bool, np.bool_)) or not isinstance(value, _Real) for value in values):
+        raise ValueError(f"'{param_name}' must contain numeric values.")
+    lower, upper = float(values[0]), float(values[1])
+    if not np.isfinite([lower, upper]).all() or lower >= upper:
+        raise ValueError(f"'{param_name}' must contain finite increasing values.")
+    lower_bound = _scale_lower_bound(scale)
+    if lower_bound is not None and lower <= lower_bound:
+        raise ValueError(
+            f"'{param_name}' values must be greater than {lower_bound:g} for '{scale}'."
+        )
+    return lower, upper
+
+
+def _normalize_padding(value: float | None, *, param_name: str) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, _Real):
+        raise ValueError(f"'{param_name}' must be numeric.")
+    value = float(value)
+    if not np.isfinite(value) or value < 0:
+        raise ValueError(f"'{param_name}' must be finite and nonnegative.")
+    return value
+
+
+def _resolve_axis_limits(
+    values: pd.Series,
+    current_limits: tuple[float, float],
+    *,
+    explicit_limits: tuple[float, float] | None,
+    padding_fraction: float | None,
+    scale: str,
+    extra_values: Sequence[float] = (),
+) -> tuple[float, float]:
+    if explicit_limits is not None:
+        return explicit_limits
+    if padding_fraction is None:
+        if scale != "log1p":
+            return current_limits
+        padding_fraction = 0.05
+    numeric = pd.to_numeric(values, errors="coerce").to_numpy(dtype=float)
+    finite = numeric[np.isfinite(numeric)]
+    if extra_values:
+        extra_numeric = np.asarray(tuple(extra_values), dtype=float)
+        finite = np.concatenate([finite, extra_numeric[np.isfinite(extra_numeric)]])
+    if finite.size == 0:
+        raise ValueError("Cannot resolve limits without finite rendered values.")
+    lower = float(finite.min())
+    upper = float(finite.max())
+    if scale in {"log", "log2", "log1p"}:
+        transformed_lower, transformed_upper = _forward_scale([lower, upper], scale)
+        if transformed_lower == transformed_upper:
+            delta = max(abs(transformed_lower) * padding_fraction, 0.05)
+        else:
+            delta = (transformed_upper - transformed_lower) * padding_fraction
+        resolved = _inverse_scale(
+            [transformed_lower - delta, transformed_upper + delta],
+            scale,
+        )
+        return (
+            float(resolved[0]),
+            float(resolved[1]),
+        )
+    if lower == upper:
+        delta = max(abs(lower) * padding_fraction, 0.5)
+    else:
+        delta = (upper - lower) * padding_fraction
+    return lower - delta, upper + delta
+
+
+def _validate_scale_values(values: pd.Series, *, param_name: str, scale: str) -> None:
+    lower_bound = _scale_lower_bound(scale)
+    numeric = pd.to_numeric(values, errors="coerce").to_numpy(dtype=float)
+    if not np.isfinite(numeric).all() or (numeric <= lower_bound).any():
+        if lower_bound == 0:
+            raise ValueError(
+                f"'{param_name}' contains nonpositive or non-finite values for '{scale}'."
+            )
+        raise ValueError(
+            f"'{param_name}' values must be finite and greater than {lower_bound:g} for '{scale}'."
+        )
+
+
 def corr_dotplot(
     df: pd.DataFrame | None = None,
     *,
@@ -140,9 +341,14 @@ def corr_dotplot(
     fit_legend_bbox_to_anchor: Sequence[float] | None = None,
     hue_legend_bbox_to_anchor: Sequence[float] | None = None,
     show_all_obs_fit: bool = False,
+    show_fit: bool = True,
     show_fit_legend: bool = True,
     show_hue_legend: bool = True,
     show_stats_text: bool = True,
+    show_identity_line: bool = False,
+    identity_line_label: str | None = "Identity",
+    identity_line_style: _Mapping[str, Any] | None = None,
+    identity_limits: Literal["shared_axes", "data"] = "shared_axes",
     nas2zeros: bool = False,
     dropna: bool = False,
     dropzeros: bool = False,
@@ -159,8 +365,22 @@ def corr_dotplot(
     show_all_obs_y_hist: bool = False,
     x_marginal_hist_height_ratio: float = 0.18,
     y_marginal_hist_width_ratio: float = 0.18,
+    xscale: str = "linear",
+    yscale: str = "linear",
+    xlims: Sequence[float] | None = None,
+    ylims: Sequence[float] | None = None,
+    xlim_padding_fraction: float | None = None,
+    ylim_padding_fraction: float | None = None,
+    x_reference_lines: Sequence[_Mapping[str, Any]] | None = None,
+    y_reference_lines: Sequence[_Mapping[str, Any]] | None = None,
     show: bool = True,
-):
+) -> tuple[
+    plt.Figure,
+    plt.Axes | dict[str, plt.Axes | None],
+    Any,
+    float,
+    float,
+]:
     """Plot a correlation scatter with optional marginal histograms.
 
     Parameters
@@ -249,6 +469,10 @@ def corr_dotplot(
         In subset mode, overlay the all-observation distribution on the corresponding marginal.
     x_marginal_hist_height_ratio, y_marginal_hist_width_ratio : float
         Marginal-to-main subplot size ratios used by the composite layout.
+    xscale, yscale : {"linear", "log", "log2", "log1p"}
+        Axis scales. ``log2`` uses a base-2 logarithm; ``log1p`` uses
+        ``log1p``/``expm1`` and accepts only finite values greater than -1.
+        Correlation and fit calculations always use the untransformed values.
     show : bool
         Call ``plt.show()`` before returning when ``True``.
 
@@ -279,6 +503,25 @@ def corr_dotplot(
     method = method.lower()
     if method not in {"spearman", "pearson"}:
         raise ValueError("'method' must be either 'spearman' or 'pearson'.")
+    if identity_limits not in {"shared_axes", "data"}:
+        raise ValueError("'identity_limits' must be 'shared_axes' or 'data'.")
+    for scale, param_name in ((xscale, "xscale"), (yscale, "yscale")):
+        if not isinstance(scale, str) or scale not in {"linear", "log", "log2", "log1p"}:
+            raise ValueError(f"'{param_name}' must be 'linear', 'log', 'log2', or 'log1p'.")
+    if x_marginal_hist_height_ratio <= 0 or y_marginal_hist_width_ratio <= 0:
+        raise ValueError("Marginal panel ratios must be positive.")
+    xlims_tuple = _normalize_axis_limits(xlims, param_name="xlims", scale=xscale)
+    ylims_tuple = _normalize_axis_limits(ylims, param_name="ylims", scale=yscale)
+    x_padding = _normalize_padding(xlim_padding_fraction, param_name="xlim_padding_fraction")
+    y_padding = _normalize_padding(ylim_padding_fraction, param_name="ylim_padding_fraction")
+    normalized_x_reference_lines = _normalize_reference_lines(
+        x_reference_lines,
+        param_name="x_reference_lines",
+    )
+    normalized_y_reference_lines = _normalize_reference_lines(
+        y_reference_lines,
+        param_name="y_reference_lines",
+    )
 
     if df is not None:
         plot_df = df.copy()
@@ -293,9 +536,75 @@ def corr_dotplot(
         if not isinstance(_obs_df, pd.DataFrame):
             _obs_df = pd.DataFrame(_obs_df)
 
-        feature_df: pd.DataFrame | None
+        requested_columns = list(
+            dict.fromkeys(
+                column
+                for column in (column_key_x, column_key_y, hue, subset_key)
+                if column is not None
+            )
+        )
+        feature_df: pd.DataFrame | None = None
         if x_df is not None:
-            feature_df = x_df.copy()
+            if isinstance(x_df, pd.DataFrame):
+                if len(x_df.index) != len(_obs_df.index):
+                    raise ValueError(
+                        "'x_df' row count must match observation metadata."
+                    )
+                feature_columns = pd.Index(x_df.columns)
+                selected_feature_names = [
+                    name
+                    for name in feature_columns
+                    if name in requested_columns
+                    or (
+                        name in _obs_df.columns
+                        and f"{name}_obs" in requested_columns
+                    )
+                ]
+                if selected_feature_names:
+                    feature_df = x_df.loc[:, selected_feature_names].copy()
+            else:
+                if var_df is not None:
+                    feature_columns = pd.Index(var_df.index)
+                elif adata is not None:
+                    feature_columns = pd.Index(adata.var_names)
+                else:
+                    raise ValueError(
+                        "Provide 'var_df' so that feature columns can be named."
+                    )
+                matrix = x_df
+                matrix_shape = getattr(matrix, "shape", None)
+                if matrix_shape is None:
+                    matrix = np.asarray(matrix)
+                    matrix_shape = matrix.shape
+                if len(matrix_shape) != 2:
+                    raise ValueError("'x_df' must be a two-dimensional matrix.")
+                if matrix_shape[0] != len(_obs_df.index):
+                    raise ValueError(
+                        "'x_df' row count must match observation metadata."
+                    )
+                if matrix_shape[1] != len(feature_columns):
+                    raise ValueError(
+                        "'x_df' column count must match variable metadata."
+                    )
+                selected_feature_names = [
+                    name
+                    for name in feature_columns
+                    if name in requested_columns
+                    or (
+                        name in _obs_df.columns
+                        and f"{name}_obs" in requested_columns
+                    )
+                ]
+                if selected_feature_names:
+                    positions = feature_columns.get_indexer(selected_feature_names)
+                    selected_matrix = matrix[:, positions]
+                    if hasattr(selected_matrix, "toarray"):
+                        selected_matrix = selected_matrix.toarray()
+                    feature_df = pd.DataFrame(
+                        selected_matrix,
+                        index=_obs_df.index,
+                        columns=selected_feature_names,
+                    )
         elif adata is not None:
             if layer is not None:
                 if layer not in adata.layers:
@@ -303,22 +612,26 @@ def corr_dotplot(
                 matrix = adata.layers[layer]
             else:
                 matrix = adata.X
-
-            if hasattr(matrix, "toarray"):
-                matrix = matrix.toarray()
-
-            feature_df = pd.DataFrame(matrix, index=adata.obs_names, columns=adata.var_names)
-        else:
-            feature_df = None
-
-        if feature_df is not None and not isinstance(feature_df, pd.DataFrame):
-            if var_df is not None:
-                columns = var_df.index
-            elif adata is not None:
-                columns = adata.var_names
-            else:
-                raise ValueError("Provide 'var_df' so that feature columns can be named.")
-            feature_df = pd.DataFrame(feature_df, index=_obs_df.index, columns=columns)
+            feature_columns = pd.Index(adata.var_names)
+            selected_feature_names = [
+                name
+                for name in feature_columns
+                if name in requested_columns
+                or (
+                    name in _obs_df.columns
+                    and f"{name}_obs" in requested_columns
+                )
+            ]
+            if selected_feature_names:
+                positions = feature_columns.get_indexer(selected_feature_names)
+                selected_matrix = matrix[:, positions]
+                if hasattr(selected_matrix, "toarray"):
+                    selected_matrix = selected_matrix.toarray()
+                feature_df = pd.DataFrame(
+                    selected_matrix,
+                    index=adata.obs_names,
+                    columns=selected_feature_names,
+                )
 
         if feature_df is not None:
             if feature_df.index is None or not feature_df.index.equals(_obs_df.index):
@@ -391,8 +704,144 @@ def corr_dotplot(
 
     x_vals = working_df[column_key_x]
     y_vals = working_df[column_key_y]
+    x_lower_bound = _scale_lower_bound(xscale)
+    if x_lower_bound is not None:
+        _validate_scale_values(x_vals, param_name=column_key_x, scale=xscale)
+        if xscale in {"log", "log2"} and axes_lines and x_reference_lines is None:
+            raise ValueError("'axes_lines=True' would render x=0 on a logarithmic x axis.")
+        if any(line["value"] <= x_lower_bound for line in normalized_x_reference_lines):
+            raise ValueError(
+                f"x reference lines must be greater than {x_lower_bound:g} for '{xscale}'."
+            )
+    y_lower_bound = _scale_lower_bound(yscale)
+    if y_lower_bound is not None:
+        _validate_scale_values(y_vals, param_name=column_key_y, scale=yscale)
+        if yscale in {"log", "log2"} and axes_lines and y_reference_lines is None:
+            raise ValueError("'axes_lines=True' would render y=0 on a logarithmic y axis.")
+        if any(line["value"] <= y_lower_bound for line in normalized_y_reference_lines):
+            raise ValueError(
+                f"y reference lines must be greater than {y_lower_bound:g} for '{yscale}'."
+            )
     fit, corr_value, corr_pvalue = _compute_corr_and_fit(x_vals, y_vals, method)
+    corr_label = method.capitalize()
+    use_data_range_for_fit = xscale != "linear" or yscale != "linear"
     subset_palette_to_use = subset_palette or palette
+    subset_series = working_df[subset_key] if subset_key is not None else None
+    subset_values: list[Any] = []
+    subset_color_map: dict[Any, Any] = {}
+    subset_fit_results = []
+    fallback_to_all_data = False
+    fit_legend_title: str | None = None
+
+    if subset_key is not None:
+        non_null_subset = subset_series.dropna()
+        if _is_categorical_series(subset_series):
+            subset_values = list(subset_series.cat.categories)
+        elif pd.api.types.is_numeric_dtype(non_null_subset):
+            subset_values = sorted(pd.unique(non_null_subset))
+        else:
+            subset_values = list(pd.unique(non_null_subset))
+
+        subset_colors = sns.color_palette(
+            subset_palette_to_use,
+            n_colors=max(len(subset_values), 1),
+        )
+        subset_color_map = dict(zip(subset_values, subset_colors))
+        fallback_to_all_data = not subset_values
+        fit_legend_title = f"{subset_key} fit\n{corr_label}_corr"
+        if fallback_to_all_data:
+            fit_legend_title = f"All data fit\n{corr_label}_corr"
+
+        for subset_value in subset_values:
+            group_df = working_df.loc[subset_series == subset_value]
+            group_x = group_df[column_key_x]
+            group_y = group_df[column_key_y]
+            group_fit, group_corr_value, group_corr_pvalue = _try_compute_corr_and_fit(
+                group_x,
+                group_y,
+                method,
+            )
+            group_coordinates = None
+            if group_fit is not None and show_fit:
+                group_coordinates = _fit_line_coordinates(
+                    group_x,
+                    group_fit,
+                    xscale,
+                    yscale,
+                )
+            subset_fit_results.append(
+                (
+                    subset_value,
+                    group_x,
+                    group_fit,
+                    group_corr_value,
+                    group_corr_pvalue,
+                    f"{subset_key}={subset_value}",
+                    group_coordinates,
+                )
+            )
+
+    overall_fit_coordinates = None
+    if show_fit and (
+        subset_key is None
+        or show_all_obs_fit
+        or fallback_to_all_data
+    ):
+        overall_fit_coordinates = _fit_line_coordinates(
+            x_vals,
+            fit,
+            xscale,
+            yscale,
+        )
+
+    x_limit_extras: list[float] = []
+    y_limit_extras: list[float] = []
+    if x_reference_lines is None:
+        if axes_lines:
+            x_limit_extras.append(0.0)
+    else:
+        x_limit_extras.extend(line["value"] for line in normalized_x_reference_lines)
+    if y_reference_lines is None:
+        if axes_lines:
+            y_limit_extras.append(0.0)
+    else:
+        y_limit_extras.extend(line["value"] for line in normalized_y_reference_lines)
+
+    if overall_fit_coordinates is not None:
+        x_limit_extras.extend(overall_fit_coordinates[0])
+        y_limit_extras.extend(overall_fit_coordinates[1])
+    for fit_result in subset_fit_results:
+        group_coordinates = fit_result[-1]
+        if group_coordinates is not None:
+            x_limit_extras.extend(group_coordinates[0])
+            y_limit_extras.extend(group_coordinates[1])
+
+    identity_domain_minimum = max(
+        (bound for bound in (x_lower_bound, y_lower_bound) if bound is not None),
+        default=None,
+    )
+    identity_data_limits = None
+    if show_identity_line and identity_limits == "data":
+        combined = np.concatenate(
+            [
+                pd.to_numeric(x_vals, errors="coerce").to_numpy(dtype=float),
+                pd.to_numeric(y_vals, errors="coerce").to_numpy(dtype=float),
+            ]
+        )
+        combined = combined[np.isfinite(combined)]
+        identity_data_limits = (
+            float(combined.min()),
+            float(combined.max()),
+        )
+        if identity_domain_minimum is not None and (
+            identity_data_limits[0] <= identity_domain_minimum
+            or identity_data_limits[1] <= identity_domain_minimum
+        ):
+            raise ValueError(
+                "Identity-line coordinates must be greater than "
+                f"{identity_domain_minimum:g} for the configured scales."
+            )
+
     stats_fontsize = stats_fontsize or title_fontsize
     fit_legend_anchor = _normalize_bbox_to_anchor(
         fit_legend_bbox_to_anchor,
@@ -402,7 +851,6 @@ def corr_dotplot(
         hue_legend_bbox_to_anchor,
         param_name="hue_legend_bbox_to_anchor",
     )
-
     fig = plt.figure(figsize=figsize)
     axes_x_marginal = None
     axes_y_marginal = None
@@ -478,75 +926,64 @@ def corr_dotplot(
                 existing_legend.remove()
 
     fit_handles: list[Any] = []
-    corr_label = method.capitalize()
-    subset_series = working_df[subset_key] if subset_key is not None else None
-    subset_values: list[Any] = []
-    subset_color_map: dict[Any, Any] = {}
-    fallback_to_all_data = False
-    fit_legend_title: str | None = None
     if subset_key is None:
-        _plot_fit_line(
-            axes,
-            x_vals,
-            fit,
-            show_y_intercept=show_y_intercept,
-            color="C0",
-            linestyle="-",
-            label=None,
-        )
+        if show_fit:
+            _plot_fit_line(
+                axes,
+                x_vals,
+                fit,
+                show_y_intercept=show_y_intercept,
+                color="C0",
+                linestyle="-",
+                label=None,
+                use_data_range=use_data_range_for_fit,
+                x_scale=xscale,
+                y_scale=yscale,
+                coordinates=overall_fit_coordinates,
+            )
         stats_text = (
             f"{corr_label} Corr = {corr_value:.3f} pvalue = {corr_pvalue:.6f}\n"
             f"y = {fit.intercept:.3f} + {fit.slope:.3f}x R^2: {fit.rvalue ** 2:.3f}"
         )
     else:
-        non_null_subset = subset_series.dropna()
-        if _is_categorical_series(subset_series):
-            subset_values = list(subset_series.cat.categories)
-        elif pd.api.types.is_numeric_dtype(non_null_subset):
-            subset_values = sorted(pd.unique(non_null_subset))
-        else:
-            subset_values = list(pd.unique(non_null_subset))
-
-        subset_colors = sns.color_palette(subset_palette_to_use, n_colors=max(len(subset_values), 1))
-        subset_color_map = dict(zip(subset_values, subset_colors))
-        fallback_to_all_data = not subset_values
-        fit_legend_title = f"{subset_key} fit\n{corr_label}_corr"
         stats_lines: list[str] = []
 
         if fallback_to_all_data:
             stats_lines.append(
                 f"No valid {subset_key} groups after filtering; showing All data fit."
             )
-            fit_legend_title = f"All data fit\n{corr_label}_corr"
 
         if show_all_obs_fit or fallback_to_all_data:
-            fit_handles.append(
-                _plot_fit_line(
-                    axes,
-                    x_vals,
-                    fit,
-                    show_y_intercept=show_y_intercept,
-                    color="black",
-                    linestyle="--",
-                    label=_format_subset_fit_legend_label("All data", corr_value, corr_pvalue),
+            if show_fit:
+                fit_handles.append(
+                    _plot_fit_line(
+                        axes,
+                        x_vals,
+                        fit,
+                        show_y_intercept=show_y_intercept,
+                        color="black",
+                        linestyle="--",
+                        label=_format_subset_fit_legend_label("All data", corr_value, corr_pvalue),
+                        use_data_range=use_data_range_for_fit,
+                        x_scale=xscale,
+                        y_scale=yscale,
+                        coordinates=overall_fit_coordinates,
+                    )
                 )
-            )
             stats_lines.append(
                 _format_subset_stats_line("All data", method, fit, corr_value, corr_pvalue)
             )
 
-        for subset_value in subset_values:
-            group_mask = subset_series == subset_value
-            group_df = working_df.loc[group_mask]
-            group_x = group_df[column_key_x]
-            group_y = group_df[column_key_y]
-            group_fit, group_corr_value, group_corr_pvalue = _try_compute_corr_and_fit(
-                group_x,
-                group_y,
-                method,
-            )
-            group_label = f"{subset_key}={subset_value}"
-            if group_fit is not None:
+        for (
+            subset_value,
+            group_x,
+            group_fit,
+            group_corr_value,
+            group_corr_pvalue,
+            group_label,
+            group_coordinates,
+        ) in subset_fit_results:
+            if group_fit is not None and show_fit:
                 fit_handles.append(
                     _plot_fit_line(
                         axes,
@@ -560,6 +997,10 @@ def corr_dotplot(
                             group_corr_value,
                             group_corr_pvalue,
                         ),
+                        use_data_range=use_data_range_for_fit,
+                        x_scale=xscale,
+                        y_scale=yscale,
+                        coordinates=group_coordinates,
                     )
                 )
             stats_lines.append(
@@ -576,9 +1017,29 @@ def corr_dotplot(
             stats_lines.append(f"No valid {subset_key} groups after filtering.")
         stats_text = "\n".join(stats_lines)
 
-    if axes_lines:
+    reference_handles: list[Any] = []
+    if axes_lines and y_reference_lines is None:
         axes.axhline(0, color="black")
+    if axes_lines and x_reference_lines is None:
         axes.axvline(0, color="black")
+    if x_reference_lines is not None:
+        reference_handles.extend(
+            _draw_reference_lines(
+                axes,
+                normalized_x_reference_lines,
+                axis="x",
+                param_name="x_reference_lines",
+            )
+        )
+    if y_reference_lines is not None:
+        reference_handles.extend(
+            _draw_reference_lines(
+                axes,
+                normalized_y_reference_lines,
+                axis="y",
+                param_name="y_reference_lines",
+            )
+        )
 
     if xlabel is not None:
         axes.set_xlabel(xlabel, fontsize=axis_label_fontsize)
@@ -697,6 +1158,89 @@ def corr_dotplot(
         axes.set_xlim(main_xlim)
         axes.set_ylim(main_ylim)
 
+    xscale_name = {"log2": "log", "log1p": "function"}.get(xscale, xscale)
+    yscale_name = {"log2": "log", "log1p": "function"}.get(yscale, yscale)
+    if xscale == "log2":
+        xscale_kwargs = {"base": 2}
+    elif xscale == "log1p":
+        xscale_kwargs = {"functions": (_log1p_forward, np.expm1)}
+    else:
+        xscale_kwargs = {}
+    if yscale == "log2":
+        yscale_kwargs = {"base": 2}
+    elif yscale == "log1p":
+        yscale_kwargs = {"functions": (_log1p_forward, np.expm1)}
+    else:
+        yscale_kwargs = {}
+    axes.set_xscale(xscale_name, **xscale_kwargs)
+    axes.set_yscale(yscale_name, **yscale_kwargs)
+    if axes_x_marginal is not None:
+        axes_x_marginal.set_xscale(xscale_name, **xscale_kwargs)
+    if axes_y_marginal is not None:
+        axes_y_marginal.set_yscale(yscale_name, **yscale_kwargs)
+    resolved_xlim = _resolve_axis_limits(
+        x_vals,
+        axes.get_xlim(),
+        explicit_limits=xlims_tuple,
+        padding_fraction=x_padding,
+        scale=xscale,
+        extra_values=x_limit_extras,
+    )
+    resolved_ylim = _resolve_axis_limits(
+        y_vals,
+        axes.get_ylim(),
+        explicit_limits=ylims_tuple,
+        padding_fraction=y_padding,
+        scale=yscale,
+        extra_values=y_limit_extras,
+    )
+    axes.set_xlim(resolved_xlim)
+    axes.set_ylim(resolved_ylim)
+    if axes_x_marginal is not None:
+        axes_x_marginal.set_xlim(resolved_xlim)
+    if axes_y_marginal is not None:
+        axes_y_marginal.set_ylim(resolved_ylim)
+
+    if show_identity_line:
+        if identity_line_style is not None and not isinstance(identity_line_style, _Mapping):
+            raise ValueError("'identity_line_style' must be a mapping.")
+        if identity_limits == "shared_axes":
+            identity_lower = max(resolved_xlim[0], resolved_ylim[0])
+            identity_upper = min(resolved_xlim[1], resolved_ylim[1])
+            if identity_lower >= identity_upper:
+                raise ValueError("The visible x and y ranges do not overlap for the identity line.")
+        else:
+            identity_lower, identity_upper = identity_data_limits
+        if identity_domain_minimum is not None and (
+            identity_lower <= identity_domain_minimum
+            or identity_upper <= identity_domain_minimum
+        ):
+            raise ValueError(
+                "Identity-line coordinates must be greater than "
+                f"{identity_domain_minimum:g} for the configured scales."
+            )
+        identity_style: dict[str, Any] = {
+            "color": "0.3",
+            "linestyle": "--",
+            "linewidth": 1.5,
+            "zorder": 1,
+        }
+        identity_style.update(dict(identity_line_style or {}))
+        identity_style.pop("label", None)
+        if identity_line_label is not None:
+            identity_style["label"] = identity_line_label
+        identity_coordinates = _sample_linear_relation(
+            [identity_lower, identity_upper],
+            intercept=0.0,
+            slope=1.0,
+            x_scale=xscale,
+            y_scale=yscale,
+        )
+        (identity_handle,) = axes.plot(*identity_coordinates, **identity_style)
+        reference_handles.insert(0, identity_handle)
+        axes.set_xlim(resolved_xlim)
+        axes.set_ylim(resolved_ylim)
+
     if axes_x_marginal is None and axes_y_marginal is None:
         fig.tight_layout()
 
@@ -711,7 +1255,14 @@ def corr_dotplot(
             fontsize=stats_fontsize,
         )
 
-    if subset_key is not None and show_fit_legend and fit_handles:
+    labeled_reference_handles = [
+        handle
+        for handle in reference_handles
+        if handle.get_label() and not str(handle.get_label()).startswith("_")
+    ]
+    legend_fit_handles = fit_handles if subset_key is not None and show_fit_legend else []
+    combined_legend_handles = legend_fit_handles + labeled_reference_handles
+    if combined_legend_handles:
         fit_legend_kwargs: dict[str, Any] = {
             "loc": 2,
             "borderaxespad": 0.0,
@@ -740,12 +1291,13 @@ def corr_dotplot(
             fit_legend_kwargs["fontsize"] = legend_fontsize
             fit_legend_kwargs["title_fontsize"] = legend_fontsize
         fit_legend = axes.legend(
-            handles=fit_handles,
-            title=fit_legend_title,
+            handles=combined_legend_handles,
+            title=fit_legend_title if legend_fit_handles else None,
             **fit_legend_kwargs,
         )
         for legend_handle in fit_legend.legend_handles:
-            legend_handle.set_linewidth(3.0)
+            if hasattr(legend_handle, "set_linewidth"):
+                legend_handle.set_linewidth(3.0)
 
     if stats_footer is not None:
         fig.canvas.draw()
@@ -811,9 +1363,14 @@ def corr_dotplot_dev(
     fit_legend_bbox_to_anchor: Sequence[float] | None = None,
     hue_legend_bbox_to_anchor: Sequence[float] | None = None,
     show_all_obs_fit: bool = False,
+    show_fit: bool = True,
     show_fit_legend: bool = True,
     show_hue_legend: bool = True,
     show_stats_text: bool = True,
+    show_identity_line: bool = False,
+    identity_line_label: str | None = "Identity",
+    identity_line_style: _Mapping[str, Any] | None = None,
+    identity_limits: Literal["shared_axes", "data"] = "shared_axes",
     nas2zeros: bool = False,
     dropna: bool = False,
     dropzeros: bool = False,
@@ -830,6 +1387,14 @@ def corr_dotplot_dev(
     show_all_obs_y_hist: bool = False,
     x_marginal_hist_height_ratio: float = 0.18,
     y_marginal_hist_width_ratio: float = 0.18,
+    xscale: str = "linear",
+    yscale: str = "linear",
+    xlims: Sequence[float] | None = None,
+    ylims: Sequence[float] | None = None,
+    xlim_padding_fraction: float | None = None,
+    ylim_padding_fraction: float | None = None,
+    x_reference_lines: Sequence[_Mapping[str, Any]] | None = None,
+    y_reference_lines: Sequence[_Mapping[str, Any]] | None = None,
     show: bool = True,
 ):
     """Deprecated compatibility wrapper for :func:`corr_dotplot`."""
@@ -868,9 +1433,14 @@ def corr_dotplot_dev(
         fit_legend_bbox_to_anchor=fit_legend_bbox_to_anchor,
         hue_legend_bbox_to_anchor=hue_legend_bbox_to_anchor,
         show_all_obs_fit=show_all_obs_fit,
+        show_fit=show_fit,
         show_fit_legend=show_fit_legend,
         show_hue_legend=show_hue_legend,
         show_stats_text=show_stats_text,
+        show_identity_line=show_identity_line,
+        identity_line_label=identity_line_label,
+        identity_line_style=identity_line_style,
+        identity_limits=identity_limits,
         nas2zeros=nas2zeros,
         dropna=dropna,
         dropzeros=dropzeros,
@@ -887,6 +1457,14 @@ def corr_dotplot_dev(
         show_all_obs_y_hist=show_all_obs_y_hist,
         x_marginal_hist_height_ratio=x_marginal_hist_height_ratio,
         y_marginal_hist_width_ratio=y_marginal_hist_width_ratio,
+        xscale=xscale,
+        yscale=yscale,
+        xlims=xlims,
+        ylims=ylims,
+        xlim_padding_fraction=xlim_padding_fraction,
+        ylim_padding_fraction=ylim_padding_fraction,
+        x_reference_lines=x_reference_lines,
+        y_reference_lines=y_reference_lines,
         show=show,
     )
     fig, axes_result, fit, corr_value, corr_pvalue = result

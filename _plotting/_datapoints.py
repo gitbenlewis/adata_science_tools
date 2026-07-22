@@ -3,16 +3,22 @@
 import logging
 import math
 from collections.abc import Mapping, Sequence
+from numbers import Real as _Real
 from typing import Any, Literal
 
 import anndata
+import matplotlib.colors as _mcolors
 import matplotlib.pyplot as plt
+import matplotlib.scale as _mscale
+from matplotlib.lines import Line2D as _Line2D
+from matplotlib.markers import MarkerStyle as _MarkerStyle
 import numpy as np
 import pandas as pd
 import seaborn as sns
 
 from . import palettes
 from ._histograms import _apply_isin_filters
+from ._utils import _draw_reference_lines, _normalize_reference_lines
 
 
 LOGGER = logging.getLogger(__name__)
@@ -33,6 +39,9 @@ def datapoints(
     use_raw: bool = False,
     filter_vars_by_isin_lists: Mapping[str, Sequence[Any]] | None = None,
     filter_obs_by_isin_lists: Mapping[str, Sequence[Any]] | None = None,
+    summary_filter_obs_by_isin_lists: Mapping[
+        str, Sequence[Any]
+    ] | None = None,
     subset_obs_key: str | None = None,
     subset_order: Sequence[Any] | None = None,
     subplot_by_obs_key: str | None = None,
@@ -48,8 +57,11 @@ def datapoints(
         "pool_variables",
     ] = "panel_by_variable",
     palette: Sequence[Any] | str | None = palettes.tol_colors,
-    subset_palette: Sequence[Any] | str | None = None,
+    subset_palette: Mapping[Any, Any] | Sequence[Any] | str | None = None,
     color: Any | None = None,
+    marker_by_obs_key: str | None = None,
+    marker_order: Sequence[Any] | None = None,
+    marker_styles: Mapping[Any, Mapping[str, Any]] | None = None,
     jitter_amount: float = 0.2,
     random_seed: int | None = 0,
     point_size: float = 60,
@@ -63,11 +75,14 @@ def datapoints(
     legend_metrics: Sequence[Literal["mean", "median", "count", "std", "sem"]] | None = ("mean",),
     show_all_data_metrics: bool = True,
     highlight_negative_mean_legend: bool = True,
+    group_annotations: Sequence[Mapping[str, Any]] | None = None,
     ncols: int = 3,
     figsize: tuple[float, float] | None = None,
     sharey: bool = False,
+    yscale: str = "linear",
     ylims: Sequence[float] | None = None,
     add_zero_line: bool = False,
+    y_reference_lines: Sequence[Mapping[str, Any]] | None = None,
     xlabel: str | None = None,
     ylabel: str | None = None,
     title: str | None = None,
@@ -78,6 +93,8 @@ def datapoints(
     legend_loc: str | int | None = None,
     legend_bbox_to_anchor: tuple[float, ...] | None = None,
     legend_scope: Literal["axis", "figure"] = "axis",
+    append_marker_handles_to_legend: bool = True,
+    append_reference_handles_to_legend: bool = True,
     legend: bool = True,
     dropna: bool = True,
     nas2zeros: bool = False,
@@ -130,19 +147,94 @@ def datapoints(
         raise ValueError("Provide only one of 'subplot_by_obs_key' or 'subplot_by_var_key'.")
     if x_by_obs_multi_var_mode not in {"panel_by_variable", "pool_variables"}:
         raise ValueError("'x_by_obs_multi_var_mode' must be one of 'panel_by_variable' or 'pool_variables'.")
+    if yscale not in _mscale.get_scale_names():
+        raise ValueError(f"Unsupported yscale: {yscale!r}.")
     if ylims is not None:
         ylims_tuple = tuple(ylims)
         if len(ylims_tuple) != 2:
             raise ValueError("'ylims' must contain exactly two values.")
+        if any(
+            isinstance(value, (bool, np.bool_))
+            or not isinstance(value, _Real)
+            or not np.isfinite(value)
+            for value in ylims_tuple
+        ):
+            raise ValueError("'ylims' values must be finite numbers.")
+        ylims_tuple = (float(ylims_tuple[0]), float(ylims_tuple[1]))
         if ylims_tuple[0] >= ylims_tuple[1]:
             raise ValueError("'ylims' lower bound must be less than upper bound.")
+        if yscale == "log" and ylims_tuple[0] <= 0:
+            raise ValueError("'ylims' values must be positive when yscale='log'.")
     else:
         ylims_tuple = None
+
+    normalized_reference_lines = _normalize_reference_lines(
+        y_reference_lines,
+        param_name="y_reference_lines",
+    )
+    if yscale == "log":
+        if add_zero_line:
+            raise ValueError("'add_zero_line=True' is not valid when yscale='log'.")
+        if any(line["value"] <= 0 for line in normalized_reference_lines):
+            raise ValueError("Reference-line values must be positive when yscale='log'.")
 
     metric_names: tuple[str, ...] = tuple(legend_metrics or ())
     invalid_metric_names = sorted(set(metric_names).difference({"mean", "median", "count", "std", "sem"}))
     if invalid_metric_names:
         raise ValueError(f"Unsupported legend metric(s): {invalid_metric_names}.")
+
+    normalized_annotations: list[dict[str, Any]] = []
+    annotation_keys = {"metric", "position", "label", "format", "text_kwargs"}
+    for index, annotation in enumerate(group_annotations or ()):
+        if not isinstance(annotation, Mapping):
+            raise ValueError(f"'group_annotations[{index}]' must be a mapping.")
+        unsupported = sorted(set(annotation).difference(annotation_keys))
+        if unsupported:
+            raise ValueError(
+                f"Unsupported key(s) in 'group_annotations[{index}]': {unsupported}."
+            )
+        metric = annotation.get("metric")
+        if metric not in {"mean", "median", "count", "std", "sem"}:
+            raise ValueError(
+                f"'group_annotations[{index}].metric' must be one of "
+                "'mean', 'median', 'count', 'std', or 'sem'."
+            )
+        position = annotation.get("position", "metric")
+        if position not in {"metric", "axes_top", "axes_bottom"}:
+            raise ValueError(
+                f"'group_annotations[{index}].position' must be one of "
+                "'metric', 'axes_top', or 'axes_bottom'."
+            )
+        label = annotation.get("label", str(metric))
+        if not isinstance(label, str):
+            raise ValueError(f"'group_annotations[{index}].label' must be a string.")
+        annotation_format = annotation.get("format", "{label}: {value:.3g}")
+        if not isinstance(annotation_format, str):
+            raise ValueError(f"'group_annotations[{index}].format' must be a string.")
+        text_kwargs = annotation.get("text_kwargs", {})
+        if not isinstance(text_kwargs, Mapping):
+            raise ValueError(f"'group_annotations[{index}].text_kwargs' must be a mapping.")
+        try:
+            annotation_format.format(
+                metric=metric,
+                label=label,
+                value=1.0,
+                count=1,
+                x_label="group",
+            )
+        except (IndexError, KeyError, ValueError) as exc:
+            raise ValueError(
+                f"Invalid 'group_annotations[{index}].format': {exc}."
+            ) from exc
+        normalized_annotations.append(
+            {
+                "metric": metric,
+                "position": position,
+                "label": label,
+                "format": annotation_format,
+                "text_kwargs": dict(text_kwargs),
+            }
+        )
 
     if adata is not None:
         obs_metadata_df = adata.obs.copy()
@@ -176,12 +268,121 @@ def datapoints(
 
     if subset_obs_key is not None and subset_obs_key not in obs_metadata_df.columns:
         raise ValueError(f"Column '{subset_obs_key}' not found in observation metadata.")
+    if marker_by_obs_key is not None and marker_by_obs_key not in obs_metadata_df.columns:
+        raise ValueError(f"Column '{marker_by_obs_key}' not found in observation metadata.")
+    if marker_by_obs_key is None and (marker_order is not None or marker_styles is not None):
+        raise ValueError("'marker_order' and 'marker_styles' require 'marker_by_obs_key'.")
+    if marker_order is not None and pd.Index(list(marker_order)).has_duplicates:
+        raise ValueError("'marker_order' must not contain duplicate values.")
+    if marker_styles is not None and not isinstance(marker_styles, Mapping):
+        raise ValueError("'marker_styles' must be a mapping.")
+    marker_style_keys = {
+        "marker",
+        "filled",
+        "label",
+        "facecolor",
+        "edgecolor",
+        "size",
+        "alpha",
+    }
+    for marker_value, style in (marker_styles or {}).items():
+        if not isinstance(style, Mapping):
+            raise ValueError(f"Marker style for {marker_value!r} must be a mapping.")
+        unsupported = sorted(set(style).difference(marker_style_keys))
+        if unsupported:
+            raise ValueError(f"Unsupported marker-style key(s) for {marker_value!r}: {unsupported}.")
+        if "marker" in style:
+            try:
+                _MarkerStyle(style["marker"])
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"Invalid marker symbol for {marker_value!r}.") from exc
+        if "filled" in style and not isinstance(style["filled"], (bool, np.bool_)):
+            raise ValueError(f"Marker 'filled' for {marker_value!r} must be boolean.")
+        if "label" in style and not isinstance(style["label"], str):
+            raise ValueError(f"Marker 'label' for {marker_value!r} must be a string.")
+        for color_key in ("facecolor", "edgecolor"):
+            color_value = style.get(color_key)
+            if color_value is not None and not _mcolors.is_color_like(color_value):
+                raise ValueError(
+                    f"Marker '{color_key}' for {marker_value!r} is not a valid color."
+                )
+        size = style.get("size", point_size)
+        if (
+            isinstance(size, (bool, np.bool_))
+            or not isinstance(size, _Real)
+            or not np.isfinite(size)
+            or size <= 0
+        ):
+            raise ValueError(f"Marker 'size' for {marker_value!r} must be a positive finite number.")
+        alpha = style.get("alpha", point_alpha)
+        if (
+            isinstance(alpha, (bool, np.bool_))
+            or not isinstance(alpha, _Real)
+            or not np.isfinite(alpha)
+            or not 0 <= alpha <= 1
+        ):
+            raise ValueError(f"Marker 'alpha' for {marker_value!r} must be between 0 and 1.")
     if subplot_by_obs_key is not None and subplot_by_obs_key not in obs_metadata_df.columns:
         raise ValueError(f"Column '{subplot_by_obs_key}' not found in observation metadata.")
     if x_by_obs_key is not None and x_by_obs_key not in obs_metadata_df.columns:
         raise ValueError(f"Column '{x_by_obs_key}' not found in observation metadata.")
     if subplot_by_var_key is not None and subplot_by_var_key not in var_metadata_df.columns:
         raise ValueError(f"Column '{subplot_by_var_key}' not found in variable metadata.")
+
+    result_columns = {
+        "panel",
+        "variable",
+        "source_variable",
+        "obs_name",
+        "x_label",
+        "x_order",
+        "value",
+        "subset_value",
+        "summary_included",
+        "marker_category",
+        "resolved_marker",
+        "resolved_marker_filled",
+        "resolved_marker_label",
+        "resolved_marker_facecolor",
+        "rendered_marker_facecolor",
+        "resolved_marker_edgecolor",
+        "resolved_marker_size",
+        "resolved_marker_alpha",
+    }
+    role_columns = (
+        ("subset_obs_key", subset_obs_key),
+        ("subplot_by_obs_key", subplot_by_obs_key),
+        ("subplot_by_var_key", subplot_by_var_key),
+        ("x_by_obs_key", x_by_obs_key),
+        ("marker_by_obs_key", marker_by_obs_key),
+    )
+    equivalent_role_fields = {
+        ("subset_obs_key", "subset_value"),
+        ("subplot_by_var_key", "panel"),
+        ("subplot_by_obs_key", "panel"),
+        ("x_by_obs_key", "x_label"),
+        ("marker_by_obs_key", "marker_category"),
+    }
+    if (
+        subplot_by_obs_key == "panel"
+        and not all(
+            isinstance(value, str) for value in obs_metadata_df["panel"].dropna()
+        )
+    ):
+        raise ValueError(
+            "Column 'panel' selected by 'subplot_by_obs_key' conflicts with "
+            "a returned datapoints field."
+        )
+
+    for param_name, column_name in role_columns:
+        if (
+            column_name in result_columns
+            and (param_name, column_name) not in equivalent_role_fields
+        ):
+            raise ValueError(
+                f"Column {column_name!r} selected by '{param_name}' conflicts with "
+                "a returned datapoints field."
+            )
 
     has_var_groups = var_groupby_key is not None
     if has_var_groups and var_groupby_key not in var_metadata_df.columns:
@@ -196,6 +397,12 @@ def datapoints(
     filtered_obs_df = obs_metadata_df.loc[obs_mask].copy()
     if filtered_obs_df.empty:
         raise ValueError("No observations remain after filtering.")
+    summary_obs_mask = _apply_isin_filters(
+        filtered_obs_df,
+        summary_filter_obs_by_isin_lists,
+        frame_label="observation metadata",
+        param_name="summary_filter_obs_by_isin_lists",
+    )
     if subplot_by_obs_key is not None:
         missing_panel_obs = filtered_obs_df.index[filtered_obs_df[subplot_by_obs_key].isna()].tolist()
         if missing_panel_obs:
@@ -432,6 +639,18 @@ def datapoints(
         plot_df = plot_df.dropna(subset=["value"])
     if dropzeros:
         plot_df = plot_df.loc[plot_df["value"] != 0]
+    plot_df = plot_df.copy()
+    plot_df["summary_included"] = [
+        bool(summary_obs_mask.loc[obs_name])
+        for obs_name in plot_df["obs_name"]
+    ]
+    if marker_by_obs_key is None:
+        plot_df["marker_category"] = pd.NA
+    else:
+        plot_df["marker_category"] = [
+            filtered_obs_df.loc[obs_name, marker_by_obs_key]
+            for obs_name in plot_df["obs_name"]
+        ]
     if plot_df.empty:
         raise ValueError("No datapoints remain after value filtering.")
 
@@ -522,7 +741,10 @@ def datapoints(
         for row in plot_df.itertuples(index=False)
     ]
     rng = np.random.default_rng(random_seed)
-    plot_df["_jittered_x"] = plot_df["x_order"] + rng.uniform(
+    jittered_x_column = "_jittered_x"
+    while jittered_x_column in plot_df.columns:
+        jittered_x_column = f"_{jittered_x_column}"
+    plot_df[jittered_x_column] = plot_df["x_order"] + rng.uniform(
         -jitter_amount,
         jitter_amount,
         len(plot_df),
@@ -544,18 +766,37 @@ def datapoints(
                 subset_order,
                 filtered_obs_df[subset_obs_key],
             )
-        subset_palette_to_use = subset_palette or palette
-        if subset_palette_to_use is not None and subset_hue_order:
-            if isinstance(subset_palette_to_use, str):
-                subset_colors = sns.color_palette(subset_palette_to_use, n_colors=len(subset_hue_order))
+        subset_palette_to_use = subset_palette if subset_palette is not None else palette
+        if subset_hue_order:
+            if isinstance(subset_palette_to_use, Mapping):
+                missing_colors = [
+                    value for value in subset_hue_order if value not in subset_palette_to_use
+                ]
+                if missing_colors:
+                    raise ValueError(
+                        f"'subset_palette' is missing color(s) for: {missing_colors}."
+                    )
+                subset_palette_map = {
+                    value: subset_palette_to_use[value] for value in subset_hue_order
+                }
             else:
-                subset_colors = list(subset_palette_to_use)
-                if not subset_colors:
-                    raise ValueError("'subset_palette'/'palette' cannot be an empty sequence.")
-            subset_palette_map = {
-                subset_value: subset_colors[idx % len(subset_colors)]
-                for idx, subset_value in enumerate(subset_hue_order)
-            }
+                if subset_palette_to_use is None:
+                    subset_colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+                elif isinstance(subset_palette_to_use, str):
+                    subset_colors = sns.color_palette(
+                        subset_palette_to_use,
+                        n_colors=len(subset_hue_order),
+                    )
+                else:
+                    subset_colors = list(subset_palette_to_use)
+                    if not subset_colors:
+                        raise ValueError(
+                            "'subset_palette'/'palette' cannot be an empty sequence."
+                        )
+                subset_palette_map = {
+                    subset_value: subset_colors[idx % len(subset_colors)]
+                    for idx, subset_value in enumerate(subset_hue_order)
+                }
 
     if color is not None:
         default_point_color = color
@@ -569,33 +810,170 @@ def datapoints(
             raise ValueError("'palette' cannot be an empty sequence.")
         default_point_color = palette_colors[0]
 
+    marker_category_order: list[Any] = []
+    marker_style_by_category: dict[Any, dict[str, Any]] = {}
+    default_markers = ("o", "s", "^", "D", "v", "P", "X", "<", ">")
+    if marker_by_obs_key is not None:
+        marker_category_order = _ordered_values(
+            plot_df["marker_category"],
+            marker_order,
+            filtered_obs_df[marker_by_obs_key],
+        )
+        for marker_index, marker_category in enumerate(marker_category_order):
+            configured_style = dict((marker_styles or {}).get(marker_category, {}))
+            marker_style_by_category[marker_category] = {
+                "marker": configured_style.get(
+                    "marker",
+                    default_markers[marker_index % len(default_markers)],
+                ),
+                "filled": bool(configured_style.get("filled", True)),
+                "label": configured_style.get("label", str(marker_category)),
+                "facecolor": configured_style.get("facecolor"),
+                "edgecolor": configured_style.get("edgecolor"),
+                "size": float(configured_style.get("size", point_size)),
+                "alpha": float(configured_style.get("alpha", point_alpha)),
+            }
+
+    point_color_column = "_point_color"
+    while point_color_column in plot_df.columns:
+        point_color_column = f"_{point_color_column}"
+    if subset_obs_key is None:
+        plot_df[point_color_column] = [default_point_color] * len(plot_df)
+    else:
+        plot_df[point_color_column] = [
+            (
+                "black"
+                if pd.isna(subset_value)
+                else subset_palette_map[subset_value]
+            )
+            for subset_value in plot_df[subset_obs_key]
+        ]
+
+    resolved_markers: list[Any] = []
+    resolved_filled: list[bool] = []
+    resolved_labels: list[Any] = []
+    resolved_facecolors: list[Any] = []
+    rendered_facecolors: list[Any] = []
+    resolved_edgecolors: list[Any] = []
+    resolved_sizes: list[float] = []
+    resolved_alphas: list[float] = []
+    for marker_category, point_color in zip(
+        plot_df["marker_category"],
+        plot_df[point_color_column],
+    ):
+        if marker_by_obs_key is None or pd.isna(marker_category):
+            style = {
+                "marker": "o",
+                "filled": True,
+                "label": pd.NA,
+                "facecolor": None,
+                "edgecolor": None,
+                "size": float(point_size),
+                "alpha": float(point_alpha),
+            }
+        else:
+            style = marker_style_by_category[marker_category]
+        facecolor = style["facecolor"]
+        edgecolor = style["edgecolor"]
+        resolved_markers.append(style["marker"])
+        resolved_filled.append(style["filled"])
+        resolved_labels.append(style["label"])
+        resolved_facecolors.append(facecolor)
+        rendered_facecolors.append(
+            "none" if not style["filled"] else (facecolor if facecolor is not None else point_color)
+        )
+        resolved_edgecolors.append(edgecolor if edgecolor is not None else point_color)
+        resolved_sizes.append(style["size"])
+        resolved_alphas.append(style["alpha"])
+    plot_df["resolved_marker"] = resolved_markers
+    plot_df["resolved_marker_filled"] = resolved_filled
+    plot_df["resolved_marker_label"] = resolved_labels
+    plot_df["resolved_marker_facecolor"] = resolved_facecolors
+    plot_df["rendered_marker_facecolor"] = rendered_facecolors
+    plot_df["resolved_marker_edgecolor"] = resolved_edgecolors
+    plot_df["resolved_marker_size"] = resolved_sizes
+    plot_df["resolved_marker_alpha"] = resolved_alphas
+
+    def _metric_value(metric_name: str, values: pd.Series) -> float:
+        clean_values = values.dropna()
+        if metric_name == "count":
+            return float(len(clean_values))
+        if clean_values.empty:
+            return float("nan")
+        if metric_name == "mean":
+            return float(clean_values.mean())
+        if metric_name == "median":
+            return float(clean_values.median())
+        if metric_name == "std":
+            return float(clean_values.std())
+        return float(clean_values.sem())
+
     def _metric_label(label: str, values: pd.Series) -> str:
         if not metric_names:
             return label
         metric_parts: list[str] = []
-        clean_values = values.dropna()
         for metric_name in metric_names:
+            metric_value = _metric_value(metric_name, values)
             if metric_name == "count":
-                metric_parts.append(f"count={len(clean_values)}")
-            elif clean_values.empty:
-                metric_parts.append(f"{metric_name}=nan")
-            elif metric_name == "mean":
-                metric_parts.append(f"mean={clean_values.mean():.3g}")
-            elif metric_name == "median":
-                metric_parts.append(f"median={clean_values.median():.3g}")
-            elif metric_name == "std":
-                metric_parts.append(f"std={clean_values.std():.3g}")
+                metric_parts.append(f"count={int(metric_value)}")
             else:
-                metric_parts.append(f"sem={clean_values.sem():.3g}")
+                metric_parts.append(f"{metric_name}={metric_value:.3g}")
         return f"{label} ({', '.join(metric_parts)})"
 
     def _has_negative_mean(values: pd.Series) -> bool:
         clean_values = values.dropna()
         return not clean_values.empty and clean_values.mean() < 0
 
+    if yscale == "log":
+        point_values = plot_df["value"]
+        invalid_points = point_values.notna() & (
+            ~np.isfinite(point_values) | (point_values <= 0)
+        )
+        if invalid_points.any():
+            raise ValueError("Rendered datapoint values must be positive and finite on a log y-axis.")
+
+        for panel_name in panel_names:
+            summary_panel_df = plot_df.loc[
+                (plot_df["panel"] == panel_name) & plot_df["summary_included"]
+            ]
+            rendered_metrics: list[tuple[str, pd.Series]] = []
+            if legend and show_all_data_metrics:
+                rendered_metrics.extend(
+                    (metric_name, summary_panel_df["value"])
+                    for metric_name in metric_names
+                )
+            if legend and subset_obs_key is not None:
+                for subset_value in subset_hue_order:
+                    summary_subset_values = summary_panel_df.loc[
+                        summary_panel_df[subset_obs_key] == subset_value,
+                        "value",
+                    ]
+                    rendered_metrics.extend(
+                        (metric_name, summary_subset_values)
+                        for metric_name in metric_names
+                    )
+            for annotation in normalized_annotations:
+                for x_label in x_orders_by_panel[panel_name]:
+                    annotation_values = summary_panel_df.loc[
+                        summary_panel_df["x_label"] == x_label,
+                        "value",
+                    ]
+                    if not annotation_values.empty:
+                        rendered_metrics.append(
+                            (annotation["metric"], annotation_values)
+                        )
+            for metric_name, metric_values in rendered_metrics:
+                metric_value = _metric_value(metric_name, metric_values)
+                if np.isfinite(metric_value) and metric_value <= 0:
+                    raise ValueError(
+                        f"Rendered summary metric '{metric_name}' must be positive "
+                        "on a log y-axis."
+                    )
+
     fig, axes_array = plt.subplots(plot_nrows, plot_ncols, figsize=figsize, squeeze=False, sharey=sharey)
     axes_flat = axes_array.ravel()
     axes_by_panel: dict[str, plt.Axes] = {}
+    legend_entries_by_panel: dict[str, list[tuple[Any, str]]] = {}
     negative_mean_legend_labels: set[str] = set()
 
     if title is not None:
@@ -611,11 +989,15 @@ def datapoints(
         ax = axes_flat[plot_idx]
         axes_by_panel[panel_name] = ax
         panel_df = plot_df.loc[plot_df["panel"] == panel_name].copy()
+        summary_panel_df = panel_df.loc[panel_df["summary_included"]]
         panel_x_order = x_orders_by_panel[panel_name]
         x_labels = list(panel_x_order)
         x_positions = [panel_x_order[x_label] for x_label in x_labels]
         grouped_values = [
-            panel_df.loc[panel_df["x_label"] == x_label, "value"].dropna().to_numpy()
+            summary_panel_df.loc[
+                summary_panel_df["x_label"] == x_label,
+                "value",
+            ].dropna().to_numpy()
             for x_label in x_labels
         ]
         nonempty_grouped = [
@@ -655,52 +1037,189 @@ def datapoints(
             for cap in boxplot_artists["caps"]:
                 cap.set_visible(False)
 
-        if subset_obs_key is None:
-            ax.scatter(
-                panel_df["_jittered_x"],
-                panel_df["value"],
-                color=default_point_color,
-                s=point_size,
-                alpha=point_alpha,
-                zorder=2,
-            )
+        if marker_by_obs_key is None:
+            if subset_obs_key is None:
+                ax.scatter(
+                    panel_df[jittered_x_column],
+                    panel_df["value"],
+                    color=default_point_color,
+                    s=point_size,
+                    alpha=point_alpha,
+                    zorder=2,
+                )
+            else:
+                for subset_value in subset_hue_order:
+                    subset_df = panel_df.loc[panel_df[subset_obs_key] == subset_value]
+                    if subset_df.empty:
+                        continue
+                    summary_subset_df = summary_panel_df.loc[
+                        summary_panel_df[subset_obs_key] == subset_value
+                    ]
+                    label = _metric_label(str(subset_value), summary_subset_df["value"])
+                    if "mean" in metric_names and _has_negative_mean(summary_subset_df["value"]):
+                        negative_mean_legend_labels.add(label)
+                    ax.scatter(
+                        subset_df[jittered_x_column],
+                        subset_df["value"],
+                        color=subset_palette_map[subset_value],
+                        s=point_size,
+                        alpha=point_alpha,
+                        label=label,
+                        zorder=2,
+                    )
+                missing_subset_df = panel_df.loc[panel_df[subset_obs_key].isna()]
+                if not missing_subset_df.empty:
+                    ax.scatter(
+                        missing_subset_df[jittered_x_column],
+                        missing_subset_df["value"],
+                        color="black",
+                        s=point_size,
+                        alpha=point_alpha,
+                        zorder=2,
+                    )
         else:
-            for subset_value in subset_hue_order:
-                subset_df = panel_df.loc[panel_df[subset_obs_key] == subset_value]
+            if subset_obs_key is None:
+                subset_frames = [(None, panel_df)]
+            else:
+                subset_frames = [
+                    (
+                        subset_value,
+                        panel_df.loc[panel_df[subset_obs_key] == subset_value],
+                    )
+                    for subset_value in subset_hue_order
+                ]
+                missing_subset_df = panel_df.loc[panel_df[subset_obs_key].isna()]
+                if not missing_subset_df.empty:
+                    subset_frames.append((pd.NA, missing_subset_df))
+            for subset_value, subset_df in subset_frames:
                 if subset_df.empty:
                     continue
-                label = _metric_label(str(subset_value), subset_df["value"])
-                if "mean" in metric_names and _has_negative_mean(subset_df["value"]):
-                    negative_mean_legend_labels.add(label)
-                ax.scatter(
-                    subset_df["_jittered_x"],
-                    subset_df["value"],
-                    color=(
-                        subset_palette_map.get(subset_value)
-                        if subset_palette_map is not None
-                        else None
-                    ),
-                    s=point_size,
-                    alpha=point_alpha,
-                    label=label,
-                    zorder=2,
-                )
-            missing_subset_df = panel_df.loc[panel_df[subset_obs_key].isna()]
-            if not missing_subset_df.empty:
-                ax.scatter(
-                    missing_subset_df["_jittered_x"],
-                    missing_subset_df["value"],
-                    color="black",
-                    s=point_size,
-                    alpha=point_alpha,
-                    zorder=2,
-                )
+                subset_label: str | None = None
+                if subset_obs_key is not None and not pd.isna(subset_value):
+                    summary_subset_df = summary_panel_df.loc[
+                        summary_panel_df[subset_obs_key] == subset_value
+                    ]
+                    subset_label = _metric_label(
+                        str(subset_value),
+                        summary_subset_df["value"],
+                    )
+                    if "mean" in metric_names and _has_negative_mean(summary_subset_df["value"]):
+                        negative_mean_legend_labels.add(subset_label)
+                label_available = subset_label is not None
+                for marker_category in marker_category_order:
+                    marker_df = subset_df.loc[
+                        subset_df["marker_category"] == marker_category
+                    ]
+                    if marker_df.empty:
+                        continue
+                    first_row = marker_df.iloc[0]
+                    ax.scatter(
+                        marker_df[jittered_x_column],
+                        marker_df["value"],
+                        marker=first_row["resolved_marker"],
+                        facecolors=first_row["rendered_marker_facecolor"],
+                        edgecolors=first_row["resolved_marker_edgecolor"],
+                        s=first_row["resolved_marker_size"],
+                        alpha=first_row["resolved_marker_alpha"],
+                        label=subset_label if label_available else None,
+                        zorder=2,
+                    )
+                    label_available = False
+                missing_marker_df = subset_df.loc[subset_df["marker_category"].isna()]
+                if not missing_marker_df.empty:
+                    ax.scatter(
+                        missing_marker_df[jittered_x_column],
+                        missing_marker_df["value"],
+                        marker="o",
+                        facecolors=missing_marker_df.iloc[0]["rendered_marker_facecolor"],
+                        edgecolors=missing_marker_df.iloc[0]["resolved_marker_edgecolor"],
+                        s=point_size,
+                        alpha=point_alpha,
+                        label=subset_label if label_available else None,
+                        zorder=2,
+                    )
 
-        all_data_label = _metric_label("All data", panel_df["value"])
+        all_data_label = _metric_label("All data", summary_panel_df["value"])
         if legend and show_all_data_metrics and metric_names:
-            if "mean" in metric_names and _has_negative_mean(panel_df["value"]):
+            if "mean" in metric_names and _has_negative_mean(summary_panel_df["value"]):
                 negative_mean_legend_labels.add(all_data_label)
             ax.scatter([], [], color="black", s=point_size, alpha=point_alpha, label=all_data_label)
+
+        existing_handles, existing_labels = ax.get_legend_handles_labels()
+        legend_entries: list[tuple[Any, str]] = list(
+            zip(existing_handles, existing_labels)
+        )
+
+        if marker_by_obs_key is not None and append_marker_handles_to_legend:
+            for marker_category in marker_category_order:
+                style = marker_style_by_category[marker_category]
+                marker_facecolor = (
+                    "none"
+                    if not style["filled"]
+                    else (
+                        style["facecolor"]
+                        if style["facecolor"] is not None
+                        else "black"
+                    )
+                )
+                marker_edgecolor = style["edgecolor"] or "black"
+                marker_handle = _Line2D(
+                    [],
+                    [],
+                    linestyle="None",
+                    marker=style["marker"],
+                    markerfacecolor=marker_facecolor,
+                    markeredgecolor=marker_edgecolor,
+                    markersize=math.sqrt(style["size"]),
+                    alpha=style["alpha"],
+                )
+                legend_entries.append((marker_handle, style["label"]))
+
+        for annotation_index, annotation in enumerate(normalized_annotations):
+            same_position_index = sum(
+                previous["position"] == annotation["position"]
+                for previous in normalized_annotations[:annotation_index]
+            )
+            for x_label, x_position in zip(x_labels, x_positions):
+                annotation_df = summary_panel_df.loc[
+                    summary_panel_df["x_label"] == x_label
+                ]
+                if annotation_df.empty:
+                    continue
+                annotation_value = _metric_value(
+                    annotation["metric"],
+                    annotation_df["value"],
+                )
+                if not np.isfinite(annotation_value):
+                    continue
+                annotation_text = annotation["format"].format(
+                    metric=annotation["metric"],
+                    label=annotation["label"],
+                    value=annotation_value,
+                    count=int(annotation_df["value"].notna().sum()),
+                    x_label=x_label,
+                )
+                text_kwargs: dict[str, Any] = {
+                    "ha": "center",
+                    "va": "bottom",
+                    "clip_on": False,
+                }
+                if annotation["position"] == "metric":
+                    annotation_y = annotation_value
+                else:
+                    text_kwargs["transform"] = ax.get_xaxis_transform()
+                    if annotation["position"] == "axes_top":
+                        annotation_y = 0.98 - (0.06 * same_position_index)
+                        text_kwargs["va"] = "top"
+                    else:
+                        annotation_y = 0.02 + (0.06 * same_position_index)
+                text_kwargs.update(annotation["text_kwargs"])
+                ax.text(
+                    x_position,
+                    annotation_y,
+                    annotation_text,
+                    **text_kwargs,
+                )
 
         ax.set_title(panel_name)
         ax.set_xticks(x_positions)
@@ -710,6 +1229,7 @@ def datapoints(
             fontsize=axis_label_fontsize,
         )
         ax.set_ylabel(ylabel or "value", fontsize=axis_label_fontsize)
+        ax.set_yscale(yscale)
         if tick_label_fontsize is not None:
             ax.tick_params(axis="both", labelsize=tick_label_fontsize)
         if add_zero_line:
@@ -721,25 +1241,48 @@ def datapoints(
                 label="_nolegend_",
                 zorder=0.5,
             )
+        reference_handles = _draw_reference_lines(
+            ax,
+            normalized_reference_lines,
+            axis="y",
+            param_name="y_reference_lines",
+            skip_values=(0.0,) if add_zero_line else (),
+        )
+        if append_reference_handles_to_legend:
+            legend_entries.extend(
+                (handle, handle.get_label())
+                for handle in reference_handles
+                if handle.get_label() and handle.get_label() != "_nolegend_"
+            )
         if ylims_tuple is not None:
             ax.set_ylim(ylims_tuple)
-        if legend and legend_scope == "axis":
-            handles, labels = ax.get_legend_handles_labels()
-            if handles:
-                legend_kwargs: dict[str, Any] = {"fontsize": legend_fontsize}
-                if subset_obs_key is not None:
-                    legend_kwargs["title"] = subset_obs_key
-                legend_kwargs.update(legend_position_kwargs)
-                ax.legend(handles, labels, **legend_kwargs)
+
+        unique_legend_entries: list[tuple[Any, str]] = []
+        seen_legend_labels: set[str] = set()
+        for handle, label in legend_entries:
+            if not label or label == "_nolegend_" or label in seen_legend_labels:
+                continue
+            seen_legend_labels.add(label)
+            unique_legend_entries.append((handle, label))
+        legend_entries_by_panel[panel_name] = unique_legend_entries
+        if legend and legend_scope == "axis" and unique_legend_entries:
+            legend_kwargs: dict[str, Any] = {"fontsize": legend_fontsize}
+            if subset_obs_key is not None:
+                legend_kwargs["title"] = subset_obs_key
+            legend_kwargs.update(legend_position_kwargs)
+            ax.legend(
+                [handle for handle, _label in unique_legend_entries],
+                [label for _handle, label in unique_legend_entries],
+                **legend_kwargs,
+            )
 
     for ax in axes_flat[len(panel_names):]:
         ax.set_visible(False)
 
     if legend and legend_scope == "figure":
         handles_by_label: dict[str, Any] = {}
-        for ax in axes_by_panel.values():
-            handles, labels = ax.get_legend_handles_labels()
-            for handle, label in zip(handles, labels):
+        for panel_name in panel_names:
+            for handle, label in legend_entries_by_panel[panel_name]:
                 if label not in handles_by_label:
                     handles_by_label[label] = handle
         if handles_by_label:
@@ -771,7 +1314,7 @@ def datapoints(
     else:
         plt.close(fig)
 
-    plot_df = plot_df.drop(columns=["_jittered_x"])
+    plot_df = plot_df.drop(columns=[jittered_x_column, point_color_column])
     return fig, axes_by_panel, plot_df
 
 

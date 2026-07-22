@@ -3,6 +3,7 @@
 import logging
 import math
 from collections.abc import Mapping, Sequence
+from string import Formatter as _Formatter
 from typing import Any, Literal
 
 import anndata
@@ -12,7 +13,7 @@ import pandas as pd
 import seaborn as sns
 
 from . import palettes
-
+from ._utils import _draw_reference_lines, _normalize_reference_lines
 
 LOGGER = logging.getLogger(__name__)
 
@@ -33,6 +34,100 @@ def _apply_isin_filters(
             raise ValueError(f"Column '{column}' from {param_name} not found in {frame_label}.")
         mask &= metadata_df[column].isin(allowed_values)
     return mask
+
+
+_LINE_STYLE_KEYS = {"color", "linestyle", "linewidth", "alpha", "zorder"}
+_SUBSET_METRICS = {"count", "mean", "median"}
+
+
+def _normalize_line_style(
+    style: Mapping[str, Any] | None,
+    *,
+    defaults: Mapping[str, Any],
+    param_name: str,
+) -> dict[str, Any]:
+    if style is None:
+        return dict(defaults)
+    if not isinstance(style, Mapping):
+        raise ValueError(f"'{param_name}' must be a mapping.")
+    unsupported = sorted(set(style) - _LINE_STYLE_KEYS)
+    if unsupported:
+        raise ValueError(f"Unsupported key(s) in '{param_name}': {unsupported}.")
+    resolved = dict(defaults)
+    resolved.update(style)
+    return resolved
+
+
+def _normalize_subset_metrics(
+    metrics: Sequence[Literal["count", "mean", "median"]] | None,
+) -> list[str] | None:
+    if metrics is None:
+        return None
+    if isinstance(metrics, (str, bytes)):
+        raise ValueError("'subset_legend_metrics' must be a sequence of metric names.")
+    resolved = list(metrics)
+    unsupported = [metric for metric in resolved if metric not in _SUBSET_METRICS]
+    if unsupported:
+        raise ValueError(
+            "'subset_legend_metrics' supports only 'count', 'mean', and 'median'."
+        )
+    if len(resolved) != len(set(resolved)):
+        raise ValueError("'subset_legend_metrics' must not contain duplicates.")
+    return resolved
+
+
+def _validate_subset_label_format(label_format: str | None) -> None:
+    if label_format is None:
+        return
+    if not isinstance(label_format, str):
+        raise ValueError("'subset_label_format' must be a string.")
+    fields = []
+    pending_formats = [label_format]
+    try:
+        while pending_formats:
+            for _, field_name, format_spec, _ in _Formatter().parse(
+                pending_formats.pop()
+            ):
+                if field_name is not None:
+                    fields.append(field_name)
+                if format_spec:
+                    pending_formats.append(format_spec)
+    except ValueError as exc:
+        raise ValueError("Invalid 'subset_label_format'.") from exc
+    unsupported = sorted(set(fields) - {"group", "count", "mean", "median"})
+    if unsupported:
+        raise ValueError(
+            "'subset_label_format' contains unsupported field(s): "
+            f"{unsupported}."
+        )
+
+
+def _subset_metrics(values: pd.Series) -> dict[str, Any]:
+    finite = pd.to_numeric(values, errors="coerce")
+    finite = finite.loc[np.isfinite(finite.to_numpy(dtype=float))]
+    return {
+        "count": int(len(finite)),
+        "mean": float(finite.mean()) if not finite.empty else float("nan"),
+        "median": float(finite.median()) if not finite.empty else float("nan"),
+    }
+
+
+def _format_subset_label(
+    group: Any,
+    metrics: Mapping[str, Any],
+    requested_metrics: Sequence[str] | None,
+    label_format: str | None,
+) -> str:
+    if label_format is not None:
+        return label_format.format(group=group, **metrics)
+    if requested_metrics is None:
+        return str(group)
+    formatted = []
+    for metric in requested_metrics:
+        value = metrics[metric]
+        rendered = str(value) if metric == "count" else f"{value:.3g}"
+        formatted.append(f"{metric}={rendered}")
+    return str(group) if not formatted else f"{group} ({', '.join(formatted)})"
 
 
 def adata_histograms(
@@ -59,8 +154,14 @@ def adata_histograms(
     filter_obs_by_isin_lists: Mapping[str, Sequence[Any]] | None = None,
     subset_obs_key: str | None = None,
     subset_order: Sequence[Any] | None = None,
+    subset_min_count: int | None = None,
+    subset_small_group_policy: Literal["exclude", "error", "keep"] = "exclude",
+    subset_legend_metrics: Sequence[
+        Literal["count", "mean", "median"]
+    ] | None = None,
+    subset_label_format: str | None = None,
     palette: Sequence[Any] | str | None = palettes.tol_colors,
-    subset_palette: Sequence[Any] | str | None = None,
+    subset_palette: Mapping[Any, Any] | Sequence[Any] | str | None = None,
     show_all_obs_hist: bool = True,
     all_obs_color: Any = "0.7",
     all_obs_alpha: float = 0.20,
@@ -72,6 +173,9 @@ def adata_histograms(
     add_mean_line: bool = True,
     add_mean_to_legend: bool = True,
     highlight_negative_mean_legend: bool = True,
+    zero_line_style: Mapping[str, Any] | None = None,
+    mean_line_style: Mapping[str, Any] | None = None,
+    x_reference_lines: Sequence[Mapping[str, Any]] | None = None,
     bins: int | str | Sequence[float] = "auto",
     binwidth: float | None = None,
     binrange: tuple[float, float] | None = None,
@@ -80,6 +184,9 @@ def adata_histograms(
     element: Literal["bars", "step", "poly"] | None = None,
     fill: bool | None = True,
     kde: bool = True,
+    kde_bw_method: str | float | None = None,
+    kde_grid_points: int | None = None,
+    kde_clip: tuple[float, float] | None = None,
     common_bins: bool = True,
     common_norm: bool = False,
     discrete: bool | None = None,
@@ -131,6 +238,64 @@ def adata_histograms(
             raise ValueError("'collapse_func=\"select_max_ref_value\"' requires collapse_mode=\"aggregate\".")
     if ncols < 1:
         raise ValueError("'ncols' must be at least 1.")
+    if subset_min_count is not None:
+        if isinstance(subset_min_count, (bool, np.bool_)) or not isinstance(
+            subset_min_count, (int, np.integer)
+        ):
+            raise ValueError("'subset_min_count' must be a nonnegative integer or None.")
+        if subset_min_count < 0:
+            raise ValueError("'subset_min_count' must be a nonnegative integer or None.")
+    if subset_small_group_policy not in {"exclude", "error", "keep"}:
+        raise ValueError(
+            "'subset_small_group_policy' must be 'exclude', 'error', or 'keep'."
+        )
+    subset_metrics_to_use = _normalize_subset_metrics(subset_legend_metrics)
+    _validate_subset_label_format(subset_label_format)
+    zero_style = _normalize_line_style(
+        zero_line_style,
+        defaults={"color": "red", "linestyle": ":", "linewidth": 1.5},
+        param_name="zero_line_style",
+    )
+    mean_style = _normalize_line_style(
+        mean_line_style,
+        defaults={"linestyle": "--", "linewidth": 1.5},
+        param_name="mean_line_style",
+    )
+    normalized_x_reference_lines = _normalize_reference_lines(
+        x_reference_lines,
+        param_name="x_reference_lines",
+    )
+    if isinstance(kde_bw_method, (bool, np.bool_)) or (
+        kde_bw_method is not None
+        and not isinstance(kde_bw_method, (str, int, float, np.integer, np.floating))
+    ):
+        raise ValueError("'kde_bw_method' must be a string, positive number, or None.")
+    if isinstance(kde_bw_method, (int, float, np.integer, np.floating)) and (
+        not np.isfinite(kde_bw_method) or kde_bw_method <= 0
+    ):
+        raise ValueError("'kde_bw_method' must be positive and finite.")
+    if kde_grid_points is not None and (
+        isinstance(kde_grid_points, (bool, np.bool_))
+        or not isinstance(kde_grid_points, (int, np.integer))
+        or kde_grid_points < 2
+    ):
+        raise ValueError("'kde_grid_points' must be an integer of at least 2.")
+    if kde_clip is None:
+        kde_clip_to_use = None
+    else:
+        if isinstance(kde_clip, (str, bytes)) or len(kde_clip) != 2:
+            raise ValueError("'kde_clip' must contain two finite increasing values.")
+        try:
+            kde_clip_to_use = (float(kde_clip[0]), float(kde_clip[1]))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "'kde_clip' must contain two finite increasing values."
+            ) from exc
+        if (
+            not np.isfinite(kde_clip_to_use).all()
+            or kde_clip_to_use[0] >= kde_clip_to_use[1]
+        ):
+            raise ValueError("'kde_clip' must contain two finite increasing values.")
     if xlims is not None:
         xlims_tuple = tuple(xlims)
         if len(xlims_tuple) != 2:
@@ -312,6 +477,15 @@ def adata_histograms(
         "common_norm": common_norm,
         "cumulative": cumulative,
     }
+    kde_kws: dict[str, Any] = {}
+    if kde_bw_method is not None:
+        kde_kws["bw_method"] = kde_bw_method
+    if kde_grid_points is not None:
+        kde_kws["gridsize"] = int(kde_grid_points)
+    if kde_clip_to_use is not None:
+        kde_kws["clip"] = kde_clip_to_use
+    if kde_kws:
+        hist_kwargs["kde_kws"] = kde_kws
     if binwidth is not None:
         hist_kwargs["binwidth"] = binwidth
     if binrange is not None:
@@ -347,7 +521,7 @@ def adata_histograms(
     subset_hue_order: list[Any] = []
     subset_palette_map: dict[Any, Any] | str | None = None
     if has_obs_groups:
-        subset_palette_to_use = subset_palette or palette
+        subset_palette_to_use = subset_palette if subset_palette is not None else palette
         subset_values = filtered_obs_df[subset_obs_key].dropna()
         if subset_order is not None:
             observed_subset_values = set(subset_values)
@@ -367,11 +541,25 @@ def adata_histograms(
 
         if subset_palette_to_use is None:
             subset_palette_map = None
+        elif isinstance(subset_palette_to_use, Mapping):
+            missing_palette_values = [
+                value for value in subset_hue_order if value not in subset_palette_to_use
+            ]
+            if missing_palette_values:
+                raise ValueError(
+                    "'subset_palette' has no color for: "
+                    f"{missing_palette_values}."
+                )
+            subset_palette_map = {
+                value: subset_palette_to_use[value] for value in subset_hue_order
+            }
         elif isinstance(subset_palette_to_use, str):
             subset_colors = sns.color_palette(subset_palette_to_use, n_colors=max(len(subset_hue_order), 1))
             subset_palette_map = dict(zip(subset_hue_order, subset_colors))
         else:
             subset_colors = list(subset_palette_to_use)
+            if not subset_colors and subset_hue_order:
+                raise ValueError("'subset_palette' must not be empty.")
             subset_palette_map = {
                 subset_value: subset_colors[idx % len(subset_colors)]
                 for idx, subset_value in enumerate(subset_hue_order)
@@ -517,9 +705,47 @@ def adata_histograms(
         if dropzeros:
             plot_df = plot_df.loc[plot_df["value"] != 0]
 
-        plot_values = plot_df["value"].dropna()
+        numeric_plot_values = pd.to_numeric(plot_df["value"], errors="coerce")
+        finite_value_mask = pd.Series(
+            np.isfinite(numeric_plot_values.to_numpy(dtype=float)),
+            index=plot_df.index,
+        )
+        finite_plot_df = plot_df.loc[finite_value_mask].copy()
+        finite_plot_df["value"] = numeric_plot_values.loc[finite_value_mask]
+        plot_values = finite_plot_df["value"]
         plot_supports_kde = len(plot_values) > 1 and plot_values.nunique() > 1
-        negative_mean_legend_labels: set[str] = set()
+        negative_mean_legend_positions: set[int] = set()
+        all_data_mean_is_negative = False
+        drawn_line_values: set[float] = set()
+
+        panel_subset_order = list(subset_hue_order)
+        panel_subset_metrics: dict[Any, dict[str, Any]] = {}
+        if has_obs_groups:
+            for subset_value in subset_hue_order:
+                panel_subset_metrics[subset_value] = _subset_metrics(
+                    finite_plot_df.loc[
+                        finite_plot_df[subset_obs_key] == subset_value,
+                        "value",
+                    ]
+                )
+            if subset_min_count is not None and subset_small_group_policy != "keep":
+                small_groups = [
+                    subset_value
+                    for subset_value in subset_hue_order
+                    if panel_subset_metrics[subset_value]["count"] < subset_min_count
+                ]
+                if small_groups and subset_small_group_policy == "error":
+                    counts = {
+                        value: panel_subset_metrics[value]["count"] for value in small_groups
+                    }
+                    raise ValueError(
+                        f"Panel '{var_name}' has subgroup counts below "
+                        f"subset_min_count={subset_min_count}: {counts}."
+                    )
+                if subset_small_group_policy == "exclude":
+                    panel_subset_order = [
+                        value for value in subset_hue_order if value not in small_groups
+                    ]
 
         all_data_mean_label = None
         all_data_mean_handle = None
@@ -528,7 +754,7 @@ def adata_histograms(
             if not plot_supports_kde:
                 all_obs_hist_kwargs["kde"] = False
             sns.histplot(
-                data=plot_df,
+                data=finite_plot_df,
                 x="value",
                 color=all_obs_color,
                 alpha=all_obs_alpha,
@@ -539,15 +765,15 @@ def adata_histograms(
             if add_mean_line:
                 all_data_mean = plot_values.mean()
                 all_data_mean_label = f"All data (mean={all_data_mean:.3g})"
-                if all_data_mean < 0:
-                    negative_mean_legend_labels.add(all_data_mean_label)
+                all_data_mean_is_negative = add_mean_to_legend and all_data_mean < 0
+                all_data_mean_kwargs = dict(mean_style)
+                all_data_mean_kwargs.setdefault("color", all_obs_color)
+                all_data_mean_kwargs["label"] = "_nolegend_"
                 all_data_mean_handle = axes.axvline(
                     all_data_mean,
-                    color=all_obs_color,
-                    linestyle="--",
-                    linewidth=1.5,
-                    label="_nolegend_",
+                    **all_data_mean_kwargs,
                 )
+                drawn_line_values.add(float(all_data_mean))
 
         plot_hist_kwargs = dict(hist_kwargs)
         if alpha_to_use is not None:
@@ -556,12 +782,32 @@ def adata_histograms(
             plot_hist_kwargs["kde"] = False
 
         if has_obs_groups:
-            grouped_plot_df = plot_df.dropna(subset=[subset_obs_key])
-            grouped_values = grouped_plot_df["value"].dropna()
-            if len(grouped_values) <= 1 or grouped_values.nunique() <= 1:
+            grouped_plot_df = finite_plot_df.dropna(subset=[subset_obs_key])
+            grouped_plot_df = grouped_plot_df.loc[
+                grouped_plot_df[subset_obs_key].isin(panel_subset_order)
+            ]
+            grouped_values = pd.to_numeric(
+                grouped_plot_df["value"], errors="coerce"
+            ).to_numpy(dtype=float)
+            grouped_values = grouped_values[np.isfinite(grouped_values)]
+            if len(grouped_values) <= 1 or np.unique(grouped_values).size <= 1:
                 plot_hist_kwargs["kde"] = False
-            subset_mean_labels: dict[str, str] = {}
-            if grouped_plot_df.empty or not subset_hue_order:
+            subset_legend_labels = [str(value) for value in panel_subset_order]
+            subset_negative_means = [False] * len(panel_subset_order)
+            use_custom_subset_labels = (
+                subset_metrics_to_use is not None or subset_label_format is not None
+            )
+            if use_custom_subset_labels:
+                subset_legend_labels = [
+                    _format_subset_label(
+                        subset_value,
+                        panel_subset_metrics[subset_value],
+                        subset_metrics_to_use,
+                        subset_label_format,
+                    )
+                    for subset_value in panel_subset_order
+                ]
+            if grouped_plot_df.empty or not panel_subset_order:
                 if all_data_mean_handle is None:
                     axes.text(
                         0.5,
@@ -576,16 +822,16 @@ def adata_histograms(
                     data=grouped_plot_df,
                     x="value",
                     hue=subset_obs_key,
-                    hue_order=subset_hue_order,
+                    hue_order=panel_subset_order,
                     palette=subset_palette_map,
                     ax=axes,
                     legend=legend,
                     **plot_hist_kwargs,
                 )
                 if add_mean_line:
-                    for subset_value in subset_hue_order:
-                        subgroup_values = grouped_plot_df.loc[
-                            grouped_plot_df[subset_obs_key] == subset_value,
+                    for subset_index, subset_value in enumerate(panel_subset_order):
+                        subgroup_values = finite_plot_df.loc[
+                            finite_plot_df[subset_obs_key] == subset_value,
                             "value",
                         ].dropna()
                         if subgroup_values.empty:
@@ -595,27 +841,46 @@ def adata_histograms(
                             mean_color = subset_palette_map.get(subset_value, "black")
                         else:
                             mean_color = "black"
+                        subgroup_mean_kwargs = dict(mean_style)
+                        subgroup_mean_kwargs.setdefault("color", mean_color)
+                        subgroup_mean_kwargs["label"] = "_nolegend_"
                         axes.axvline(
                             subgroup_mean,
-                            color=mean_color,
-                            linestyle="--",
-                            linewidth=1.5,
-                            label="_nolegend_",
+                            **subgroup_mean_kwargs,
                         )
-                        subset_mean_labels[str(subset_value)] = (
-                            f"{subset_value} (mean={subgroup_mean:.3g})"
-                        )
-                        if subgroup_mean < 0:
-                            negative_mean_legend_labels.add(subset_mean_labels[str(subset_value)])
-            if add_mean_line and add_mean_to_legend and legend:
+                        drawn_line_values.add(float(subgroup_mean))
+                        if not use_custom_subset_labels:
+                            subset_legend_labels[subset_index] = (
+                                f"{subset_value} (mean={subgroup_mean:.3g})"
+                            )
+                        if add_mean_to_legend:
+                            subset_negative_means[subset_index] = subgroup_mean < 0
+            if legend and (
+                (add_mean_line and add_mean_to_legend) or use_custom_subset_labels
+            ):
                 legend_obj = axes.get_legend()
                 if legend_obj is not None:
                     legend_handles = list(legend_obj.legend_handles)
-                    legend_labels = []
-                    for legend_text in legend_obj.get_texts():
-                        legend_label = legend_text.get_text()
-                        legend_labels.append(subset_mean_labels.get(legend_label, legend_label))
-                    if all_data_mean_handle is not None and all_data_mean_label is not None:
+                    legend_labels = [
+                        subset_legend_labels[index]
+                        if index < len(subset_legend_labels)
+                        else legend_text.get_text()
+                        for index, legend_text in enumerate(legend_obj.get_texts())
+                    ]
+                    include_all_data_mean = (
+                        add_mean_to_legend
+                        and all_data_mean_handle is not None
+                        and all_data_mean_label is not None
+                    )
+                    subset_legend_offset = int(include_all_data_mean)
+                    negative_mean_legend_positions.update(
+                        subset_legend_offset + index
+                        for index, is_negative in enumerate(subset_negative_means)
+                        if is_negative and index < len(legend_labels)
+                    )
+                    if include_all_data_mean:
+                        if all_data_mean_is_negative:
+                            negative_mean_legend_positions.add(0)
                         legend_handles = [all_data_mean_handle] + legend_handles
                         legend_labels = [all_data_mean_label] + legend_labels
                         legend_obj.remove()
@@ -638,7 +903,13 @@ def adata_histograms(
                         else:
                             for legend_text, legend_label in zip(legend_obj.get_texts(), legend_labels):
                                 legend_text.set_text(legend_label)
-                elif all_data_mean_handle is not None and all_data_mean_label is not None:
+                elif (
+                    add_mean_to_legend
+                    and all_data_mean_handle is not None
+                    and all_data_mean_label is not None
+                ):
+                    if all_data_mean_is_negative:
+                        negative_mean_legend_positions.add(0)
                     axes.legend(
                         handles=[all_data_mean_handle],
                         labels=[all_data_mean_label],
@@ -685,31 +956,68 @@ def adata_histograms(
                         else "_nolegend_"
                     )
                     if mean_value < 0 and mean_line_label != "_nolegend_":
-                        negative_mean_legend_labels.add(mean_line_label)
-                    axes.axvline(
-                        mean_value,
-                        color=color if color is not None else "black",
-                        linestyle="--",
-                        linewidth=1.5,
-                        label=mean_line_label,
+                        negative_mean_legend_positions.add(0)
+                    mean_kwargs = dict(mean_style)
+                    mean_kwargs.setdefault(
+                        "color",
+                        color if color is not None else "black",
                     )
+                    mean_kwargs["label"] = mean_line_label
+                    axes.axvline(mean_value, **mean_kwargs)
+                    drawn_line_values.add(float(mean_value))
                     if add_mean_to_legend and legend:
                         axes.legend(**legend_position_kwargs)
 
         if add_zero_line:
-            axes.axvline(
-                0,
-                color="red",
-                linestyle=":",
-                linewidth=1.5,
-                label="_nolegend_",
+            zero_kwargs = dict(zero_style)
+            zero_kwargs["label"] = "_nolegend_"
+            axes.axvline(0, **zero_kwargs)
+            drawn_line_values.add(0.0)
+
+        panel_reference_lines: list[dict[str, Any]] = []
+        seen_reference_values = set(drawn_line_values)
+        for reference_line in normalized_x_reference_lines:
+            reference_value = float(reference_line["value"])
+            if reference_value in seen_reference_values:
+                continue
+            panel_reference_lines.append(reference_line)
+            seen_reference_values.add(reference_value)
+        reference_handles = _draw_reference_lines(
+            axes,
+            panel_reference_lines,
+            axis="x",
+            param_name="x_reference_lines",
+        )
+        labeled_reference_handles = [
+            handle
+            for handle in reference_handles
+            if handle.get_label() and not str(handle.get_label()).startswith("_")
+        ]
+        if legend and labeled_reference_handles:
+            legend_obj = axes.get_legend()
+            legend_handles: list[Any] = []
+            legend_labels: list[str] = []
+            legend_title = None
+            if legend_obj is not None:
+                legend_handles.extend(legend_obj.legend_handles)
+                legend_labels.extend(text.get_text() for text in legend_obj.get_texts())
+                legend_title = legend_obj.get_title().get_text() or None
+                legend_obj.remove()
+            for handle in labeled_reference_handles:
+                legend_handles.append(handle)
+                legend_labels.append(str(handle.get_label()))
+            axes.legend(
+                handles=legend_handles,
+                labels=legend_labels,
+                title=legend_title,
+                **legend_position_kwargs,
             )
 
-        if highlight_negative_mean_legend and negative_mean_legend_labels:
+        if highlight_negative_mean_legend and negative_mean_legend_positions:
             legend_obj = axes.get_legend()
             if legend_obj is not None:
-                for legend_text in legend_obj.get_texts():
-                    if legend_text.get_text() in negative_mean_legend_labels:
+                for index, legend_text in enumerate(legend_obj.get_texts()):
+                    if index in negative_mean_legend_positions:
                         legend_text.set_color("red")
                         legend_text.set_fontweight("bold")
 
