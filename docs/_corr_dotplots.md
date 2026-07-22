@@ -7,7 +7,7 @@ This is the most test-backed plotting module in the package. Direct regression t
 ## Main entry points
 
 - `corr_dotplot`
-- `corr_dotplot_dev`
+- `corr_dotplot_dev` (deprecated compatibility wrapper)
 - `spearman_cor_dotplot`
 - `spearman_cor_dotplot_2`
 - `plot_rank_scatter`
@@ -19,126 +19,12 @@ This is the most test-backed plotting module in the package. Direct regression t
 
 ## `corr_dotplot`
 
-`corr_dotplot(...)` is the primary public API.
+`corr_dotplot(...)` is the primary public API for correlation scatter plots, subgroup fit lines, and optional x/y marginal histograms.
 
 ### Full signature
 
 ```python
 def corr_dotplot(
-    df: pd.DataFrame | None = None,
-    *,
-    adata: anndata.AnnData | None = None,
-    layer: str | None = None,
-    x_df: Any | None = None,
-    var_df: pd.DataFrame | None = None,
-    obs_df: pd.DataFrame | None = None,
-    column_key_x: str | None = None,
-    column_key_y: str | None = None,
-    hue: str | None = None,
-    subset_key: str | None = None,
-    figsize: tuple[float, float] = (20, 10),
-    xlabel: str | None = None,
-    ylabel: str | None = None,
-    axes_title: str | None = None,
-    axes_lines: bool = True,
-    show_y_intercept: bool = True,
-    palette: Sequence[Any] | str | None = palettes.godsnot_102,
-    subset_palette: Sequence[Any] | str | None = None,
-    dot_size: float = 200,
-    title_fontsize: int = 20,
-    stats_fontsize: int | None = None,
-    axes_title_y: float | None = None,
-    axis_label_fontsize: int = 20,
-    tick_label_fontsize: int | None = None,
-    legend_fontsize: int | None = None,
-    fit_legend_bbox_to_anchor: Sequence[float] | None = None,
-    hue_legend_bbox_to_anchor: Sequence[float] | None = None,
-    show_all_obs_fit: bool = False,
-    show_fit_legend: bool = True,
-    show_hue_legend: bool = True,
-    show_stats_text: bool = True,
-    nas2zeros: bool = False,
-    dropna: bool = False,
-    dropzeros: bool = False,
-    method: Literal["spearman", "pearson"] = "pearson",
-    show: bool = True,
-):
-```
-
-```python
-import adata_science_tools as adtl
-
-fig, ax, fit, corr_value, corr_pvalue = adtl.corr_dotplot(
-    adata=adata,
-    layer="log1p",
-    column_key_x="geneA",
-    column_key_y="geneB",
-    hue="Treatment",
-    subset_key="Batch",
-    method="spearman",
-    show=False,
-)
-```
-
-### Supported input modes
-
-- `df=...` with preassembled plotting columns
-- `adata=...` with optional `layer`
-- `x_df` plus `obs_df`, with optional `var_df` when feature columns need names
-
-When `df` is provided, the `AnnData`-derived path is ignored.
-
-### Required arguments
-
-- `column_key_x`
-- `column_key_y`
-
-These must resolve to numeric columns after the final plotting table is assembled.
-
-### Return value
-
-`corr_dotplot(...)` returns:
-
-- `fig`
-- `axes`
-- `fit`
-- `corr_value`
-- `corr_pvalue`
-
-The returned `fit`, `corr_value`, and `corr_pvalue` always describe the overall filtered observations, even when `subset_key` is used to draw subgroup fits.
-
-### Important behavior
-
-- `method` must be `"pearson"` or `"spearman"`.
-- `nas2zeros`, `dropna`, and `dropzeros` control x/y cleanup before statistics.
-- `palette` colors `hue`-driven scatter points, while `subset_palette` colors `subset_key`-driven subgroup fit lines.
-- `subset_key` draws one fit line per subgroup when fitting succeeds.
-- `subset_key` order follows categorical order for categorical columns, ascending sorted order for non-categorical numeric columns, and first-seen order for other non-categorical columns.
-- `show_all_obs_fit=True` adds the overall fit line in subset mode.
-- `show_fit_legend` and `show_hue_legend` can be toggled independently.
-- `fit_legend_bbox_to_anchor` and `hue_legend_bbox_to_anchor` accept either 2-item or 4-item sequences.
-- `show=False` closes the figure before returning so notebook backends do not auto-render it.
-- There is no built-in `savefig` argument; callers save the returned figure themselves.
-
-### Tested behaviors
-
-The current regression tests lock in several details:
-
-- Observation columns that collide with feature names are renamed to `<name>_obs` before concatenation.
-- Public styling kwargs such as `dot_size`, `title_fontsize`, `stats_fontsize`, `axes_title_y`, `axis_label_fontsize`, `tick_label_fontsize`, and `legend_fontsize` affect the final figure.
-- `show_stats_text=False` suppresses the footer text without suppressing the returned statistics.
-- Non-categorical `subset_key` columns are supported, including numeric columns whose subgroup order matches seaborn's numeric hue order.
-- Subsets that cannot produce a fit are reported as `fit unavailable` in the footer and omitted from the fit legend.
-- The fit legend title changes with method, for example `batch fit\nPearson_corr` versus `batch fit\nSpearman_corr`.
-
-## `corr_dotplot_dev`
-
-`corr_dotplot_dev(...)` is the experimental variant that adds optional top and right marginal histograms while mostly keeping the same filtered-data correlation and fit behavior as `corr_dotplot(...)`.
-
-### Full signature
-
-```python
-def corr_dotplot_dev(
     df: pd.DataFrame | None = None,
     *,
     adata: anndata.AnnData | None = None,
@@ -192,12 +78,16 @@ def corr_dotplot_dev(
 ```
 
 ```python
-fig, axes, fit, corr_value, corr_pvalue = adtl.corr_dotplot_dev(
-    df=df,
-    column_key_x="Age",
-    column_key_y="CRP",
-    hue="Outcome",
+import adata_science_tools as adtl
+
+fig, axes, fit, corr_value, corr_pvalue = adtl.corr_dotplot(
+    adata=adata,
+    layer="log1p",
+    column_key_x="geneA",
+    column_key_y="geneB",
+    hue="Treatment",
     subset_key="Batch",
+    method="spearman",
     show_x_marginal_hist=True,
     show_y_marginal_hist=True,
     show=False,
@@ -208,28 +98,65 @@ top_hist_ax = axes["x_marginal"]
 right_hist_ax = axes["y_marginal"]
 ```
 
-Important behavior:
+### Supported input modes
 
-- It accepts the full `corr_dotplot(...)` keyword API, including `palette` for `hue` layers and `subset_palette` for `subset_key` layers, plus `show_x_marginal_hist`, `show_y_marginal_hist`, `x_marginal_hist_bins`, `y_marginal_hist_bins`, `x_marginal_hist_fill`, `x_marginal_hist_KDE`, `y_marginal_hist_fill`, `y_marginal_hist_KDE`, `show_all_obs_x_hist`, `show_all_obs_y_hist`, `x_marginal_hist_height_ratio`, and `y_marginal_hist_width_ratio`.
-- It returns `(fig, axes_dict, fit, corr_value, corr_pvalue)` instead of a single scatter axes.
-- `axes_dict` always contains `"main"`, `"x_marginal"`, and `"y_marginal"` keys, with disabled marginal panels set to `None`.
-- Marginals use the same filtered `working_df` as the scatter, correlation, and fit layers.
-- When `subset_key` is provided, marginal histograms follow `subset_key` rather than `hue`, so their subgroup colors follow `subset_palette`.
-- When `subset_key` is provided but no valid subgroup values remain after filtering, `corr_dotplot_dev(...)` falls back to the overall fit, footer stats, and all-observation marginals even if `show_all_obs_fit`, `show_all_obs_x_hist`, or `show_all_obs_y_hist` were `False`.
-- `corr_dotplot(...)` keeps its current behavior in that edge case and does not apply this dev-only fallback.
-- Marginals default to `fill=True` and `KDE=True` and can be turned off independently for the x and y panels.
-- When `show_x_marginal_hist=True`, `axes_title` is attached to `axes["x_marginal"]` so the title sits above the full composite plot; otherwise it remains on `axes["main"]`.
-- `corr_dotplot_dev(method="spearman", ...)` is the supported Spearman path for the dev API; there is no separate `spearman_cor_dotplot_dev(...)` wrapper in this change.
+- `df=...` with preassembled plotting columns
+- `adata=...` with an optional `layer`
+- `x_df` plus `obs_df`, with optional `var_df` when feature columns need names
+
+When `df` is provided, the AnnData-derived path is ignored. `column_key_x` and `column_key_y` are required and must resolve to numeric columns after the final plotting table is assembled.
+
+### Return value
+
+`corr_dotplot(...)` always returns `(fig, axes, fit, corr_value, corr_pvalue)`.
+
+- With both marginal flags disabled, `axes` is the single scatter `Axes`, preserving the original public contract.
+- With either marginal enabled, `axes` is a dictionary containing `"main"`, `"x_marginal"`, and `"y_marginal"`; a disabled marginal entry is `None`.
+- `fit`, `corr_value`, and `corr_pvalue` always describe the overall filtered observations, including when subgroup fits are drawn.
+
+### Correlation, filtering, and fit behavior
+
+- `method` must be `"pearson"` or `"spearman"`.
+- `nas2zeros`, `dropna`, and `dropzeros` control x/y cleanup before statistics.
+- `palette` colors `hue`-driven scatter points, while `subset_palette` colors `subset_key`-driven fit and marginal layers.
+- `subset_key` draws one fit line per subgroup when fitting succeeds.
+- Subgroup order follows categorical order for categorical columns, ascending order for non-categorical numeric columns, and first-seen order for other columns.
+- `show_all_obs_fit=True` adds the overall fit line in subset mode.
+- `show_fit_legend`, `show_hue_legend`, and `show_stats_text` are independent display controls.
+- `fit_legend_bbox_to_anchor` and `hue_legend_bbox_to_anchor` accept 2-item or 4-item sequences.
+- If no valid subgroup values remain, `corr_dotplot(...)` falls back to the all-data fit and statistics; enabled marginals also show the all-data distributions.
+- `show=False` closes the figure before returning so notebook backends do not auto-render it.
+
+### Marginal histogram behavior
+
+- The supported layouts are no marginals, x-only above the scatter, y-only to the right, and both marginals.
+- Marginals always use the same filtered observations as the scatter and returned statistics.
+- Without `subset_key`, each enabled marginal draws one overall histogram.
+- With `subset_key`, marginal grouping follows `subset_key`, not `hue`, and uses `subset_palette`.
+- `show_all_obs_x_hist` and `show_all_obs_y_hist` add muted all-observation overlays in subset mode.
+- Bin arguments accept an integer count or explicit edge sequences.
+- Fill and KDE overlays can be controlled independently for x and y.
+- `x_marginal_hist_height_ratio` and `y_marginal_hist_width_ratio` control marginal panel size relative to the main panel.
+- When an x marginal is enabled, `axes_title` belongs to `axes["x_marginal"]`; otherwise it belongs to the main axes.
+- Default legends move beyond the right marginal when one is present; explicit legend anchors still win.
+
+### Tested behaviors
+
+Regression tests cover observation/feature name collisions, styling controls, optional footer text, subgroup fit failures, independent legends, separate palettes, numeric subgroup ordering, all four layouts, grouped and all-observation marginals, filtering parity, integer and explicit bins, fill/KDE controls, subplot ratios, title ownership, footer spacing, legend placement, main-limit preservation, the empty-subset fallback, and Spearman forwarding.
 
 ### Repo example with simulated data
 
-The repository now includes a config-driven example that uses `corr_dotplot_dev(...)` end to end:
+The config-driven example uses `corr_dotplot(...)` with both marginals enabled:
 
-- [`example_simulated_data/scripts/simulate_1_var_covar_age.py`](../example_simulated_data/scripts/simulate_1_var_covar_age.py) creates a baseline `AnnData` object with `obs` columns `Age` and `case_control` and one feature, `simulated_feature`.
-- [`example_simulated_data/scripts/plot_dotplot_simulate_1_var_covar_age.py`](../example_simulated_data/scripts/plot_dotplot_simulate_1_var_covar_age.py) loads that `.h5ad` file and calls `corr_dotplot_dev(...)` with `column_key_x="Age"`, `column_key_y="simulated_feature"`, `hue="case_control"`, and `subset_key="case_control"`.
-- The default example uses the explicit palette `['#AA4499', '#332288', '#1f77b4', '#661100', '#117733', '#ff7f0e']` from the YAML config rather than `adtl.palettes`.
+- [`example_simulated_data/config/config.yaml`](../example_simulated_data/config/config.yaml) contains the marginal controls.
+- [`example_simulated_data/scripts/plot_dotplot_simulate_1_var_covar_age.py`](../example_simulated_data/scripts/plot_dotplot_simulate_1_var_covar_age.py) loads the simulated AnnData and creates the plot.
+- The generated figure is available at [`baseline.png`](../example_simulated_data/results/plot_dotplot_simulate_1_var_covar_age/baseline/baseline.png).
 
-The generated example figure is available at [`baseline.png`](../example_simulated_data/results/plot_dotplot_simulate_1_var_covar_age/baseline/baseline.png).
+## `corr_dotplot_dev`
+
+`corr_dotplot_dev(...)` is deprecated. It emits `DeprecationWarning` and forwards all arguments to `corr_dotplot(...)`.
+
+For compatibility, its second return value is always the three-key axes dictionary, including when both marginals are disabled. New code should use `corr_dotplot(...)` and follow the conditional return contract above.
 
 ## `spearman_cor_dotplot`
 
