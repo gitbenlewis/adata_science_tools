@@ -227,6 +227,8 @@ plot_df[[
     positional fields raise `ValueError` before drawing.
 
 11. AXIS SCALE AND LIMITS: `yscale` is validated against Matplotlib scales.
+    The callable-only `function` and `functionlog` scales are rejected because
+    this API does not accept their required transform functions.
     `ylims=[low, high]` must be finite and increasing and is applied after
     drawing. For `yscale="log"`, every visible point and rendered summary
     metric, limit, and reference must be positive; `add_zero_line=True` raises.
@@ -247,7 +249,10 @@ plot_df[[
     handles and then labeled reference handles are appended in configured
     order, with labels de-duplicated. The same block order is used for
     `legend_scope="axis"` and `legend_scope="figure"`. The two `append_*`
-    switches suppress only their corresponding new legend blocks.
+    switches suppress only their corresponding new legend blocks. When mixed
+    category types have the same default string label, only those collisions
+    use `repr` labels (for example, `1` and `'1'`). Explicit marker labels are
+    unchanged.
 
 15. PALETTES: `subset_palette` accepts a complete mapping as well as existing
     sequence and named-palette forms. Mapping colors remain attached to their

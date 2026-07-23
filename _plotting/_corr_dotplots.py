@@ -253,6 +253,34 @@ def _normalize_padding(value: float | None, *, param_name: str) -> float | None:
     return value
 
 
+def _normalize_marginal_hist_bins(
+    bins: int | Sequence[float],
+    *,
+    param_name: str,
+    scale: str,
+) -> int | tuple[float, ...]:
+    if isinstance(bins, (int, np.integer)):
+        return int(bins)
+    try:
+        edges = np.asarray(bins, dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"'{param_name}' edges must be numeric.") from exc
+    if edges.ndim != 1 or edges.size < 2:
+        raise ValueError(
+            f"'{param_name}' edges must be one-dimensional and contain at least two values."
+        )
+    if not np.isfinite(edges).all():
+        raise ValueError(f"'{param_name}' edges must be finite.")
+    if (np.diff(edges) <= 0).any():
+        raise ValueError(f"'{param_name}' edges must be strictly increasing.")
+    lower_bound = _scale_lower_bound(scale)
+    if lower_bound is not None and (edges <= lower_bound).any():
+        raise ValueError(
+            f"'{param_name}' edges must be greater than {lower_bound:g} for '{scale}'."
+        )
+    return tuple(edges)
+
+
 def _resolve_axis_limits(
     values: pd.Series,
     current_limits: tuple[float, float],
@@ -505,13 +533,42 @@ def corr_dotplot(
         raise ValueError("'method' must be either 'spearman' or 'pearson'.")
     if identity_limits not in {"shared_axes", "data"}:
         raise ValueError("'identity_limits' must be 'shared_axes' or 'data'.")
+    if (
+        show_identity_line
+        and identity_line_style is not None
+        and not isinstance(identity_line_style, _Mapping)
+    ):
+        raise ValueError("'identity_line_style' must be a mapping.")
     for scale, param_name in ((xscale, "xscale"), (yscale, "yscale")):
         if not isinstance(scale, str) or scale not in {"linear", "log", "log2", "log1p"}:
             raise ValueError(f"'{param_name}' must be 'linear', 'log', 'log2', or 'log1p'.")
     if x_marginal_hist_height_ratio <= 0 or y_marginal_hist_width_ratio <= 0:
         raise ValueError("Marginal panel ratios must be positive.")
+    normalized_x_marginal_hist_bins = x_marginal_hist_bins
+    if show_x_marginal_hist:
+        normalized_x_marginal_hist_bins = _normalize_marginal_hist_bins(
+            x_marginal_hist_bins,
+            param_name="x_marginal_hist_bins",
+            scale=xscale,
+        )
+    normalized_y_marginal_hist_bins = y_marginal_hist_bins
+    if show_y_marginal_hist:
+        normalized_y_marginal_hist_bins = _normalize_marginal_hist_bins(
+            y_marginal_hist_bins,
+            param_name="y_marginal_hist_bins",
+            scale=yscale,
+        )
     xlims_tuple = _normalize_axis_limits(xlims, param_name="xlims", scale=xscale)
     ylims_tuple = _normalize_axis_limits(ylims, param_name="ylims", scale=yscale)
+    if (
+        show_identity_line
+        and identity_limits == "shared_axes"
+        and xlims_tuple is not None
+        and ylims_tuple is not None
+        and max(xlims_tuple[0], ylims_tuple[0])
+        >= min(xlims_tuple[1], ylims_tuple[1])
+    ):
+        raise ValueError("The visible x and y ranges do not overlap for the identity line.")
     x_padding = _normalize_padding(xlim_padding_fraction, param_name="xlim_padding_fraction")
     y_padding = _normalize_padding(ylim_padding_fraction, param_name="ylim_padding_fraction")
     normalized_x_reference_lines = _normalize_reference_lines(
@@ -1062,13 +1119,13 @@ def corr_dotplot(
 
     if axes_x_marginal is not None:
         x_hist_kwargs: dict[str, Any] = {
-            "bins": x_marginal_hist_bins,
+            "bins": normalized_x_marginal_hist_bins,
             "element": "step",
             "fill": x_marginal_hist_fill,
             "kde": x_marginal_hist_KDE,
             "ax": axes_x_marginal,
         }
-        if isinstance(x_marginal_hist_bins, int):
+        if isinstance(normalized_x_marginal_hist_bins, int):
             x_hist_kwargs["binrange"] = (x_vals.min(), x_vals.max())
 
         if subset_key is None:
@@ -1110,13 +1167,13 @@ def corr_dotplot(
 
     if axes_y_marginal is not None:
         y_hist_kwargs: dict[str, Any] = {
-            "bins": y_marginal_hist_bins,
+            "bins": normalized_y_marginal_hist_bins,
             "element": "step",
             "fill": y_marginal_hist_fill,
             "kde": y_marginal_hist_KDE,
             "ax": axes_y_marginal,
         }
-        if isinstance(y_marginal_hist_bins, int):
+        if isinstance(normalized_y_marginal_hist_bins, int):
             y_hist_kwargs["binrange"] = (y_vals.min(), y_vals.max())
 
         if subset_key is None:
@@ -1202,12 +1259,11 @@ def corr_dotplot(
         axes_y_marginal.set_ylim(resolved_ylim)
 
     if show_identity_line:
-        if identity_line_style is not None and not isinstance(identity_line_style, _Mapping):
-            raise ValueError("'identity_line_style' must be a mapping.")
         if identity_limits == "shared_axes":
             identity_lower = max(resolved_xlim[0], resolved_ylim[0])
             identity_upper = min(resolved_xlim[1], resolved_ylim[1])
             if identity_lower >= identity_upper:
+                plt.close(fig)
                 raise ValueError("The visible x and y ranges do not overlap for the identity line.")
         else:
             identity_lower, identity_upper = identity_data_limits
@@ -1215,6 +1271,7 @@ def corr_dotplot(
             identity_lower <= identity_domain_minimum
             or identity_upper <= identity_domain_minimum
         ):
+            plt.close(fig)
             raise ValueError(
                 "Identity-line coordinates must be greater than "
                 f"{identity_domain_minimum:g} for the configured scales."
@@ -1229,14 +1286,18 @@ def corr_dotplot(
         identity_style.pop("label", None)
         if identity_line_label is not None:
             identity_style["label"] = identity_line_label
-        identity_coordinates = _sample_linear_relation(
-            [identity_lower, identity_upper],
-            intercept=0.0,
-            slope=1.0,
-            x_scale=xscale,
-            y_scale=yscale,
-        )
-        (identity_handle,) = axes.plot(*identity_coordinates, **identity_style)
+        try:
+            identity_coordinates = _sample_linear_relation(
+                [identity_lower, identity_upper],
+                intercept=0.0,
+                slope=1.0,
+                x_scale=xscale,
+                y_scale=yscale,
+            )
+            (identity_handle,) = axes.plot(*identity_coordinates, **identity_style)
+        except Exception:
+            plt.close(fig)
+            raise
         reference_handles.insert(0, identity_handle)
         axes.set_xlim(resolved_xlim)
         axes.set_ylim(resolved_ylim)

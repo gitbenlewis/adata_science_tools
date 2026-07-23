@@ -351,10 +351,7 @@ def longitudinal_trajectories(
             f"'color_order' is missing observed category value(s): {missing_color_order}."
         )
     color_map = _resolve_color_map(resolved_color_order, palette)
-    if resolved_color_order:
-        default_point_color = color_map[resolved_color_order[0]]
-    else:
-        default_point_color = mcolors.to_rgba("C0")
+    default_point_color = mcolors.to_rgba("C0")
 
     prepared["line_color_category"] = (
         None if line_color_by is None else prepared[line_color_by]
@@ -444,12 +441,24 @@ def longitudinal_trajectories(
             raise ValueError(
                 f"'marker_styles[{category!r}].marker' is not a valid Matplotlib marker."
             ) from exc
+        facecolor = supplied.get("facecolor")
+        if facecolor is not None:
+            facecolor = _normalize_color(
+                facecolor,
+                param_name=f"marker_styles[{category!r}].facecolor",
+            )
+        edgecolor = supplied.get("edgecolor")
+        if edgecolor is not None:
+            edgecolor = _normalize_color(
+                edgecolor,
+                param_name=f"marker_styles[{category!r}].edgecolor",
+            )
         marker_style_map[category] = {
             "marker": marker,
             "filled": bool(filled),
             "label": str(supplied.get("label", category if category is not None else "Data")),
-            "facecolor": supplied.get("facecolor"),
-            "edgecolor": supplied.get("edgecolor"),
+            "facecolor": facecolor,
+            "edgecolor": edgecolor,
             "size": size,
             "alpha": alpha,
         }
@@ -510,27 +519,17 @@ def longitudinal_trajectories(
         axis=1,
     )
 
-    if yscale == "log":
-        line_values = prepared.loc[prepared["line_eligible"], "exact_y"]
-        if (line_values <= 0).any():
-            raise ValueError("Line-eligible y values must be positive when yscale='log'.")
-        point_values = prepared.loc[
-            prepared["point_eligible"] & prepared["display_y"].notna(), "display_y"
-        ]
-        if (point_values <= 0).any():
-            raise ValueError("Point display values must be positive when yscale='log'.")
-        if any(reference["value"] <= 0 for reference in normalized_references):
-            raise ValueError("Reference values must be positive when yscale='log'.")
-
     subject_input_order = list(pd.unique(df[subject]))
     prepared["segment_ids"] = pd.Series(
         [tuple() for _ in range(len(prepared))], dtype=object
     )
     segments: list[tuple[str, int, int, tuple[float, float, float, float]]] = []
     if connect != "none":
+        subject_rows_by_value = prepared.groupby(
+            subject, sort=False, observed=True
+        ).indices
         for subject_value in subject_input_order:
-            subject_rows = prepared.index[prepared[subject] == subject_value].tolist()
-            subject_rows.sort(key=lambda index: prepared.at[index, "x_position"])
+            subject_rows = subject_rows_by_value[subject_value].tolist()
             eligible_rows = [
                 index for index in subject_rows if bool(prepared.at[index, "line_eligible"])
             ]
@@ -560,6 +559,26 @@ def longitudinal_trajectories(
                         *prepared.at[row_index, "segment_ids"],
                         segment_id,
                     )
+
+    if yscale == "log":
+        line_endpoint_indices = [
+            row_index
+            for _, left_index, right_index, _ in segments
+            for row_index in (left_index, right_index)
+        ]
+        line_values = prepared.loc[line_endpoint_indices, "exact_y"]
+        if (line_values <= 0).any():
+            raise ValueError(
+                "Line-eligible segment endpoint y values must be positive "
+                "when yscale='log'."
+            )
+        point_values = prepared.loc[
+            prepared["point_eligible"] & prepared["display_y"].notna(), "display_y"
+        ]
+        if (point_values <= 0).any():
+            raise ValueError("Point display values must be positive when yscale='log'.")
+        if any(reference["value"] <= 0 for reference in normalized_references):
+            raise ValueError("Reference values must be positive when yscale='log'.")
 
     fig, ax = plt.subplots(figsize=figsize_tuple)
     for segment_id, left_index, right_index, segment_color in segments:

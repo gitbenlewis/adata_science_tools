@@ -194,6 +194,33 @@ class LongitudinalTrajectoriesTests(unittest.TestCase):
         self.assertEqual([legend.get_title().get_text() for legend in ax.artists], ["point_group"])
         self.assertEqual(ax.get_legend().get_title().get_text(), "shape")
 
+    def test_line_color_channel_does_not_change_default_point_color(self):
+        frame = pd.DataFrame(
+            {
+                "visit": ["v1", "v2"],
+                "value": [1.0, 2.0],
+                "subject": ["s1", "s1"],
+                "line_group": ["a", "a"],
+            }
+        )
+        _, _, plotted = longitudinal_trajectories(
+            frame,
+            x="visit",
+            y="value",
+            subject="subject",
+            x_order=["v1", "v2"],
+            line_color_by="line_group",
+            palette={"a": "red"},
+            show=False,
+        )
+
+        self.assertTrue(
+            all(color == mcolors.to_rgba("C0") for color in plotted["resolved_point_color"])
+        )
+        self.assertTrue(
+            all(color == mcolors.to_rgba("red") for color in plotted["resolved_line_color"])
+        )
+
     def test_endpoint_line_color_conflict_raises(self):
         frame = pd.DataFrame(
             {
@@ -336,6 +363,57 @@ class LongitudinalTrajectoriesTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, message):
                 longitudinal_trajectories(**call_kwargs)
 
+    def test_log_domain_validates_only_rendered_line_endpoints(self):
+        frame = pd.DataFrame(
+            {
+                "visit": ["v1", "v2"],
+                "exact": [-1.0, 2.0],
+                "shown": [1.0, 2.0],
+                "subject": ["s1", "s1"],
+            }
+        )
+        _, ax, plotted = longitudinal_trajectories(
+            frame,
+            x="visit",
+            y="exact",
+            display_y="shown",
+            subject="subject",
+            x_order=["v1", "v2"],
+            connect="none",
+            yscale="log",
+            show=False,
+        )
+
+        self.assertFalse([line for line in ax.lines if line.get_gid()])
+        self.assertTrue(all(segment_ids == () for segment_ids in plotted["segment_ids"]))
+
+        gap_frame = frame.assign(visit=["v1", "v3"])
+        _, gap_ax, gap_data = longitudinal_trajectories(
+            gap_frame,
+            x="visit",
+            y="exact",
+            display_y="shown",
+            subject="subject",
+            x_order=["v1", "v2", "v3"],
+            connect="adjacent",
+            yscale="log",
+            show=False,
+        )
+        self.assertFalse([line for line in gap_ax.lines if line.get_gid()])
+        self.assertTrue(all(segment_ids == () for segment_ids in gap_data["segment_ids"]))
+
+        with self.assertRaisesRegex(ValueError, "Line-eligible"):
+            longitudinal_trajectories(
+                frame,
+                x="visit",
+                y="exact",
+                display_y="shown",
+                subject="subject",
+                x_order=["v1", "v2"],
+                yscale="log",
+                show=False,
+            )
+
     def test_reference_validation_and_legend_order(self):
         frame = pd.DataFrame(
             {"visit": ["v1"], "value": [1.0], "subject": ["s1"]}
@@ -411,7 +489,64 @@ class LongitudinalTrajectoriesTests(unittest.TestCase):
                 pd.testing.assert_frame_equal(frame, original)
                 self.assertEqual(plt.get_fignums(), existing_figures)
 
+    def test_unobserved_marker_colors_validate_before_drawing(self):
+        frame = pd.DataFrame(
+            {
+                "visit": ["v1"],
+                "value": [1.0],
+                "subject": ["s1"],
+                "shape": ["observed"],
+            }
+        )
+        for color_key in ("facecolor", "edgecolor"):
+            with self.subTest(color_key=color_key):
+                existing_figures = plt.get_fignums()
 
+                with self.assertRaisesRegex(ValueError, "valid Matplotlib color"):
+                    longitudinal_trajectories(
+                        frame,
+                        x="visit",
+                        y="value",
+                        subject="subject",
+                        x_order=["v1"],
+                        marker_by="shape",
+                        marker_order=["observed", "unobserved"],
+                        marker_styles={"unobserved": {color_key: "not-a-color"}},
+                        show=False,
+                    )
+
+                self.assertEqual(plt.get_fignums(), existing_figures)
+
+    def test_segment_order_follows_first_subject_appearance(self):
+        frame = pd.DataFrame(
+            {
+                "visit": ["v2", "v1", "v1", "v2"],
+                "value": [20.0, 1.0, 10.0, 2.0],
+                "subject": ["s2", "s1", "s2", "s1"],
+            }
+        )
+        _, ax, plotted = longitudinal_trajectories(
+            frame,
+            x="visit",
+            y="value",
+            subject="subject",
+            x_order=["v1", "v2"],
+            show=False,
+        )
+
+        self.assertEqual(
+            [line.get_ydata().tolist() for line in ax.lines if line.get_gid()],
+            [[10.0, 20.0], [1.0, 2.0]],
+        )
+        self.assertEqual(
+            plotted["segment_ids"].tolist(),
+            [
+                ("segment_000001",),
+                ("segment_000000",),
+                ("segment_000000",),
+                ("segment_000001",),
+            ],
+        )
 
     def test_style_order_palette_and_extent_validation(self):
         frame = pd.DataFrame(

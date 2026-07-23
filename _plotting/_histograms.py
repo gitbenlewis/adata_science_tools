@@ -505,13 +505,6 @@ def adata_histograms(
     if fill_to_use is not None:
         hist_kwargs["fill"] = fill_to_use
 
-    fig, axes_array = plt.subplots(plot_nrows, plot_ncols, figsize=figsize, squeeze=False)
-    axes_flat = axes_array.ravel()
-    axes_by_var: dict[str, plt.Axes] = {}
-
-    if title is not None:
-        fig.suptitle(title, fontsize=title_fontsize)
-
     legend_position_kwargs: dict[str, Any] = {}
     if legend_loc is not None:
         legend_position_kwargs["loc"] = legend_loc
@@ -564,6 +557,13 @@ def adata_histograms(
                 subset_value: subset_colors[idx % len(subset_colors)]
                 for idx, subset_value in enumerate(subset_hue_order)
             }
+
+    fig, axes_array = plt.subplots(plot_nrows, plot_ncols, figsize=figsize, squeeze=False)
+    axes_flat = axes_array.ravel()
+    axes_by_var: dict[str, plt.Axes] = {}
+
+    if title is not None:
+        fig.suptitle(title, fontsize=title_fontsize)
 
     for plot_idx, var_name in enumerate(panel_names):
         axes = axes_flat[plot_idx]
@@ -720,6 +720,7 @@ def adata_histograms(
 
         panel_subset_order = list(subset_hue_order)
         panel_subset_metrics: dict[Any, dict[str, Any]] = {}
+        small_groups: list[Any] = []
         if has_obs_groups:
             for subset_value in subset_hue_order:
                 panel_subset_metrics[subset_value] = _subset_metrics(
@@ -738,6 +739,7 @@ def adata_histograms(
                     counts = {
                         value: panel_subset_metrics[value]["count"] for value in small_groups
                     }
+                    plt.close(fig)
                     raise ValueError(
                         f"Panel '{var_name}' has subgroup counts below "
                         f"subset_min_count={subset_min_count}: {counts}."
@@ -749,6 +751,7 @@ def adata_histograms(
 
         all_data_mean_label = None
         all_data_mean_handle = None
+        all_data_hist_drawn = False
         if has_obs_groups and show_all_obs_hist and not plot_values.empty:
             all_obs_hist_kwargs = dict(hist_kwargs)
             if not plot_supports_kde:
@@ -762,6 +765,7 @@ def adata_histograms(
                 legend=False,
                 **all_obs_hist_kwargs,
             )
+            all_data_hist_drawn = True
             if add_mean_line:
                 all_data_mean = plot_values.mean()
                 all_data_mean_label = f"All data (mean={all_data_mean:.3g})"
@@ -798,21 +802,37 @@ def adata_histograms(
                 subset_metrics_to_use is not None or subset_label_format is not None
             )
             if use_custom_subset_labels:
-                subset_legend_labels = [
-                    _format_subset_label(
-                        subset_value,
-                        panel_subset_metrics[subset_value],
-                        subset_metrics_to_use,
-                        subset_label_format,
-                    )
-                    for subset_value in panel_subset_order
-                ]
+                try:
+                    subset_legend_labels = [
+                        _format_subset_label(
+                            subset_value,
+                            panel_subset_metrics[subset_value],
+                            subset_metrics_to_use,
+                            subset_label_format,
+                        )
+                        for subset_value in panel_subset_order
+                    ]
+                except (IndexError, KeyError, TypeError, ValueError) as exc:
+                    plt.close(fig)
+                    raise ValueError(
+                        f"Invalid 'subset_label_format' for panel {var_name!r}: {exc}."
+                    ) from exc
             if grouped_plot_df.empty or not panel_subset_order:
-                if all_data_mean_handle is None:
+                if not all_data_hist_drawn:
+                    all_groups_excluded = (
+                        subset_small_group_policy == "exclude"
+                        and bool(small_groups)
+                        and not panel_subset_order
+                    )
+                    empty_group_message = (
+                        f"No eligible {subset_obs_key} groups"
+                        if all_groups_excluded
+                        else f"No non-missing {subset_obs_key} groups"
+                    )
                     axes.text(
                         0.5,
                         0.5,
-                        f"No non-missing {subset_obs_key} groups",
+                        empty_group_message,
                         ha="center",
                         va="center",
                         transform=axes.transAxes,

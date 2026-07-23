@@ -107,6 +107,16 @@ def ranked_waterfall(
 ) -> tuple[plt.Figure, plt.Axes, pd.DataFrame]:
     """Draw stably ranked vertical bars and return the exact ranked rows."""
 
+    reserved_columns = {"rank", "resolved_color"}
+    conflicting_columns = [
+        column for column in df.columns if column in reserved_columns
+    ]
+    if conflicting_columns:
+        raise ValueError(
+            "Input column name(s) conflict with reserved returned waterfall "
+            f"field(s): {conflicting_columns}."
+        )
+
     required = [value, label]
     if color_by is not None:
         required.append(color_by)

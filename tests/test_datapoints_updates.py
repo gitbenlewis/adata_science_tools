@@ -1,6 +1,7 @@
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import anndata as ad
 import matplotlib
@@ -9,6 +10,7 @@ import pandas as pd
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.axes import Axes
 
 
 REPO_PARENT = Path(__file__).resolve().parents[2]
@@ -294,6 +296,99 @@ class DatapointsUpdateTests(unittest.TestCase):
         finally:
             if fig is not None:
                 plt.close(fig)
+
+    def test_mixed_type_subset_and_marker_defaults_keep_distinct_legend_entries(self):
+        adata = self.make_adata()
+        adata.obs["mixed_subset"] = pd.Series(
+            [1, "1", 1, "1"], index=adata.obs_names, dtype=object
+        )
+        adata.obs["mixed_marker"] = pd.Series(
+            [1, "1", 1, "1"], index=adata.obs_names, dtype=object
+        )
+
+        subset_fig, subset_axes, _ = adtl.datapoints(
+            adata=adata,
+            var_names=["signal"],
+            subset_obs_key="mixed_subset",
+            subset_order=[1, "1"],
+            subset_palette={1: "red", "1": "blue"},
+            legend_metrics=None,
+            boxplot=False,
+            show=False,
+        )
+        marker_fig, marker_axes, marker_df = adtl.datapoints(
+            adata=adata,
+            var_names=["signal"],
+            marker_by_obs_key="mixed_marker",
+            marker_order=[1, "1"],
+            marker_styles={1: {"marker": "o"}, "1": {"marker": "s"}},
+            legend_metrics=None,
+            boxplot=False,
+            show=False,
+        )
+        explicit_fig, explicit_axes, explicit_df = adtl.datapoints(
+            adata=adata,
+            var_names=["signal"],
+            marker_by_obs_key="mixed_marker",
+            marker_order=[1, "1"],
+            marker_styles={
+                1: {"marker": "o", "label": "numeric"},
+                "1": {"marker": "s", "label": "text"},
+            },
+            legend_metrics=None,
+            boxplot=False,
+            show=False,
+        )
+        try:
+            self.assertEqual(
+                [text.get_text() for text in subset_axes["all"].get_legend().get_texts()],
+                ["1", "'1'"],
+            )
+            self.assertEqual(
+                [text.get_text() for text in marker_axes["all"].get_legend().get_texts()],
+                ["1", "'1'"],
+            )
+            self.assertEqual(
+                marker_df["resolved_marker_label"].tolist(),
+                ["1", "'1'", "1", "'1'"],
+            )
+            self.assertEqual(
+                [text.get_text() for text in explicit_axes["all"].get_legend().get_texts()],
+                ["numeric", "text"],
+            )
+            self.assertEqual(
+                explicit_df["resolved_marker_label"].tolist(),
+                ["numeric", "text", "numeric", "text"],
+            )
+        finally:
+            plt.close(subset_fig)
+            plt.close(marker_fig)
+            plt.close(explicit_fig)
+
+    def test_callable_yscales_are_rejected_before_figure_creation(self):
+        for yscale in ("function", "functionlog"):
+            with self.subTest(yscale=yscale):
+                existing_figures = plt.get_fignums()
+                with self.assertRaisesRegex(ValueError, "requires transform functions"):
+                    adtl.datapoints(
+                        adata=self.make_adata(),
+                        var_names=["signal"],
+                        yscale=yscale,
+                        show=False,
+                    )
+                self.assertEqual(plt.get_fignums(), existing_figures)
+
+    def test_unexpected_yscale_setup_error_closes_new_figure(self):
+        existing_figures = plt.get_fignums()
+        with patch.object(Axes, "set_yscale", side_effect=RuntimeError("scale setup failed")):
+            with self.assertRaisesRegex(RuntimeError, "scale setup failed"):
+                adtl.datapoints(
+                    adata=self.make_adata(),
+                    var_names=["signal"],
+                    boxplot=False,
+                    show=False,
+                )
+        self.assertEqual(plt.get_fignums(), existing_figures)
 
     def test_log_domain_validation(self):
         adata = self.make_adata()
