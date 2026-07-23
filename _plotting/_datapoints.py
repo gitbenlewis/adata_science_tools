@@ -147,6 +147,10 @@ def datapoints(
         raise ValueError("Provide only one of 'subplot_by_obs_key' or 'subplot_by_var_key'.")
     if x_by_obs_multi_var_mode not in {"panel_by_variable", "pool_variables"}:
         raise ValueError("'x_by_obs_multi_var_mode' must be one of 'panel_by_variable' or 'pool_variables'.")
+    if yscale in ("function", "functionlog"):
+        raise ValueError(
+            f"yscale={yscale!r} requires transform functions, which this API does not accept."
+        )
     if yscale not in _mscale.get_scale_names():
         raise ValueError(f"Unsupported yscale: {yscale!r}.")
     if ylims is not None:
@@ -687,6 +691,29 @@ def datapoints(
             return ordered + [value for value in observed if value not in set(ordered)]
         return observed
 
+    def _collision_safe_category_labels(
+        values: Sequence[Any],
+        explicit_labels: Mapping[Any, str] | None = None,
+    ) -> dict[Any, str]:
+        labels = {
+            value: (
+                explicit_labels[value]
+                if explicit_labels is not None and value in explicit_labels
+                else str(value)
+            )
+            for value in values
+        }
+        label_counts: dict[str, int] = {}
+        for label in labels.values():
+            label_counts[label] = label_counts.get(label, 0) + 1
+        for value in values:
+            has_explicit_label = (
+                explicit_labels is not None and value in explicit_labels
+            )
+            if not has_explicit_label and label_counts[labels[value]] > 1:
+                labels[value] = repr(value)
+        return labels
+
     if panel_by_x_variable:
         panel_names = [
             str(value)
@@ -751,6 +778,7 @@ def datapoints(
     )
 
     subset_hue_order: list[Any] = []
+    subset_label_by_value: dict[Any, str] = {}
     subset_palette_map: dict[Any, Any] | None = None
     if subset_obs_key is not None:
         if subset_obs_key == x_by_obs_key:
@@ -766,6 +794,7 @@ def datapoints(
                 subset_order,
                 filtered_obs_df[subset_obs_key],
             )
+        subset_label_by_value = _collision_safe_category_labels(subset_hue_order)
         subset_palette_to_use = subset_palette if subset_palette is not None else palette
         if subset_hue_order:
             if isinstance(subset_palette_to_use, Mapping):
@@ -819,15 +848,28 @@ def datapoints(
             marker_order,
             filtered_obs_df[marker_by_obs_key],
         )
+        configured_marker_styles = {
+            marker_category: dict((marker_styles or {}).get(marker_category, {}))
+            for marker_category in marker_category_order
+        }
+        explicit_marker_labels = {
+            marker_category: configured_style["label"]
+            for marker_category, configured_style in configured_marker_styles.items()
+            if "label" in configured_style
+        }
+        marker_label_by_category = _collision_safe_category_labels(
+            marker_category_order,
+            explicit_marker_labels,
+        )
         for marker_index, marker_category in enumerate(marker_category_order):
-            configured_style = dict((marker_styles or {}).get(marker_category, {}))
+            configured_style = configured_marker_styles[marker_category]
             marker_style_by_category[marker_category] = {
                 "marker": configured_style.get(
                     "marker",
                     default_markers[marker_index % len(default_markers)],
                 ),
                 "filled": bool(configured_style.get("filled", True)),
-                "label": configured_style.get("label", str(marker_category)),
+                "label": marker_label_by_category[marker_category],
                 "facecolor": configured_style.get("facecolor"),
                 "edgecolor": configured_style.get("edgecolor"),
                 "size": float(configured_style.get("size", point_size)),
@@ -972,6 +1014,12 @@ def datapoints(
 
     fig, axes_array = plt.subplots(plot_nrows, plot_ncols, figsize=figsize, squeeze=False, sharey=sharey)
     axes_flat = axes_array.ravel()
+    try:
+        for ax in axes_flat[: len(panel_names)]:
+            ax.set_yscale(yscale)
+    except Exception:
+        plt.close(fig)
+        raise
     axes_by_panel: dict[str, plt.Axes] = {}
     legend_entries_by_panel: dict[str, list[tuple[Any, str]]] = {}
     negative_mean_legend_labels: set[str] = set()
@@ -1055,7 +1103,10 @@ def datapoints(
                     summary_subset_df = summary_panel_df.loc[
                         summary_panel_df[subset_obs_key] == subset_value
                     ]
-                    label = _metric_label(str(subset_value), summary_subset_df["value"])
+                    label = _metric_label(
+                        subset_label_by_value[subset_value],
+                        summary_subset_df["value"],
+                    )
                     if "mean" in metric_names and _has_negative_mean(summary_subset_df["value"]):
                         negative_mean_legend_labels.add(label)
                     ax.scatter(
@@ -1100,7 +1151,7 @@ def datapoints(
                         summary_panel_df[subset_obs_key] == subset_value
                     ]
                     subset_label = _metric_label(
-                        str(subset_value),
+                        subset_label_by_value[subset_value],
                         summary_subset_df["value"],
                     )
                     if "mean" in metric_names and _has_negative_mean(summary_subset_df["value"]):
@@ -1229,7 +1280,6 @@ def datapoints(
             fontsize=axis_label_fontsize,
         )
         ax.set_ylabel(ylabel or "value", fontsize=axis_label_fontsize)
-        ax.set_yscale(yscale)
         if tick_label_fontsize is not None:
             ax.tick_params(axis="both", labelsize=tick_label_fontsize)
         if add_zero_line:

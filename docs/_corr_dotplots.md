@@ -148,7 +148,7 @@ When `df` is provided, the AnnData-derived path is ignored. `column_key_x` and `
 - `"log1p"` uses `log1p`/`expm1` function scaling, accepts finite values strictly greater than -1, and keeps the legacy origin line valid.
 - On nonlinear axes, fit and identity artists sample their raw-coordinate linear relation densely; correlation and regression statistics still use the untransformed values.
 - Automatic and fractionally padded `"log1p"` ranges include the data plus active fit endpoints and axis-reference values, including a legacy origin line, before applying transformed-space padding that stays above -1.
-- Explicit limits still win; an explicit reference sequence replaces the legacy origin on that axis, and an empty sequence draws none.
+- Explicit limits still win; an explicit reference sequence replaces the legacy origin on that axis, and an empty sequence draws none. Reference specifications other than `None` must be sequences of mappings.
 - Explicit limits take precedence over padding; padding is calculated in the configured transformed space for all three logarithmic modes.
 - Data, limits, references, fit endpoints, and identity coordinates must satisfy each configured scale's domain.
 - When identity coordinates span two transformed axes, the stricter lower domain bound applies.
@@ -165,7 +165,7 @@ When `df` is provided, the AnnData-derived path is ignored. `column_key_x` and `
 - Without `subset_key`, each enabled marginal draws one overall histogram.
 - With `subset_key`, marginal grouping follows `subset_key`, not `hue`, and uses `subset_palette`.
 - `show_all_obs_x_hist` and `show_all_obs_y_hist` add muted all-observation overlays in subset mode.
-- Bin arguments accept an integer count or explicit edge sequences.
+- Bin arguments accept an integer count or explicit one-dimensional edge sequences. Explicit edges for an enabled marginal must contain at least two finite, strictly increasing values within the configured scale's domain.
 - Fill and KDE overlays can be controlled independently for x and y.
 - `x_marginal_hist_height_ratio` and `y_marginal_hist_width_ratio` control marginal panel size relative to the main panel.
 - When an x marginal is enabled, `axes_title` belongs to `axes["x_marginal"]`; otherwise it belongs to the main axes.

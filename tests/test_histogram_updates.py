@@ -539,6 +539,94 @@ class HistogramUpdateTests(unittest.TestCase):
                 show=False,
             )
 
+    def test_all_data_overlay_suppresses_false_no_group_annotation(self):
+        df = pd.DataFrame({"value": [1.0, 2.0], "cohort": ["A", "B"]})
+        common = dict(
+            df=df,
+            var_names=["value"],
+            subset_obs_key="cohort",
+            subset_min_count=2,
+            subset_small_group_policy="exclude",
+            add_mean_line=False,
+            add_zero_line=False,
+            bins=2,
+            kde=False,
+            show=False,
+        )
+
+        overlay_fig, overlay_axes = adtl.adata_histograms(
+            **common, show_all_obs_hist=True
+        )
+        empty_fig, empty_axes = adtl.adata_histograms(
+            **common, show_all_obs_hist=False
+        )
+        try:
+            self.assertEqual(len(overlay_axes["value"].texts), 0)
+            self.assertGreater(len(overlay_axes["value"].collections), 0)
+            self.assertEqual(
+                [text.get_text() for text in empty_axes["value"].texts],
+                ["No eligible cohort groups"],
+            )
+        finally:
+            plt.close(overlay_fig)
+            plt.close(empty_fig)
+
+    def test_palette_validation_does_not_leak_figure(self):
+        existing_figures = plt.get_fignums()
+        with self.assertRaisesRegex(ValueError, "has no color"):
+            adtl.adata_histograms(
+                df=pd.DataFrame({"value": [1.0, 2.0], "cohort": ["A", "B"]}),
+                var_names=["value"],
+                subset_obs_key="cohort",
+                subset_palette={"A": "red"},
+                show=False,
+            )
+        self.assertEqual(plt.get_fignums(), existing_figures)
+
+    def test_later_panel_small_group_error_closes_figure(self):
+        existing_figures = plt.get_fignums()
+        with self.assertRaisesRegex(ValueError, "Panel 'second'.*'B': 1"):
+            adtl.adata_histograms(
+                df=pd.DataFrame(
+                    {
+                        "first": [1.0, 2.0, 3.0, 4.0],
+                        "second": [1.0, 2.0, 3.0, np.nan],
+                        "cohort": ["A", "A", "B", "B"],
+                    }
+                ),
+                var_names=["first", "second"],
+                subset_obs_key="cohort",
+                subset_min_count=2,
+                subset_small_group_policy="error",
+                bins=2,
+                kde=False,
+                show=False,
+            )
+        self.assertEqual(plt.get_fignums(), existing_figures)
+
+    def test_later_panel_label_format_error_closes_figure(self):
+        existing_figures = plt.get_fignums()
+        with self.assertRaisesRegex(ValueError, "subset_label_format.*second"):
+            adtl.adata_histograms(
+                df=pd.DataFrame(
+                    {
+                        "first": [1.0, 2.0, np.nan, np.nan],
+                        "second": [np.nan, np.nan, 3.0, 4.0],
+                        "cohort": pd.Series([1.5, 1.5, "A", "A"], dtype=object),
+                    }
+                ),
+                var_names=["first", "second"],
+                subset_obs_key="cohort",
+                subset_min_count=1,
+                subset_small_group_policy="exclude",
+                subset_label_format="{group:.1f}",
+                show_all_obs_hist=False,
+                bins=2,
+                kde=False,
+                show=False,
+            )
+        self.assertEqual(plt.get_fignums(), existing_figures)
+
     def test_negative_highlighting_tracks_mixed_type_entries_by_position(self):
         df = pd.DataFrame(
             {

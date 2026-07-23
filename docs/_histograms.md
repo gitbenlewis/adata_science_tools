@@ -267,7 +267,11 @@ adtl.adata_histograms(
 
 9. `highlight_negative_mean_legend=True` renders calculated negative mean legend entries in red bold text by default. This applies to non-subset labels such as `Mean = -2`, all-data labels such as `All data (mean=-1)`, and subgroup labels such as `case (mean=-3)`. Set `highlight_negative_mean_legend=False` to keep Matplotlib's default legend text styling.
 
-10. Missing `subset_obs_key` values are ignored for grouped histogram layers; variables with no plottable subgroup rows get an annotated empty panel instead of stopping the full figure.
+10. Missing `subset_obs_key` values are ignored for grouped histogram layers.
+    A panel with no plottable subgroup rows is annotated only when no all-data
+    overlay was drawn. If eligibility filtering excludes every subgroup, that
+    annotation reads `No eligible <subset_obs_key> groups`; otherwise it reads
+    `No non-missing <subset_obs_key> groups`.
 
 ## Subgroup eligibility, colors, and labels
 

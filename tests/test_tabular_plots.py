@@ -69,6 +69,29 @@ class TabularPlotTests(unittest.TestCase):
                 show=False,
             )
 
+    def test_ranked_waterfall_rejects_reserved_result_columns(self):
+        for reserved, value_column in (("rank", "rank"), ("resolved_color", "value")):
+            with self.subTest(reserved=reserved, value_column=value_column):
+                frame = pd.DataFrame(
+                    {"name": ["a", "b"], "value": [1.0, 2.0], reserved: [10, 20]}
+                )
+                original = frame.copy(deep=True)
+                existing_figures = plt.get_fignums()
+
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "conflict with reserved returned waterfall",
+                ):
+                    adtl.ranked_waterfall(
+                        frame,
+                        value=value_column,
+                        label="name",
+                        show=False,
+                    )
+
+                pd.testing.assert_frame_equal(frame, original)
+                self.assertEqual(plt.get_fignums(), existing_figures)
+
     def test_category_composition_counts_and_order(self):
         df = pd.DataFrame(
             {

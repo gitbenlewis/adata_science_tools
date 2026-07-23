@@ -536,6 +536,166 @@ class CorrDotplotUpdateTests(unittest.TestCase):
         finally:
             if fig is not None:
                 plt.close(fig)
+
+    def test_falsy_invalid_reference_containers_are_rejected_before_drawing(self):
+        df = pd.DataFrame({"x": [1.0, 2.0, 3.0], "y": [2.0, 3.0, 4.0]})
+        figures_before = set(plt.get_fignums())
+
+        for reference_lines in ({}, "", 0, False):
+            with self.subTest(reference_lines=reference_lines):
+                with self.assertRaisesRegex(ValueError, "x_reference_lines.*sequence"):
+                    adtl.corr_dotplot(
+                        df=df,
+                        column_key_x="x",
+                        column_key_y="y",
+                        x_reference_lines=reference_lines,
+                        show=False,
+                    )
+
+        self.assertEqual(set(plt.get_fignums()), figures_before)
+
+    def test_enabled_explicit_marginal_bins_are_validated_before_drawing(self):
+        df = pd.DataFrame({"x": [1.0, 2.0, 3.0], "y": [2.0, 3.0, 4.0]})
+        figures_before = set(plt.get_fignums())
+        invalid_calls = (
+            (
+                "one-dimensional.*at least two",
+                {"show_x_marginal_hist": True, "x_marginal_hist_bins": [1.0]},
+            ),
+            (
+                "one-dimensional.*at least two",
+                {
+                    "show_x_marginal_hist": True,
+                    "x_marginal_hist_bins": [[1.0, 2.0], [3.0, 4.0]],
+                },
+            ),
+            (
+                "finite",
+                {
+                    "show_x_marginal_hist": True,
+                    "x_marginal_hist_bins": [1.0, np.nan, 3.0],
+                },
+            ),
+            (
+                "strictly increasing",
+                {
+                    "show_x_marginal_hist": True,
+                    "x_marginal_hist_bins": [1.0, 2.0, 2.0],
+                },
+            ),
+            (
+                "greater than 0",
+                {
+                    "show_x_marginal_hist": True,
+                    "x_marginal_hist_bins": [0.0, 1.0, 3.0],
+                    "xscale": "log",
+                    "axes_lines": False,
+                },
+            ),
+            (
+                "greater than -1",
+                {
+                    "show_y_marginal_hist": True,
+                    "y_marginal_hist_bins": [-1.0, 2.0, 4.0],
+                    "yscale": "log1p",
+                },
+            ),
+        )
+
+        for message, kwargs in invalid_calls:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(ValueError, message):
+                    adtl.corr_dotplot(
+                        df=df,
+                        column_key_x="x",
+                        column_key_y="y",
+                        show=False,
+                        **kwargs,
+                    )
+
+        self.assertEqual(set(plt.get_fignums()), figures_before)
+
+        fig = None
+        try:
+            fig, _, _, _, _ = adtl.corr_dotplot(
+                df=df,
+                column_key_x="x",
+                column_key_y="y",
+                x_marginal_hist_bins=[np.nan],
+                show=False,
+            )
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+        fig = None
+        try:
+            fig, _, _, _, _ = adtl.corr_dotplot(
+                df=df,
+                column_key_x="x",
+                column_key_y="y",
+                show_x_marginal_hist=True,
+                x_marginal_hist_bins=np.int64(3),
+                show=False,
+            )
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_identity_validation_does_not_retain_failed_figures(self):
+        df = pd.DataFrame({"x": [1.0, 2.0, 3.0], "y": [2.0, 3.0, 4.0]})
+        figures_before = set(plt.get_fignums())
+        invalid_calls = (
+            (
+                "identity_line_style.*mapping",
+                {"show_identity_line": True, "identity_line_style": []},
+            ),
+            (
+                "visible x and y ranges",
+                {
+                    "show_identity_line": True,
+                    "xlims": (1.0, 2.0),
+                    "ylims": (3.0, 4.0),
+                },
+            ),
+            (
+                "not a valid value for color",
+                {
+                    "show_identity_line": True,
+                    "identity_limits": "data",
+                    "identity_line_style": {"color": "not-a-color"},
+                },
+            ),
+        )
+
+        for message, kwargs in invalid_calls:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(ValueError, message):
+                    adtl.corr_dotplot(
+                        df=df,
+                        column_key_x="x",
+                        column_key_y="y",
+                        axes_lines=False,
+                        show_fit=False,
+                        show=False,
+                        **kwargs,
+                    )
+
+        with self.assertRaisesRegex(ValueError, "visible x and y ranges"):
+            adtl.corr_dotplot(
+                df=pd.DataFrame(
+                    {"x": [1.0, 2.0, 3.0], "y": [100.0, 101.0, 102.0]}
+                ),
+                column_key_x="x",
+                column_key_y="y",
+                axes_lines=False,
+                show_fit=False,
+                show_identity_line=True,
+                show=False,
+            )
+
+        self.assertEqual(set(plt.get_fignums()), figures_before)
+
     def test_transformed_fit_and_identity_sample_raw_relation(self):
         df = pd.DataFrame(
             {"x": [1.0, 10.0, 100.0], "y": [1.0, 10.0, 100.0]}

@@ -31,7 +31,7 @@ def ranked_waterfall(
 ) -> tuple[plt.Figure, plt.Axes, pd.DataFrame]:
 ```
 
-Rows are stably sorted by `value`, optional ascending `tie_breaker`, then input order. Missing or non-finite values and missing labels raise. Duplicate labels raise unless explicitly allowed. The returned copy adds zero-based `rank` and `resolved_color`.
+Rows are stably sorted by `value`, optional ascending `tie_breaker`, then input order. Missing or non-finite values and missing labels raise. Duplicate labels raise unless explicitly allowed. The returned copy adds zero-based `rank` and `resolved_color`; input columns may not already use either reserved name.
 
 ```python
 fig, ax, ranked = adtl.ranked_waterfall(

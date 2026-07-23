@@ -86,7 +86,7 @@ fig, ax, plot_data = adtl.longitudinal_trajectories(
 
 ## Styles, missing values, and scales
 
-`line_color_by`, `point_color_by`, and `marker_by` are independent. `color_order` controls the shared deterministic color order. A palette mapping must cover every configured color category. Marker style mappings accept `marker`, `filled`, `label`, `facecolor`, `edgecolor`, `size`, and `alpha`. Open markers render with `facecolor="none"`; the prepared table still records their intended resolved face color and their rendered face color separately.
+`line_color_by`, `point_color_by`, and `marker_by` are independent. Without `point_color_by`, `resolved_point_color` remains Matplotlib's default `C0`; explicit marker face and edge overrides still apply. `color_order` controls the shared deterministic color order. A palette mapping must cover every configured color category. Marker style mappings accept `marker`, `filled`, `label`, `facecolor`, `edgecolor`, `size`, and `alpha`. Configured marker colors are validated before drawing, including styles for unobserved values in `marker_order`. Open markers render with `facecolor="none"`; the prepared table still records their intended resolved face color and their rendered face color separately.
 
 `color_order` requires at least one active color channel, and `marker_order` requires `marker_by`. A palette sequence must contain at least as many colors as the configured color order; palette mappings must cover every configured category. Invalid marker symbols, nonpositive figure extents, and nonfinite or reversed y limits raise before drawing.
 
@@ -96,7 +96,7 @@ the current Matplotlib figure set unchanged.
 
 Jitter is uniform within `[-x_jitter, x_jitter]`, follows stable plot order, and is reproducible when `random_seed` is fixed. Segment endpoints reuse the returned `x_jittered` coordinates.
 
-With `dropna_display=True`, rows with missing display values are not point-eligible. With `False`, they remain point-eligible and Matplotlib masks the missing coordinate; this setting never changes line eligibility. Infinite values and nonnumeric nonmissing values raise. On a log axis, every rendered finite point, line endpoint, limit, and reference value must be positive.
+With `dropna_display=True`, rows with missing display values are not point-eligible. With `False`, they remain point-eligible and Matplotlib masks the missing coordinate; this setting never changes line eligibility. Infinite values and nonnumeric nonmissing values raise. On a log axis, every rendered finite point, actual segment endpoint, limit, and reference value must be positive; exact values that do not enter a segment are not constrained by the line channel.
 
 `y_reference_lines` follows the shared ordered reference-line schema. Each mapping requires numeric `value` and may contain `label`, `color`, `linestyle`, `linewidth`, `alpha`, and `zorder`. Labeled references retain configured legend order.
 

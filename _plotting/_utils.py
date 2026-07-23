@@ -127,8 +127,15 @@ def _normalize_reference_lines(
 ) -> list[dict[str, Any]]:
     """Validate and copy an ordered public reference-line specification."""
 
+    if reference_lines is None:
+        return []
+    if isinstance(reference_lines, (str, bytes, bytearray, Mapping)) or not isinstance(
+        reference_lines, Sequence
+    ):
+        raise ValueError(f"'{param_name}' must be a sequence of mappings.")
+
     normalized: list[dict[str, Any]] = []
-    for index, line in enumerate(reference_lines or ()):
+    for index, line in enumerate(reference_lines):
         if not isinstance(line, Mapping):
             raise ValueError(f"'{param_name}[{index}]' must be a mapping.")
         unsupported = sorted(set(line).difference(_REFERENCE_LINE_KEYS))
