@@ -8,6 +8,7 @@ from ._column_plots import *
 from ._row_plots import *
 from ._corr_dotplots import *
 from ._forest import *
+from ._meta_forest import *
 from ._histograms import *
 from ._tabular_plots import *
 from ._longitudinal import *

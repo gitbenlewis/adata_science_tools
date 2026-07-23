@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping, Sequence
 from numbers import Integral, Real
+from string import Formatter
 from typing import Any, Literal
 
 import anndata
@@ -10,6 +11,7 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import numpy as np
 import pandas as pd
+import seaborn as sns
 
 from ._utils import _draw_reference_lines, _normalize_reference_lines
 
@@ -27,34 +29,56 @@ def forest(
     ci_low_col: str,
     ci_high_col: str,
     pvalue_col: str | None = None,
+    total_observations_col: str | None = None,
     feature_id_col: str | None = None,
     feature_label_col: str | None = None,
     feature_label_char_limit: int | None = 40,
+    group_col: str | None = None,
+    group_order: Sequence[Any] | None = None,
+    group_labels: Mapping[Any, str] | None = None,
     effect_type: Literal[
-        "coefficient", "odds_ratio", "log_odds"
+        "coefficient",
+        "odds_ratio",
+        "log_odds",
+        "additive",
+        "ratio",
+        "log_ratio",
     ] = "coefficient",
+    null_value: float | None = None,
+    effect_label: str | None = None,
     pvalue_label: str = "p-value",
     pvalue_cutoff: float = 0.05,
     missing_policy: Literal["show", "drop", "raise"] = "show",
     show_pvalue_ring: bool = True,
     point_sizes: tuple[float, float] = (24, 180),
+    pvalue_color_mode: Literal[
+        "auto", "significance", "continuous"
+    ] = "auto",
     significant_cmap: str = "viridis_r",
     nonsignificant_color: Any = "0.65",
+    total_observations_label: str = "Total observations",
+    show_size_legend: bool = True,
+    group_palette: Mapping[Any, Any] | Sequence[Any] | str | None = None,
+    group_dodge: float = 0.5,
     xlims: Sequence[float] | None = None,
+    ci_clip: Literal["none", "arrows"] = "none",
     x_reference_lines: Sequence[Mapping[str, Any]] | None = None,
     xlabel: str | None = None,
     title: str | None = None,
     annotate: bool = False,
+    table_columns: Mapping[str, str] | None = None,
+    table_formats: Mapping[str, str] | None = None,
     show_pvalue_legend: bool = True,
     legend_bins: int = 4,
+    ax: plt.Axes | None = None,
     figsize: tuple[float, float] | None = None,
     show: bool = True,
 ) -> tuple[plt.Figure, plt.Axes, pd.DataFrame]:
     """Plot supplied model estimates and confidence intervals.
 
     ``forest`` does not fit models or calculate inferential statistics. In
-    ``log_odds`` mode, the supplied estimates and interval endpoints are
-    exponentiated for display as odds ratios.
+    ``log_odds`` and ``log_ratio`` modes, the supplied estimates and interval
+    endpoints are exponentiated for display on a ratio scale.
     """
 
     if (adata is None) == (var_df is None):
@@ -90,16 +114,168 @@ def forest(
         if is_duplicate:
             raise ValueError("'feature_list' must contain unique identifiers.")
 
-    if effect_type not in {"coefficient", "odds_ratio", "log_odds"}:
+    valid_effect_types = {
+        "coefficient",
+        "odds_ratio",
+        "log_odds",
+        "additive",
+        "ratio",
+        "log_ratio",
+    }
+    if effect_type not in valid_effect_types:
         raise ValueError(
-            "'effect_type' must be 'coefficient', 'odds_ratio', or 'log_odds'."
+            "'effect_type' must be 'coefficient', 'odds_ratio', 'log_odds', "
+            "'additive', 'ratio', or 'log_ratio'."
         )
+    ratio_display = effect_type in {
+        "odds_ratio",
+        "log_odds",
+        "ratio",
+        "log_ratio",
+    }
+    exponentiate = effect_type in {"log_odds", "log_ratio"}
+    default_null = 1.0 if ratio_display else 0.0
+    if null_value is None:
+        resolved_null_value = default_null
+    else:
+        if (
+            isinstance(null_value, (bool, np.bool_))
+            or not isinstance(null_value, Real)
+            or not np.isfinite(null_value)
+        ):
+            raise ValueError("'null_value' must be a finite real number or None.")
+        resolved_null_value = float(null_value)
+        if ratio_display and resolved_null_value <= 0:
+            raise ValueError(
+                "'null_value' must be positive for ratio-scale displays."
+            )
+    default_effect_label = {
+        "coefficient": "β",
+        "additive": "Effect",
+        "odds_ratio": "OR",
+        "log_odds": "OR",
+        "ratio": "Ratio",
+        "log_ratio": "Ratio",
+    }[effect_type]
+    if effect_label is None:
+        resolved_effect_label = default_effect_label
+    elif not isinstance(effect_label, str) or not effect_label.strip():
+        raise ValueError("'effect_label' must be a non-empty string or None.")
+    else:
+        resolved_effect_label = effect_label
+
     if missing_policy not in {"show", "drop", "raise"}:
         raise ValueError("'missing_policy' must be 'show', 'drop', or 'raise'.")
+    if pvalue_color_mode not in {"auto", "significance", "continuous"}:
+        raise ValueError(
+            "'pvalue_color_mode' must be 'auto', 'significance', or 'continuous'."
+        )
+    resolved_pvalue_color_mode = (
+        "continuous"
+        if (
+            pvalue_color_mode == "auto"
+            and total_observations_col is not None
+            and pvalue_col is not None
+        )
+        else (
+            "significance"
+            if pvalue_color_mode == "auto"
+            else pvalue_color_mode
+        )
+    )
+    if resolved_pvalue_color_mode == "continuous" and pvalue_col is None:
+        raise ValueError(
+            "'pvalue_color_mode=\"continuous\"' requires 'pvalue_col'."
+        )
+    if ci_clip not in {"none", "arrows"}:
+        raise ValueError("'ci_clip' must be 'none' or 'arrows'.")
+    if ax is not None and not isinstance(ax, plt.Axes):
+        raise TypeError("'ax' must be a Matplotlib Axes or None.")
+
+    if (
+        isinstance(group_dodge, (bool, np.bool_))
+        or not isinstance(group_dodge, Real)
+        or not np.isfinite(group_dodge)
+        or not 0 <= float(group_dodge) < 1
+    ):
+        raise ValueError("'group_dodge' must be a finite number in [0, 1).")
+    group_dodge = float(group_dodge)
+    if group_col is None and any(
+        value is not None
+        for value in (group_order, group_labels, group_palette)
+    ):
+        raise ValueError(
+            "'group_order', 'group_labels', and 'group_palette' require "
+            "'group_col'."
+        )
+
+    if table_columns is None:
+        if table_formats is not None:
+            raise ValueError("'table_formats' requires 'table_columns'.")
+        resolved_table_columns: list[tuple[str, str]] = []
+        resolved_table_formats: dict[str, str] = {}
+    else:
+        if not isinstance(table_columns, Mapping) or not table_columns:
+            raise ValueError("'table_columns' must be a non-empty mapping or None.")
+        resolved_table_columns = []
+        for header, column in table_columns.items():
+            if not isinstance(header, str) or not header.strip():
+                raise ValueError(
+                    "'table_columns' headers must be non-empty strings."
+                )
+            if not isinstance(column, str) or not column:
+                raise ValueError(
+                    "'table_columns' source columns must be non-empty strings."
+                )
+            resolved_table_columns.append((header, column))
+        if table_formats is None:
+            resolved_table_formats = {}
+        elif not isinstance(table_formats, Mapping):
+            raise ValueError("'table_formats' must be a mapping or None.")
+        else:
+            unknown_format_headers = [
+                header for header in table_formats if header not in table_columns
+            ]
+            if unknown_format_headers:
+                raise ValueError(
+                    "'table_formats' contains unknown header(s): "
+                    f"{unknown_format_headers}."
+                )
+            resolved_table_formats = {}
+            for header, format_string in table_formats.items():
+                if not isinstance(format_string, str):
+                    raise ValueError(
+                        f"'table_formats[{header!r}]' must be a string."
+                    )
+                try:
+                    parsed_fields = [
+                        field_name
+                        for _, field_name, _, _ in Formatter().parse(format_string)
+                        if field_name is not None
+                    ]
+                except ValueError as exc:
+                    raise ValueError(
+                        f"'table_formats[{header!r}]' is not a valid format string."
+                    ) from exc
+                if not parsed_fields or any(
+                    field_name != "value" for field_name in parsed_fields
+                ):
+                    raise ValueError(
+                        f"'table_formats[{header!r}]' may use only the exact "
+                        "'{value}' replacement field."
+                    )
+                resolved_table_formats[header] = format_string
 
     source_df = var_df if var_df is not None else adata.var
     required_columns = [estimate_col, ci_low_col, ci_high_col]
-    optional_columns = [pvalue_col, feature_id_col, feature_label_col]
+    optional_columns = [
+        pvalue_col,
+        total_observations_col,
+        feature_id_col,
+        feature_label_col,
+        group_col,
+        *[column for _, column in resolved_table_columns],
+    ]
     referenced_columns = required_columns + [
         column for column in optional_columns if column is not None
     ]
@@ -127,19 +303,204 @@ def forest(
             raise ValueError(
                 "Feature identifiers in the result table must be hashable."
             ) from exc
-    source_index = pd.Index(source_id_values, dtype=object)
-    if source_index.has_duplicates:
-        raise ValueError("Feature identifiers in the result table must be unique.")
-    missing_features = [feature for feature in features if feature not in source_index]
+    source_positions_by_feature: dict[Any, list[int]] = {}
+    for position, feature in enumerate(source_id_values):
+        source_positions_by_feature.setdefault(feature, []).append(position)
+    missing_features = [
+        feature for feature in features if feature not in source_positions_by_feature
+    ]
     if missing_features:
         raise KeyError(
             f"Features not found in the result table: {missing_features[:5]}"
             + (" ..." if len(missing_features) > 5 else "")
         )
-    position_by_feature = {
-        feature: position for position, feature in enumerate(source_index)
-    }
-    selected_positions = [position_by_feature[feature] for feature in features]
+
+    if group_col is None:
+        if any(len(positions) > 1 for positions in source_positions_by_feature.values()):
+            raise ValueError("Feature identifiers in the result table must be unique.")
+        selected_positions = [
+            source_positions_by_feature[feature][0] for feature in features
+        ]
+        selected_feature_ids = features.copy()
+        selected_group_values: list[Any] = [None] * len(features)
+        configured_groups: list[Any] = [None]
+        resolved_group_labels: dict[Any, str | None] = {None: None}
+        resolved_group_colors: dict[Any, Any] = {None: None}
+    else:
+        raw_group_values = source_df[group_col]
+        if raw_group_values.isna().any():
+            raise ValueError("Group values in the result table must not be missing.")
+        source_group_values = raw_group_values.to_list()
+        seen_pairs: set[tuple[Any, Any]] = set()
+        for feature, group in zip(source_id_values, source_group_values):
+            try:
+                pair = (feature, group)
+                is_duplicate = pair in seen_pairs
+                seen_pairs.add(pair)
+            except TypeError as exc:
+                raise ValueError(
+                    "Group values in the result table must be hashable."
+                ) from exc
+            if is_duplicate:
+                raise ValueError(
+                    "Each feature/group pair in the result table must be unique."
+                )
+
+        selected_positions = [
+            position
+            for feature in features
+            for position in source_positions_by_feature[feature]
+        ]
+        selected_feature_ids = [
+            source_id_values[position] for position in selected_positions
+        ]
+        selected_group_values = [
+            source_group_values[position] for position in selected_positions
+        ]
+        observed_groups = list(dict.fromkeys(selected_group_values))
+        if group_order is None:
+            if isinstance(raw_group_values.dtype, pd.CategoricalDtype):
+                configured_groups = [
+                    group
+                    for group in raw_group_values.cat.categories
+                    if group in observed_groups
+                ]
+            else:
+                configured_groups = observed_groups
+        else:
+            if isinstance(
+                group_order,
+                (str, bytes, bytearray, Mapping, set, frozenset),
+            ) or getattr(group_order, "ndim", 1) != 1:
+                raise ValueError(
+                    "'group_order' must be a one-dimensional ordered collection."
+                )
+            try:
+                configured_groups = list(group_order)
+            except TypeError as exc:
+                raise ValueError(
+                    "'group_order' must be a one-dimensional ordered collection."
+                ) from exc
+            if not configured_groups:
+                raise ValueError("'group_order' must not be empty.")
+            seen_groups: set[Any] = set()
+            for group in configured_groups:
+                if pd.api.types.is_scalar(group) and pd.isna(group):
+                    raise ValueError(
+                        "'group_order' must not contain missing values."
+                    )
+                try:
+                    duplicate_group = group in seen_groups
+                    seen_groups.add(group)
+                except TypeError as exc:
+                    raise ValueError(
+                        "'group_order' values must be hashable."
+                    ) from exc
+                if duplicate_group:
+                    raise ValueError(
+                        "'group_order' must contain unique values."
+                    )
+            missing_order_groups = [
+                group for group in observed_groups if group not in seen_groups
+            ]
+            if missing_order_groups:
+                raise ValueError(
+                    "Observed group value(s) missing from 'group_order': "
+                    f"{missing_order_groups}."
+                )
+
+        if group_labels is None:
+            resolved_group_labels = {
+                group: str(group) for group in configured_groups
+            }
+        elif not isinstance(group_labels, Mapping):
+            raise ValueError("'group_labels' must be a mapping or None.")
+        else:
+            unknown_label_groups = [
+                group for group in group_labels if group not in configured_groups
+            ]
+            if unknown_label_groups:
+                raise ValueError(
+                    "'group_labels' contains unknown group(s): "
+                    f"{unknown_label_groups}."
+                )
+            resolved_group_labels = {}
+            for group in configured_groups:
+                label = group_labels.get(group, str(group))
+                if not isinstance(label, str) or not label.strip():
+                    raise ValueError(
+                        "'group_labels' values must be non-empty strings."
+                    )
+                resolved_group_labels[group] = label
+
+        if isinstance(group_palette, Mapping):
+            missing_palette_groups = [
+                group for group in configured_groups if group not in group_palette
+            ]
+            if missing_palette_groups:
+                raise ValueError(
+                    "'group_palette' is missing color(s) for: "
+                    f"{missing_palette_groups}."
+                )
+            group_color_values = [
+                group_palette[group] for group in configured_groups
+            ]
+        elif group_palette is None or isinstance(group_palette, str):
+            group_color_values = sns.color_palette(
+                group_palette,
+                n_colors=len(configured_groups),
+            )
+        elif isinstance(group_palette, (set, frozenset)):
+            raise ValueError(
+                "'group_palette' must be a palette name, mapping, or "
+                "ordered color collection."
+            )
+        else:
+            try:
+                group_color_values = list(group_palette)
+            except TypeError as exc:
+                raise ValueError(
+                    "'group_palette' must be a palette name, mapping, or "
+                    "ordered color collection."
+                ) from exc
+            if len(group_color_values) < len(configured_groups):
+                raise ValueError(
+                    "'group_palette' must provide at least as many colors as "
+                    "configured groups."
+                )
+        try:
+            resolved_group_colors = {
+                group: mcolors.to_rgba(group_color_values[position])
+                for position, group in enumerate(configured_groups)
+            }
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "'group_palette' contains an invalid Matplotlib color."
+            ) from exc
+
+        group_position_by_value = {
+            group: position for position, group in enumerate(configured_groups)
+        }
+        feature_position_by_value = {
+            feature: position for position, feature in enumerate(features)
+        }
+        selected_order = sorted(
+            range(len(selected_positions)),
+            key=lambda position: (
+                feature_position_by_value[selected_feature_ids[position]],
+                group_position_by_value[selected_group_values[position]],
+            ),
+        )
+        selected_positions = [
+            selected_positions[position] for position in selected_order
+        ]
+        selected_feature_ids = [
+            selected_feature_ids[position] for position in selected_order
+        ]
+        selected_group_values = [
+            selected_group_values[position] for position in selected_order
+        ]
+
     selected_columns = list(dict.fromkeys(referenced_columns))
     selected_df = source_df.iloc[selected_positions][selected_columns].copy(deep=True)
     selected_df.index = pd.RangeIndex(len(selected_df))
@@ -155,23 +516,44 @@ def forest(
             )
         feature_label_char_limit = int(feature_label_char_limit)
 
-    feature_labels: list[str] = []
-    raw_labels = (
-        selected_df[feature_label_col].tolist()
-        if feature_label_col is not None
-        else features
-    )
-    for feature, label in zip(features, raw_labels):
-        if pd.api.types.is_scalar(label) and pd.isna(label):
-            label = feature
-        resolved_label = str(label)
+    labels_by_feature: dict[Any, dict[str, None]] = {
+        feature: {} for feature in features
+    }
+    if feature_label_col is not None:
+        for feature, label in zip(
+            selected_feature_ids,
+            selected_df[feature_label_col].tolist(),
+        ):
+            if pd.api.types.is_scalar(label) and pd.isna(label):
+                continue
+            labels_by_feature[feature].setdefault(str(label), None)
+
+    feature_label_by_id: dict[Any, str] = {}
+    for feature in features:
+        if feature_label_col is None:
+            resolved_label = str(feature)
+        else:
+            distinct_labels = list(labels_by_feature[feature])
+            if len(distinct_labels) > 1:
+                raise ValueError(
+                    "Feature labels must agree across grouped rows for feature "
+                    f"{feature!r}."
+                )
+            resolved_label = (
+                distinct_labels[0] if distinct_labels else str(feature)
+            )
         if feature_label_char_limit is not None:
             resolved_label = resolved_label[:feature_label_char_limit]
-        feature_labels.append(resolved_label)
+        feature_label_by_id[feature] = resolved_label
+    feature_labels = [
+        feature_label_by_id[feature] for feature in selected_feature_ids
+    ]
 
     numeric_columns = [estimate_col, ci_low_col, ci_high_col]
     if pvalue_col is not None:
         numeric_columns.append(pvalue_col)
+    if total_observations_col is not None:
+        numeric_columns.append(total_observations_col)
     numeric_values: dict[str, pd.Series] = {}
     for column in numeric_columns:
         raw_values = selected_df[column]
@@ -224,13 +606,44 @@ def forest(
         raise ValueError(
             "Each estimable interval must satisfy ci_low <= estimate <= ci_high."
         )
-    if effect_type == "odds_ratio":
+    if ratio_display and not exponentiate:
         nonpositive = estimable & (
             (raw_estimate <= 0) | (raw_ci_low <= 0) | (raw_ci_high <= 0)
         )
         if nonpositive.any():
             raise ValueError(
-                "Odds-ratio estimates and confidence intervals must be positive."
+                "Ratio estimates and confidence intervals must be positive."
+            )
+
+    if total_observations_col is None:
+        total_observations = pd.Series(
+            np.nan,
+            index=selected_df.index,
+            dtype=float,
+        )
+    else:
+        total_observations = numeric_values[total_observations_col]
+        invalid_counts = (
+            total_observations.notna()
+            & (
+                (total_observations <= 0)
+                | (total_observations % 1 != 0)
+            )
+        ) | (
+            estimable
+            & total_observations.isna()
+        )
+        if invalid_counts.any():
+            raise ValueError(
+                "'total_observations_col' must contain positive integer-valued "
+                "counts for estimable rows."
+            )
+        if (
+            not isinstance(total_observations_label, str)
+            or not total_observations_label.strip()
+        ):
+            raise ValueError(
+                "'total_observations_label' must be a non-empty string."
             )
 
     if pvalue_col is None:
@@ -301,9 +714,9 @@ def forest(
         param_name="x_reference_lines",
     )
     for index, line in enumerate(normalized_reference_lines):
-        if effect_type != "coefficient" and line["value"] <= 0:
+        if ratio_display and line["value"] <= 0:
             raise ValueError(
-                "Reference-line values must be positive for odds-ratio displays."
+                "Reference-line values must be positive for ratio displays."
             )
         try:
             Line2D([], [], **{key: value for key, value in line.items() if key != "value"})
@@ -339,16 +752,16 @@ def forest(
             raise ValueError("'xlims' lower bound must be less than its upper bound.")
         if not np.isfinite(xlims_tuple[1] - xlims_tuple[0]):
             raise ValueError("'xlims' must have a finite representable span.")
-        if effect_type == "coefficient" and max(
+        if not ratio_display and max(
             abs(xlims_tuple[0]), abs(xlims_tuple[1])
         ) > _MAX_SAFE_LINEAR_LIMIT:
             raise ValueError(
                 "'xlims' magnitudes are too large for reliable linear-axis rendering."
             )
-        if effect_type != "coefficient" and xlims_tuple[0] <= 0:
-            raise ValueError("'xlims' values must be positive for odds-ratio displays.")
+        if ratio_display and xlims_tuple[0] <= 0:
+            raise ValueError("'xlims' values must be positive for ratio displays.")
 
-    if figsize is not None:
+    if ax is None and figsize is not None:
         if isinstance(
             figsize,
             (str, bytes, bytearray, Mapping, set, frozenset),
@@ -374,6 +787,7 @@ def forest(
         (show_pvalue_ring, "show_pvalue_ring"),
         (annotate, "annotate"),
         (show_pvalue_legend, "show_pvalue_legend"),
+        (show_size_legend, "show_size_legend"),
         (show, "show"),
     ):
         if not isinstance(value, (bool, np.bool_)):
@@ -381,14 +795,16 @@ def forest(
 
     if missing_policy == "raise" and (~estimable).any():
         missing_ids = [
-            feature for feature, available in zip(features, estimable) if not available
+            feature
+            for feature, available in zip(selected_feature_ids, estimable)
+            if not available
         ]
         raise ValueError(
             f"Missing or non-estimable results for features: {missing_ids[:5]}"
             + (" ..." if len(missing_ids) > 5 else "")
         )
 
-    if effect_type == "log_odds":
+    if exponentiate:
         with np.errstate(over="ignore", invalid="ignore"):
             display_estimate = np.exp(raw_estimate)
             display_ci_low = np.exp(raw_ci_low)
@@ -402,7 +818,7 @@ def forest(
             or (displayed_array <= 0).any()
         ):
             raise ValueError(
-                "Exponentiated log-odds estimates and intervals must be finite "
+                "Exponentiated log-ratio estimates and intervals must be finite "
                 "and strictly positive."
             )
     else:
@@ -412,7 +828,7 @@ def forest(
 
     plot_df = pd.DataFrame(
         {
-            "feature_id": features,
+            "feature_id": selected_feature_ids,
             "feature_label": feature_labels,
             "raw_estimate": raw_estimate.to_numpy(),
             "raw_ci_low": raw_ci_low.to_numpy(),
@@ -425,6 +841,7 @@ def forest(
                 estimable & pvalues.notna() & (pvalues <= pvalue_cutoff)
             ).to_numpy(),
             "estimable": estimable.to_numpy(),
+            "selected_row_position_internal": np.arange(len(selected_df)),
         }
     )
     if missing_policy == "drop":
@@ -434,7 +851,56 @@ def forest(
                 "No estimable rows remain after applying missing_policy='drop'."
             )
 
-    plot_df["forest_y"] = np.arange(len(plot_df) - 1, -1, -1, dtype=float)
+    if group_col is None:
+        plot_df["forest_y"] = np.arange(
+            len(plot_df) - 1,
+            -1,
+            -1,
+            dtype=float,
+        )
+        visible_features = plot_df["feature_id"].tolist()
+        feature_tick_positions = plot_df["forest_y"].tolist()
+    else:
+        retained_features = set(plot_df["feature_id"])
+        visible_features = [
+            feature
+            for feature in features
+            if feature in retained_features
+        ]
+        visible_feature_positions = {
+            feature: position
+            for position, feature in enumerate(visible_features)
+        }
+        feature_centers = {
+            feature: float(len(visible_features) - position - 1)
+            for feature, position in visible_feature_positions.items()
+        }
+        if len(configured_groups) == 1:
+            group_offsets = [0.0]
+        else:
+            group_offsets = np.linspace(
+                group_dodge / 2.0,
+                -group_dodge / 2.0,
+                num=len(configured_groups),
+            ).tolist()
+        group_position_by_value = {
+            group: position for position, group in enumerate(configured_groups)
+        }
+        plot_df["forest_y"] = [
+            feature_centers[feature]
+            + group_offsets[group_position_by_value[group]]
+            for feature, group in zip(
+                plot_df["feature_id"],
+                [
+                    selected_group_values[int(position)]
+                    for position in plot_df["selected_row_position_internal"]
+                ],
+            )
+        ]
+        feature_tick_positions = [
+            feature_centers[feature] for feature in visible_features
+        ]
+
     finite_pvalue = plot_df["pvalue"].notna() & plot_df["estimable"]
     pvalue_metric = pd.Series(np.nan, index=plot_df.index, dtype=float)
     positive_pvalue_floor = np.nextafter(0.0, 1.0)
@@ -454,42 +920,119 @@ def forest(
         float(observed_metric_max) if pd.notna(observed_metric_max) else 0.0,
         np.finfo(float).eps,
     )
-    color_norm = mcolors.Normalize(
+    significance_color_norm = mcolors.Normalize(
         vmin=cutoff_metric,
         vmax=max(metric_max, np.nextafter(cutoff_metric, np.inf)),
+        clip=True,
+    )
+    continuous_color_norm = mcolors.Normalize(
+        vmin=0.0,
+        vmax=max(metric_max, np.finfo(float).eps),
         clip=True,
     )
 
     marker_sizes: list[float] = []
     resolved_colors: list[Any] = []
+    count_min = float("nan")
+    count_max = float("nan")
+    if total_observations_col is not None:
+        retained_counts = total_observations.iloc[
+            plot_df["selected_row_position_internal"].astype(int).to_numpy()
+        ].reset_index(drop=True)
+        count_values = retained_counts.loc[plot_df["estimable"]]
+        count_min = float(count_values.min())
+        count_max = float(count_values.max())
+    else:
+        retained_counts = pd.Series(
+            np.nan,
+            index=plot_df.index,
+            dtype=float,
+        )
+
     for row_index, row in plot_df.iterrows():
         if not row["estimable"]:
             marker_sizes.append(float("nan"))
             resolved_colors.append(None)
             continue
         metric = pvalue_metric.loc[row_index]
-        if pd.isna(metric):
-            marker_sizes.append(point_size_min)
-            resolved_colors.append(neutral_rgba)
-            continue
-        marker_sizes.append(
-            float(
-                np.interp(
-                    metric,
-                    [0.0, metric_max],
-                    [point_size_min, point_size_max],
+        if total_observations_col is not None:
+            count = retained_counts.loc[row_index]
+            marker_sizes.append(
+                float(
+                    (point_size_min + point_size_max) / 2.0
+                    if count_min == count_max
+                    else np.interp(
+                        count,
+                        [count_min, count_max],
+                        [point_size_min, point_size_max],
+                    )
                 )
             )
-        )
-        resolved_colors.append(
-            cmap(color_norm(metric)) if row["significant"] else neutral_rgba
-        )
+        elif pd.isna(metric):
+            marker_sizes.append(point_size_min)
+        else:
+            marker_sizes.append(
+                float(
+                    np.interp(
+                        metric,
+                        [0.0, metric_max],
+                        [point_size_min, point_size_max],
+                    )
+                )
+            )
+
+        if pd.isna(metric):
+            if group_col is not None and pvalue_col is None:
+                group = selected_group_values[
+                    int(row["selected_row_position_internal"])
+                ]
+                resolved_colors.append(resolved_group_colors[group])
+            else:
+                resolved_colors.append(neutral_rgba)
+        elif resolved_pvalue_color_mode == "continuous":
+            resolved_colors.append(cmap(continuous_color_norm(metric)))
+        else:
+            resolved_colors.append(
+                cmap(significance_color_norm(metric))
+                if row["significant"]
+                else neutral_rgba
+            )
     plot_df["resolved_color"] = resolved_colors
     plot_df["resolved_marker_size"] = marker_sizes
 
-    null_value = 0.0 if effect_type == "coefficient" else 1.0
+    if group_col is not None:
+        group_values_for_rows = [
+            selected_group_values[int(position)]
+            for position in plot_df["selected_row_position_internal"]
+        ]
+        visible_feature_position_by_value = {
+            feature: position
+            for position, feature in enumerate(visible_features)
+        }
+        plot_df["feature_position"] = [
+            visible_feature_position_by_value[feature]
+            for feature in plot_df["feature_id"]
+        ]
+        plot_df["group"] = group_values_for_rows
+        plot_df["group_label"] = [
+            resolved_group_labels[group] for group in group_values_for_rows
+        ]
+        plot_df["group_position"] = [
+            group_position_by_value[group] for group in group_values_for_rows
+        ]
+        plot_df["resolved_group_color"] = [
+            resolved_group_colors[group] for group in group_values_for_rows
+        ]
+    if (
+        total_observations_col is not None
+        or resolved_pvalue_color_mode == "continuous"
+    ):
+        plot_df["resolved_pvalue_metric"] = pvalue_metric.to_numpy()
+    if total_observations_col is not None:
+        plot_df["total_observations"] = retained_counts.to_numpy()
+
     if xlims_tuple is None:
-        visible_values = [null_value]
+        visible_values = [resolved_null_value]
         visible_values.extend(
             plot_df.loc[
                 plot_df["estimable"], ["display_ci_low", "display_ci_high"]
@@ -497,11 +1040,13 @@ def forest(
         )
         visible_values.extend(line["value"] for line in normalized_reference_lines)
         visible_array = np.asarray(visible_values, dtype=float)
-        if effect_type == "coefficient":
-            max_abs = float(np.max(np.abs(visible_array)))
-            if max_abs == 0:
-                max_abs = 1.0
-            symmetric_limit = 1.08 * max_abs
+        if not ratio_display:
+            max_distance = float(
+                np.max(np.abs(visible_array - resolved_null_value))
+            )
+            if max_distance == 0:
+                max_distance = 1.0
+            symmetric_limit = 1.08 * max_distance
             if (
                 not np.isfinite(symmetric_limit)
                 or symmetric_limit > _MAX_SAFE_LINEAR_LIMIT
@@ -510,7 +1055,15 @@ def forest(
                     "Automatic coefficient limits exceed the finite floating-point "
                     "range; provide explicit 'xlims' with a representable span."
                 )
-            xlims_tuple = (-symmetric_limit, symmetric_limit)
+            xlims_tuple = (
+                resolved_null_value - symmetric_limit,
+                resolved_null_value + symmetric_limit,
+            )
+            if not np.isfinite(xlims_tuple).all():
+                raise ValueError(
+                    "Automatic coefficient limits exceed the finite floating-point "
+                    "range; provide explicit 'xlims' with a representable span."
+                )
         else:
             log_values = np.log(visible_array)
             log_lower = float(log_values.min())
@@ -534,47 +1087,223 @@ def forest(
                 )
             xlims_tuple = (float(np.exp(log_lower)), float(np.exp(log_upper)))
 
+    if ci_clip == "arrows":
+        clipped_low = plot_df["estimable"] & (
+            plot_df["display_ci_low"] < xlims_tuple[0]
+        )
+        clipped_high = plot_df["estimable"] & (
+            plot_df["display_ci_high"] > xlims_tuple[1]
+        )
+        plot_df["render_ci_low"] = plot_df["display_ci_low"].clip(
+            lower=xlims_tuple[0],
+            upper=xlims_tuple[1],
+        )
+        plot_df["render_ci_high"] = plot_df["display_ci_high"].clip(
+            lower=xlims_tuple[0],
+            upper=xlims_tuple[1],
+        )
+        plot_df["ci_clipped_low"] = clipped_low
+        plot_df["ci_clipped_high"] = clipped_high
+
+    annotation_texts = []
+    for row in plot_df.itertuples(index=False):
+        if not row.estimable:
+            annotation_texts.append("Not estimable")
+        elif not annotate:
+            annotation_texts.append("")
+        else:
+            pvalue_text = (
+                ""
+                if pvalue_col is None
+                else (
+                    f"; {pvalue_label}="
+                    f"{'NA' if pd.isna(row.pvalue) else f'{row.pvalue:.3g}'}"
+                )
+            )
+            annotation_texts.append(
+                f"{resolved_effect_label}={row.display_estimate:.3g} "
+                f"[{row.display_ci_low:.3g}, {row.display_ci_high:.3g}]"
+                f"{pvalue_text}"
+            )
+    plot_df["resolved_annotation_internal"] = annotation_texts
+
+    table_header_text: str | None = None
+    if resolved_table_columns:
+        formatted_rows: list[tuple[str, ...]] = []
+        for row in plot_df.itertuples(index=False):
+            row_values: list[str] = []
+            selected_row = selected_df.iloc[
+                int(row.selected_row_position_internal)
+            ]
+            for header, column in resolved_table_columns:
+                value = selected_row[column]
+                is_missing = pd.api.types.is_scalar(value) and pd.isna(value)
+                if is_missing:
+                    formatted = "NA"
+                elif header in resolved_table_formats:
+                    try:
+                        formatted = resolved_table_formats[header].format(
+                            value=value
+                        )
+                    except (KeyError, TypeError, ValueError) as exc:
+                        raise ValueError(
+                            f"'table_formats[{header!r}]' cannot format values "
+                            f"from column '{column}'."
+                        ) from exc
+                else:
+                    formatted = str(value)
+                row_values.append(formatted)
+            formatted_rows.append(tuple(row_values))
+
+        status_header = (
+            f"{resolved_effect_label} [CI]" if annotate else ""
+        )
+        status_values = plot_df["resolved_annotation_internal"].tolist()
+        headers = [status_header] + [
+            header for header, _ in resolved_table_columns
+        ]
+        value_columns = [
+            status_values,
+            *[
+                [row[position] for row in formatted_rows]
+                for position in range(len(resolved_table_columns))
+            ],
+        ]
+        widths = [
+            max(
+                len(header),
+                max((len(value) for value in values), default=0),
+            )
+            for header, values in zip(headers, value_columns)
+        ]
+        table_header_text = "  ".join(
+            header.rjust(width)
+            for header, width in zip(headers, widths)
+        )
+        table_text = [
+            "  ".join(
+                values[row_position].rjust(width)
+                for values, width in zip(value_columns, widths)
+            )
+            for row_position in range(len(plot_df))
+        ]
+        plot_df["resolved_table_values"] = formatted_rows
+        plot_df["resolved_table_text"] = table_text
+
     resolved_figsize = figsize or (
-        10.0 if annotate else 8.0,
-        max(3.0, 0.55 * len(plot_df) + 1.5),
+        10.0 if annotate or resolved_table_columns else 8.0,
+        max(3.0, 0.55 * len(visible_features) + 1.5),
     )
 
-    fig, ax = plt.subplots(figsize=resolved_figsize)
+    created_figure = ax is None
+    if created_figure:
+        fig, ax = plt.subplots(figsize=resolved_figsize)
+    else:
+        fig = ax.figure
     try:
-        if effect_type != "coefficient":
-            ax.set_xscale("log")
+        ax.set_xscale("log" if ratio_display else "linear")
         ax.set_xlim(xlims_tuple)
 
         for row in plot_df.loc[plot_df["estimable"]].itertuples(index=False):
-            ax.errorbar(
-                row.display_estimate,
-                row.forest_y,
-                xerr=[
-                    [row.display_estimate - row.display_ci_low],
-                    [row.display_ci_high - row.display_estimate],
-                ],
-                fmt="none",
-                ecolor="0.35",
-                elinewidth=1.5,
-                capsize=4,
-                capthick=1.5,
-                zorder=1,
+            interval_color = (
+                row.resolved_group_color
+                if group_col is not None
+                else "0.35"
             )
+            if ci_clip == "none":
+                ax.errorbar(
+                    row.display_estimate,
+                    row.forest_y,
+                    xerr=[
+                        [row.display_estimate - row.display_ci_low],
+                        [row.display_ci_high - row.display_estimate],
+                    ],
+                    fmt="none",
+                    ecolor=interval_color,
+                    elinewidth=1.5,
+                    capsize=4,
+                    capthick=1.5,
+                    zorder=1,
+                )
+            else:
+                visible_low = max(row.display_ci_low, xlims_tuple[0])
+                visible_high = min(row.display_ci_high, xlims_tuple[1])
+                if visible_low <= visible_high:
+                    ax.hlines(
+                        row.forest_y,
+                        visible_low,
+                        visible_high,
+                        color=interval_color,
+                        linewidth=1.5,
+                        zorder=1,
+                    )
+                if xlims_tuple[0] <= row.display_ci_low <= xlims_tuple[1]:
+                    ax.plot(
+                        row.display_ci_low,
+                        row.forest_y,
+                        marker="|",
+                        color=interval_color,
+                        markersize=8,
+                        markeredgewidth=1.5,
+                        linestyle="",
+                        zorder=1,
+                    )
+                if xlims_tuple[0] <= row.display_ci_high <= xlims_tuple[1]:
+                    ax.plot(
+                        row.display_ci_high,
+                        row.forest_y,
+                        marker="|",
+                        color=interval_color,
+                        markersize=8,
+                        markeredgewidth=1.5,
+                        linestyle="",
+                        zorder=1,
+                    )
+                if row.ci_clipped_low:
+                    ax.scatter(
+                        [0.0],
+                        [row.forest_y],
+                        transform=ax.get_yaxis_transform(),
+                        marker="<",
+                        s=30,
+                        c=[interval_color],
+                        clip_on=False,
+                        zorder=2,
+                    )
+                if row.ci_clipped_high:
+                    ax.scatter(
+                        [1.0],
+                        [row.forest_y],
+                        transform=ax.get_yaxis_transform(),
+                        marker=">",
+                        s=30,
+                        c=[interval_color],
+                        clip_on=False,
+                        zorder=2,
+                    )
 
         estimable_rows = plot_df.loc[plot_df["estimable"]]
-        ring_rows = estimable_rows.loc[estimable_rows["pvalue"].notna()]
+        ring_rows = (
+            estimable_rows.loc[estimable_rows["significant"]]
+            if total_observations_col is not None
+            else estimable_rows.loc[estimable_rows["pvalue"].notna()]
+        )
         if pvalue_col is not None and show_pvalue_ring and not ring_rows.empty:
-            ring_size = float(
-                np.interp(
-                    cutoff_metric,
-                    [0.0, metric_max],
-                    [point_size_min, point_size_max],
+            ring_sizes: float | pd.Series
+            if total_observations_col is None:
+                ring_sizes = float(
+                    np.interp(
+                        cutoff_metric,
+                        [0.0, metric_max],
+                        [point_size_min, point_size_max],
+                    )
                 )
-            )
+            else:
+                ring_sizes = ring_rows["resolved_marker_size"]
             ax.scatter(
                 ring_rows["display_estimate"],
                 ring_rows["forest_y"],
-                s=ring_size,
+                s=ring_sizes,
                 facecolors="none",
                 edgecolors="red",
                 linewidths=1.0,
@@ -583,13 +1312,23 @@ def forest(
 
         neutral_rows = estimable_rows.loc[~estimable_rows["significant"]]
         significant_rows = estimable_rows.loc[estimable_rows["significant"]]
+        neutral_edges: Any = (
+            neutral_rows["resolved_group_color"].tolist()
+            if group_col is not None
+            else "black"
+        )
+        significant_edges: Any = (
+            significant_rows["resolved_group_color"].tolist()
+            if group_col is not None
+            else "black"
+        )
         if not neutral_rows.empty:
             ax.scatter(
                 neutral_rows["display_estimate"],
                 neutral_rows["forest_y"],
                 s=neutral_rows["resolved_marker_size"],
                 c=neutral_rows["resolved_color"].tolist(),
-                edgecolors="black",
+                edgecolors=neutral_edges,
                 linewidths=0.5,
                 zorder=3,
             )
@@ -599,88 +1338,141 @@ def forest(
                 significant_rows["forest_y"],
                 s=significant_rows["resolved_marker_size"],
                 c=significant_rows["resolved_color"].tolist(),
-                edgecolors="black",
+                edgecolors=significant_edges,
                 linewidths=0.5,
                 zorder=4,
             )
 
-        ax.axvline(
-            null_value,
-            color="red",
-            linestyle="--",
-            linewidth=1.25,
-            label="_nolegend_",
-            zorder=0,
+        supplied_null_reference = next(
+            (
+                line
+                for line in normalized_reference_lines
+                if line["value"] == resolved_null_value
+            ),
+            None,
         )
-        reference_artists = _draw_reference_lines(
+        null_style: dict[str, Any] = {
+            "color": "red",
+            "linestyle": "--",
+            "linewidth": 1.25,
+            "label": "_nolegend_",
+            "zorder": 0,
+        }
+        if supplied_null_reference is not None:
+            null_style.update(
+                {
+                    key: value
+                    for key, value in supplied_null_reference.items()
+                    if key != "value"
+                }
+            )
+        null_artist = ax.axvline(
+            resolved_null_value,
+            **null_style,
+        )
+        reference_artists = [null_artist] + _draw_reference_lines(
             ax,
             normalized_reference_lines,
             axis="x",
             param_name="x_reference_lines",
-            skip_values=(null_value,),
+            skip_values=(resolved_null_value,),
         )
 
-        ax.set_ylim(-0.75, max(len(plot_df) - 0.25, 0.75))
-        ax.set_yticks(plot_df["forest_y"].tolist())
-        ax.set_yticklabels(plot_df["feature_label"].tolist())
-        ax.set_ylabel("")
-        ax.set_xlabel(
-            xlabel
-            or ("Coefficient" if effect_type == "coefficient" else "Odds ratio")
+        ax.set_ylim(-0.75, max(len(visible_features) - 0.25, 0.75))
+        ax.set_yticks(feature_tick_positions)
+        ax.set_yticklabels(
+            [feature_label_by_id[feature] for feature in visible_features]
         )
+        ax.set_ylabel("")
+        default_xlabel = {
+            "coefficient": "Coefficient",
+            "additive": "Effect",
+            "odds_ratio": "Odds ratio",
+            "log_odds": "Odds ratio",
+            "ratio": "Ratio",
+            "log_ratio": "Ratio",
+        }[effect_type]
+        ax.set_xlabel(xlabel or default_xlabel)
         if title is not None:
             ax.set_title(title)
 
-        for row in plot_df.itertuples(index=False):
-            if not row.estimable:
+        if resolved_table_columns:
+            ax.text(
+                1.02,
+                1.02,
+                table_header_text,
+                transform=ax.transAxes,
+                ha="left",
+                va="bottom",
+                fontsize=9,
+                fontfamily="monospace",
+                fontweight="bold",
+                clip_on=False,
+            )
+            for row in plot_df.itertuples(index=False):
                 ax.text(
                     1.02,
                     row.forest_y,
-                    "Not estimable",
+                    row.resolved_table_text,
                     transform=ax.get_yaxis_transform(),
                     ha="left",
                     va="center",
-                    color="0.45",
                     fontsize=9,
+                    fontfamily="monospace",
                     clip_on=False,
                 )
-            elif annotate:
-                effect_label = "β" if effect_type == "coefficient" else "OR"
-                pvalue_text = (
-                    ""
-                    if pvalue_col is None
-                    else (
-                        f"; {pvalue_label}="
-                        f"{'NA' if pd.isna(row.pvalue) else f'{row.pvalue:.3g}'}"
+        else:
+            for row in plot_df.itertuples(index=False):
+                if not row.estimable:
+                    ax.text(
+                        1.02,
+                        row.forest_y,
+                        row.resolved_annotation_internal,
+                        transform=ax.get_yaxis_transform(),
+                        ha="left",
+                        va="center",
+                        color="0.45",
+                        fontsize=9,
+                        clip_on=False,
                     )
-                )
-                ax.text(
-                    1.02,
-                    row.forest_y,
-                    (
-                        f"{effect_label}={row.display_estimate:.3g} "
-                        f"[{row.display_ci_low:.3g}, {row.display_ci_high:.3g}]"
-                        f"{pvalue_text}"
-                    ),
-                    transform=ax.get_yaxis_transform(),
-                    ha="left",
-                    va="center",
-                    fontsize=9,
-                    clip_on=False,
-                )
+                elif annotate:
+                    ax.text(
+                        1.02,
+                        row.forest_y,
+                        row.resolved_annotation_internal,
+                        transform=ax.get_yaxis_transform(),
+                        ha="left",
+                        va="center",
+                        fontsize=9,
+                        clip_on=False,
+                    )
 
-        legend_handles: list[Any] = []
-        legend_labels: list[str] = []
-        legend_title: str | None = None
-        if pvalue_col is not None and show_pvalue_legend:
+        pvalue_legend = None
+        if (
+            pvalue_col is not None
+            and show_pvalue_legend
+            and resolved_pvalue_color_mode == "continuous"
+        ):
+            scalar_mappable = plt.cm.ScalarMappable(
+                norm=continuous_color_norm,
+                cmap=cmap,
+            )
+            scalar_mappable.set_array([])
+            colorbar = fig.colorbar(scalar_mappable, ax=ax)
+            colorbar.set_label(f"-log10({pvalue_label})")
+        elif pvalue_col is not None and show_pvalue_legend:
+            pvalue_handles: list[Any] = []
+            pvalue_labels: list[str] = []
             nonsignificant_size = float(
-                np.interp(
+                (point_size_min + point_size_max) / 2.0
+                if total_observations_col is not None
+                else np.interp(
                     max(cutoff_metric - np.finfo(float).eps, 0.0),
                     [0.0, metric_max],
                     [point_size_min, point_size_max],
                 )
             )
-            legend_handles.append(
+            pvalue_handles.append(
                 Line2D(
                     [0],
                     [0],
@@ -691,7 +1483,7 @@ def forest(
                     markersize=np.sqrt(nonsignificant_size),
                 )
             )
-            legend_labels.append(
+            pvalue_labels.append(
                 f"{pvalue_label} > {pvalue_cutoff:g} or missing"
             )
 
@@ -703,33 +1495,39 @@ def forest(
                 )
                 for metric in np.unique(np.round(legend_metrics, 12)):
                     legend_size = float(
-                        np.interp(
+                        (point_size_min + point_size_max) / 2.0
+                        if total_observations_col is not None
+                        else np.interp(
                             metric,
                             [0.0, metric_max],
                             [point_size_min, point_size_max],
                         )
                     )
-                    legend_handles.append(
+                    pvalue_handles.append(
                         Line2D(
                             [0],
                             [0],
                             marker="o",
                             linestyle="",
-                            markerfacecolor=cmap(color_norm(metric)),
+                            markerfacecolor=cmap(
+                                significance_color_norm(metric)
+                            ),
                             markeredgecolor="black",
                             markersize=np.sqrt(legend_size),
                         )
                     )
-                    legend_labels.append(f"{metric:.2g}")
+                    pvalue_labels.append(f"{metric:.2g}")
             if show_pvalue_ring and finite_pvalue.any():
                 ring_size = float(
-                    np.interp(
+                    (point_size_min + point_size_max) / 2.0
+                    if total_observations_col is not None
+                    else np.interp(
                         cutoff_metric,
                         [0.0, metric_max],
                         [point_size_min, point_size_max],
                     )
                 )
-                legend_handles.append(
+                pvalue_handles.append(
                     Line2D(
                         [0],
                         [0],
@@ -740,32 +1538,191 @@ def forest(
                         markersize=np.sqrt(ring_size),
                     )
                 )
-                legend_labels.append(
-                    f"{pvalue_label}={pvalue_cutoff:g} ring"
+                pvalue_labels.append(
+                    (
+                        f"{pvalue_label}≤{pvalue_cutoff:g} ring"
+                        if total_observations_col is not None
+                        else f"{pvalue_label}={pvalue_cutoff:g} ring"
+                    )
                 )
-            legend_title = f"-log10({pvalue_label})"
+            pvalue_legend = ax.legend(
+                pvalue_handles,
+                pvalue_labels,
+                title=f"-log10({pvalue_label})",
+                frameon=True,
+                loc=(
+                    "upper left"
+                    if total_observations_col is not None
+                    else "upper center"
+                ),
+                bbox_to_anchor=(
+                    (0.0, -0.22)
+                    if total_observations_col is not None
+                    else (0.5, -0.22)
+                ),
+                ncol=(
+                    1
+                    if total_observations_col is not None
+                    else min(6, len(pvalue_handles))
+                ),
+            )
 
+        size_legend = None
+        if (
+            total_observations_col is not None
+            and show_size_legend
+            and plot_df["estimable"].any()
+        ):
+            if count_min == count_max:
+                size_values = np.array([count_min])
+            else:
+                size_values = np.unique(
+                    np.rint(
+                        np.linspace(count_min, count_max, num=legend_bins)
+                    ).astype(int)
+                )
+            size_handles = []
+            size_labels = []
+            for count in size_values:
+                size = float(
+                    (point_size_min + point_size_max) / 2.0
+                    if count_min == count_max
+                    else np.interp(
+                        count,
+                        [count_min, count_max],
+                        [point_size_min, point_size_max],
+                    )
+                )
+                size_handles.append(
+                    Line2D(
+                        [0],
+                        [0],
+                        marker="o",
+                        linestyle="",
+                        markerfacecolor=neutral_rgba,
+                        markeredgecolor="black",
+                        markersize=np.sqrt(size),
+                    )
+                )
+                size_labels.append(f"{int(count)}")
+            if pvalue_legend is not None:
+                ax.add_artist(pvalue_legend)
+            size_legend = ax.legend(
+                size_handles,
+                size_labels,
+                title=total_observations_label,
+                frameon=True,
+                loc="upper right",
+                bbox_to_anchor=(1.0, -0.22),
+                ncol=min(2, len(size_handles)),
+            )
+
+        context_handles: list[Any] = []
+        context_labels: list[str] = []
+        if group_col is not None:
+            observed_group_values = list(dict.fromkeys(plot_df["group"]))
+            for group in configured_groups:
+                if group not in observed_group_values:
+                    continue
+                context_handles.append(
+                    Line2D(
+                        [0],
+                        [0],
+                        color=resolved_group_colors[group],
+                        marker="o",
+                        markerfacecolor="white",
+                        markeredgecolor=resolved_group_colors[group],
+                        linewidth=1.5,
+                    )
+                )
+                context_labels.append(str(resolved_group_labels[group]))
+        labeled_reference_artists = []
         for artist in reference_artists:
             label = artist.get_label()
             if label and not str(label).startswith("_"):
-                legend_handles.append(artist)
-                legend_labels.append(str(label))
-        if legend_handles:
+                labeled_reference_artists.append(artist)
+                context_handles.append(artist)
+                context_labels.append(str(label))
+        has_ring_context = (
+            pvalue_col is not None
+            and show_pvalue_legend
+            and resolved_pvalue_color_mode == "continuous"
+            and show_pvalue_ring
+            and finite_pvalue.any()
+        )
+        if has_ring_context:
+            context_handles.append(
+                Line2D(
+                    [0],
+                    [0],
+                    marker="o",
+                    linestyle="",
+                    markerfacecolor="none",
+                    markeredgecolor="red",
+                    markersize=np.sqrt(
+                        (point_size_min + point_size_max) / 2.0
+                    ),
+                )
+            )
+            context_labels.append(
+                (
+                    f"{pvalue_label}≤{pvalue_cutoff:g} ring"
+                    if total_observations_col is not None
+                    else f"{pvalue_label}={pvalue_cutoff:g} ring"
+                )
+            )
+        if context_handles:
+            if pvalue_legend is not None and size_legend is None:
+                ax.add_artist(pvalue_legend)
+            if size_legend is not None:
+                ax.add_artist(size_legend)
+            if pvalue_legend is not None and size_legend is not None:
+                context_loc = "upper center"
+                context_anchor = (0.5, -0.62)
+                context_ncol = min(6, len(context_handles))
+            elif pvalue_legend is not None:
+                context_loc = "upper center"
+                context_anchor = (0.5, -0.42)
+                context_ncol = min(6, len(context_handles))
+            elif size_legend is not None:
+                context_loc = "upper left"
+                context_anchor = (0.0, -0.22)
+                context_ncol = 1
+            else:
+                context_loc = "upper left"
+                context_anchor = (0.0, -0.22)
+                context_ncol = min(6, len(context_handles))
             ax.legend(
-                legend_handles,
-                legend_labels,
-                title=legend_title,
+                context_handles,
+                context_labels,
+                title=(
+                    str(group_col)
+                    if (
+                        group_col is not None
+                        and not labeled_reference_artists
+                        and not has_ring_context
+                    )
+                    else None
+                ),
                 frameon=True,
-                loc="upper center",
-                bbox_to_anchor=(0.5, -0.22),
-                ncol=min(6, len(legend_handles)),
+                loc=context_loc,
+                bbox_to_anchor=context_anchor,
+                ncol=context_ncol,
             )
 
-        fig.tight_layout()
-        if show:
-            plt.show()
+        if created_figure:
+            fig.tight_layout()
+            if show:
+                plt.show()
     except Exception:
-        plt.close(fig)
+        if created_figure:
+            plt.close(fig)
         raise
 
+    plot_df = plot_df.drop(
+        columns=[
+            "selected_row_position_internal",
+            "resolved_annotation_internal",
+        ]
+    )
     return fig, ax, plot_df

@@ -16,6 +16,7 @@ This directory holds module-level documentation for public `adata_science_tools`
 - [`_forest.md`](_forest.md): single-effect forest plots for supplied coefficients, odds ratios, confidence intervals, and p-values.
 - [`_histograms.md`](_histograms.md): AnnData and wide-DataFrame histogram plotting with obs/var filters and subgroup overlays.
 - [`_longitudinal.md`](_longitudinal.md): multi-timepoint subject trajectories with exact/display values and auditable segments.
+- [`_meta_forest.md`](_meta_forest.md): precomputed meta-analysis forest rows with pooled diamonds, prediction intervals, study sizing, subgroup headings, and custom tables.
 - [`_metab_IO.md`](_metab_IO.md): Metabolon Excel ingestion, layer creation, optional metadata merge, and dataset export behavior.
 - [`_model_fit.md`](_model_fit.md): OLS and MixedLM model-fitting APIs, summary-table schemas, filtering support, and model-spec sidecar behavior.
 - [`_paired_datapoints.md`](_paired_datapoints.md): paired ref/target or Pre/Post datapoint plots with obs/var filters, grouping, and a synthetic example image.
@@ -33,4 +34,4 @@ This directory holds module-level documentation for public `adata_science_tools`
 
 - These pages document the current implementation in `adata_science_tools`, not an earlier design draft.
 - The first source of truth for behavior is the code in `_tools/`, `_io/`, `_simulate_data/`, and the tests in `tests/`.
-- Within `_plotting`, direct regression coverage includes analytical, correlation, histogram, datapoint, paired-datapoint, tabular, longitudinal, and forest plotting APIs.
+- Within `_plotting`, direct regression coverage includes analytical, correlation, histogram, datapoint, paired-datapoint, tabular, longitudinal, forest, and meta-analysis forest plotting APIs.
