@@ -74,6 +74,8 @@ def adata_histograms(
     element: Literal["bars", "step", "poly"] | None = None,
     fill: bool | None = True,
     kde: bool = True,
+    kde_fill: bool = False,
+    kde_fill_alpha: float = 0.20,
     kde_bw_method: str | float | None = None,
     kde_grid_points: int | None = None,
     kde_clip: tuple[float, float] | None = None,
@@ -113,6 +115,8 @@ def adata_histograms(
 | `zero_line_style` | New | Override the existing zero-line style |
 | `mean_line_style` | New | Override the existing mean-line style |
 | `x_reference_lines` | New | Draw ordered, optionally labeled vertical references |
+| `kde_fill` | New | Fill the area beneath each rendered KDE curve |
+| `kde_fill_alpha` | New | Set KDE underfill opacity from 0 through 1 |
 | `kde_bw_method` | New | Forward a shared KDE bandwidth method |
 | `kde_grid_points` | New | Forward a shared KDE grid size |
 | `kde_clip` | New | Forward shared KDE support bounds |
@@ -322,12 +326,20 @@ In this example, group `B` is excluded from the histogram because its finite cou
 
 2. A subgroup with fewer than two distinct finite values still draws its histogram layer and skips only its KDE curve. Other eligible groups retain KDE when their values support it.
 
+3. `kde_fill=True` fills from zero to the exact rendered KDE height. Each fill inherits its KDE line color and uses `kde_fill_alpha`, which must be finite and within `[0, 1]`.
+
+4. Underfill retains the rendered KDE normalization. For example, `stat="count"` produces count-scaled KDE curves and fills rather than density-scaled fills.
+
+5. A skipped KDE has no underfill. KDE fills use no legend entry and do not apply to histogram outlines, zero lines, mean lines, or configured reference lines. The default `kde_fill=False` preserves the existing unfilled appearance.
+
 ```python
 adtl.adata_histograms(
     df=measurements,
     var_names=["response"],
     subset_obs_key="cohort",
     kde=True,
+    kde_fill=True,
+    kde_fill_alpha=0.25,
     kde_bw_method=0.5,
     kde_grid_points=128,
     kde_clip=(0.0, 2.0),

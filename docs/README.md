@@ -5,6 +5,7 @@ This directory holds module-level documentation for public `adata_science_tools`
 ## Available pages
 
 - [`_IO.md`](_IO.md): core dataset save and AnnData-to-DataFrame helpers used across the package.
+- [`_analytical_plots.md`](_analytical_plots.md): precomputed Kaplan–Meier and continuous-effect renderers with auditable returned tables.
 - [`_column_plots.md`](_column_plots.md): horizontal bar plots, log2 fold-change dotplots, and multi-panel composite figure builders.
 - [`_corr_dotplots.md`](_corr_dotplots.md): correlation scatterplots, subgroup fit overlays, and rank-comparison helpers.
 - [`_plotting_updates.md`](_plotting_updates.md): additive plotting-roadmap controls and compatibility summary.
@@ -32,4 +33,4 @@ This directory holds module-level documentation for public `adata_science_tools`
 
 - These pages document the current implementation in `adata_science_tools`, not an earlier design draft.
 - The first source of truth for behavior is the code in `_tools/`, `_io/`, `_simulate_data/`, and the tests in `tests/`.
-- Within `_plotting`, direct regression coverage includes correlation, histogram, datapoint, paired-datapoint, tabular, longitudinal, and forest plotting APIs.
+- Within `_plotting`, direct regression coverage includes analytical, correlation, histogram, datapoint, paired-datapoint, tabular, longitudinal, and forest plotting APIs.

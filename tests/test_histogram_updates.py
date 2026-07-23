@@ -7,7 +7,7 @@ from unittest.mock import patch
 import matplotlib
 import numpy as np
 import pandas as pd
-from matplotlib.colors import to_hex
+from matplotlib.colors import to_hex, to_rgba
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -34,6 +34,15 @@ class HistogramUpdateTests(unittest.TestCase):
     def _legend_labels(axes):
         legend = axes.get_legend()
         return [] if legend is None else [text.get_text() for text in legend.get_texts()]
+
+    def _assert_fill_matches_line(self, collection, line):
+        vertices = np.concatenate(
+            [path.vertices for path in collection.get_paths()],
+            axis=0,
+        )
+        curve_points = np.column_stack((line.get_xdata(), line.get_ydata()))
+        matches = (vertices[:, None, :] == curve_points[None, :, :]).all(axis=2)
+        self.assertTrue(matches.any(axis=0).all())
 
     def test_stage_2_signature_order_and_defaults(self):
         signature = inspect.signature(adtl.adata_histograms)
@@ -84,6 +93,8 @@ class HistogramUpdateTests(unittest.TestCase):
                 "element",
                 "fill",
                 "kde",
+                "kde_fill",
+                "kde_fill_alpha",
                 "kde_bw_method",
                 "kde_grid_points",
                 "kde_clip",
@@ -128,6 +139,8 @@ class HistogramUpdateTests(unittest.TestCase):
             "zero_line_style": None,
             "mean_line_style": None,
             "x_reference_lines": None,
+            "kde_fill": False,
+            "kde_fill_alpha": 0.20,
             "kde_bw_method": None,
             "kde_grid_points": None,
             "kde_clip": None,
@@ -340,6 +353,147 @@ class HistogramUpdateTests(unittest.TestCase):
         self.assertEqual(self._legend_labels(axes["value"]), ["constant", "varied"])
         self.assertGreater(len(axes["value"].patches), 0)
         self.assertEqual(len(axes["value"].lines), 1)
+
+    def test_kde_fill_alpha_validation_occurs_before_drawing(self):
+        df = pd.DataFrame({"value": [1.0, 2.0, 3.0]})
+        existing_figures = plt.get_fignums()
+
+        for invalid_alpha in [True, "0.2", np.nan, np.inf, -np.inf, -0.01, 1.01]:
+            with self.subTest(kde_fill_alpha=invalid_alpha):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    r"kde_fill_alpha.*finite.*\[0, 1\]",
+                ):
+                    adtl.adata_histograms(
+                        df=df,
+                        var_names=["value"],
+                        kde_fill_alpha=invalid_alpha,
+                        show=False,
+                    )
+                self.assertEqual(plt.get_fignums(), existing_figures)
+        for valid_alpha in [0, 1, np.float64(0.5)]:
+            with self.subTest(kde_fill_alpha=valid_alpha):
+                adtl.adata_histograms(
+                    df=df,
+                    var_names=["value"],
+                    kde=False,
+                    kde_fill_alpha=valid_alpha,
+                    show=False,
+                )
+
+    def test_kde_fill_default_adds_no_underfill_artist(self):
+        _, axes = adtl.adata_histograms(
+            df=pd.DataFrame({"value": [0.0, 1.0, 2.0, 3.0]}),
+            var_names=["value"],
+            bins=2,
+            element="bars",
+            add_mean_line=False,
+            add_zero_line=False,
+            show=False,
+        )
+
+        self.assertEqual(len(axes["value"].lines), 1)
+        self.assertEqual(len(axes["value"].collections), 0)
+
+    def test_kde_underfill_matches_rendered_density_and_count_curves(self):
+        df = pd.DataFrame(
+            {"value": [0.25, 1.25, 2.25, 3.25, 4.25, 5.25, 6.25, 7.25]}
+        )
+        rendered_y = {}
+
+        for stat in ["density", "count"]:
+            with self.subTest(stat=stat):
+                _, axes = adtl.adata_histograms(
+                    df=df,
+                    var_names=["value"],
+                    bins=[0.0, 2.0, 4.0, 6.0, 8.0],
+                    stat=stat,
+                    element="step",
+                    fill=False,
+                    color="#336699",
+                    kde=True,
+                    kde_fill=True,
+                    kde_fill_alpha=0.35,
+                    kde_grid_points=64,
+                    add_mean_line=False,
+                    add_zero_line=False,
+                    show=False,
+                )
+                ax = axes["value"]
+                self.assertEqual(len(ax.lines), 2)
+                self.assertEqual(len(ax.collections), 1)
+                line = next(
+                    line for line in ax.lines if len(line.get_xdata()) == 64
+                )
+                collection = ax.collections[0]
+                self._assert_fill_matches_line(collection, line)
+                np.testing.assert_allclose(
+                    collection.get_facecolor()[0, :3],
+                    to_rgba(line.get_color())[:3],
+                )
+                self.assertEqual(collection.get_alpha(), 0.35)
+                self.assertEqual(collection.get_label(), "_nolegend_")
+                rendered_y[stat] = np.asarray(line.get_ydata()).copy()
+
+        self.assertFalse(
+            np.allclose(rendered_y["density"], rendered_y["count"])
+        )
+        self.assertGreater(rendered_y["count"].max(), rendered_y["density"].max())
+
+    def test_grouped_kde_fill_skips_degenerate_curves_and_legend_entries(self):
+        df = pd.DataFrame(
+            {
+                "value": [1.0, 1.0, 2.0, 3.0, 4.0],
+                "group": ["constant", "constant", "varied", "varied", "varied"],
+            }
+        )
+
+        _, axes = adtl.adata_histograms(
+            df=df,
+            var_names=["value"],
+            subset_obs_key="group",
+            subset_order=["constant", "varied"],
+            subset_palette={"constant": "#cc3311", "varied": "#0077bb"},
+            show_all_obs_hist=True,
+            all_obs_color="#777777",
+            bins=3,
+            element="bars",
+            kde=True,
+            kde_fill=True,
+            kde_fill_alpha=0.25,
+            kde_grid_points=48,
+            x_reference_lines=[
+                {"value": 10.0, "label": "Reference", "color": "black"}
+            ],
+            show=False,
+        )
+        ax = axes["value"]
+        kde_lines = [line for line in ax.lines if len(line.get_xdata()) == 48]
+
+        self.assertEqual(len(kde_lines), 2)
+        self.assertEqual(len(ax.collections), 2)
+        self.assertGreater(len(ax.patches), 0)
+        self.assertEqual(
+            {to_hex(line.get_color()) for line in kde_lines},
+            {"#777777", "#0077bb"},
+        )
+        for collection, line in zip(ax.collections, kde_lines):
+            self._assert_fill_matches_line(collection, line)
+            np.testing.assert_allclose(
+                collection.get_facecolor()[0, :3],
+                to_rgba(line.get_color())[:3],
+            )
+            self.assertEqual(collection.get_alpha(), 0.25)
+            self.assertEqual(collection.get_label(), "_nolegend_")
+        self.assertEqual(
+            self._legend_labels(ax),
+            [
+                "All data (mean=2.2)",
+                "constant (mean=1)",
+                "varied (mean=3)",
+                "Reference",
+            ],
+        )
 
     def test_line_styles_and_ordered_exact_value_reference_deduplication(self):
         df = pd.DataFrame({"value": [1.0, 3.0]})

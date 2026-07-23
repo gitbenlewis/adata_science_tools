@@ -4,6 +4,7 @@ import logging
 import math
 from collections.abc import Mapping, Sequence
 from numbers import Real as _Real
+from string import Formatter as _Formatter
 from typing import Any, Literal
 
 import anndata
@@ -73,6 +74,10 @@ def datapoints(
     violin_width: float = 0.8,
     violin_alpha: float = 0.25,
     legend_metrics: Sequence[Literal["mean", "median", "count", "std", "sem"]] | None = ("mean",),
+    legend_metric_formats: Mapping[
+        Literal["mean", "median", "count", "std", "sem"],
+        str,
+    ] | None = None,
     show_all_data_metrics: bool = True,
     highlight_negative_mean_legend: bool = True,
     group_annotations: Sequence[Mapping[str, Any]] | None = None,
@@ -182,10 +187,74 @@ def datapoints(
         if any(line["value"] <= 0 for line in normalized_reference_lines):
             raise ValueError("Reference-line values must be positive when yscale='log'.")
 
+    allowed_metric_names = {"mean", "median", "count", "std", "sem"}
     metric_names: tuple[str, ...] = tuple(legend_metrics or ())
-    invalid_metric_names = sorted(set(metric_names).difference({"mean", "median", "count", "std", "sem"}))
+    invalid_metric_names = sorted(set(metric_names).difference(allowed_metric_names))
     if invalid_metric_names:
         raise ValueError(f"Unsupported legend metric(s): {invalid_metric_names}.")
+
+    if legend_metric_formats is None:
+        normalized_metric_formats: dict[str, str] = {}
+    else:
+        if not isinstance(legend_metric_formats, Mapping):
+            raise ValueError("'legend_metric_formats' must be a mapping.")
+        invalid_format_metric_names = [
+            metric_name
+            for metric_name in legend_metric_formats
+            if metric_name not in allowed_metric_names
+        ]
+        if invalid_format_metric_names:
+            invalid_names = sorted(
+                (repr(metric_name) for metric_name in invalid_format_metric_names)
+            )
+            raise ValueError(
+                f"Unsupported legend metric format key(s): {invalid_names}."
+            )
+
+        normalized_metric_formats = {}
+        formatter = _Formatter()
+        for metric_name, metric_format in legend_metric_formats.items():
+            if not isinstance(metric_format, str):
+                raise ValueError(
+                    f"'legend_metric_formats[{metric_name!r}]' must be a string."
+                )
+            try:
+                parsed_fields: list[str] = []
+                formats_to_parse = [metric_format]
+                while formats_to_parse:
+                    parsed_parts = list(formatter.parse(formats_to_parse.pop()))
+                    parsed_fields.extend(
+                        field_name
+                        for _literal, field_name, _format_spec, _conversion in parsed_parts
+                        if field_name is not None
+                    )
+                    formats_to_parse.extend(
+                        format_spec
+                        for _literal, _field_name, format_spec, _conversion in parsed_parts
+                        if format_spec
+                    )
+            except ValueError as exc:
+                raise ValueError(
+                    f"Invalid 'legend_metric_formats[{metric_name!r}]': {exc}."
+                ) from exc
+            invalid_fields = [
+                field_name
+                for field_name in parsed_fields
+                if field_name not in {"metric", "value"}
+            ]
+            if invalid_fields:
+                raise ValueError(
+                    f"Invalid placeholder(s) in 'legend_metric_formats[{metric_name!r}]': "
+                    f"{invalid_fields}. Only 'metric' and 'value' are supported."
+                )
+            sample_value: int | float = 1 if metric_name == "count" else 1.0
+            try:
+                metric_format.format(metric=metric_name, value=sample_value)
+            except (AttributeError, IndexError, KeyError, TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"Invalid 'legend_metric_formats[{metric_name!r}]': {exc}."
+                ) from exc
+            normalized_metric_formats[metric_name] = metric_format
 
     normalized_annotations: list[dict[str, Any]] = []
     annotation_keys = {"metric", "position", "label", "format", "text_kwargs"}
@@ -956,7 +1025,19 @@ def datapoints(
         metric_parts: list[str] = []
         for metric_name in metric_names:
             metric_value = _metric_value(metric_name, values)
-            if metric_name == "count":
+            if metric_name in normalized_metric_formats:
+                format_value: int | float = (
+                    int(metric_value)
+                    if metric_name == "count"
+                    else float(metric_value)
+                )
+                metric_parts.append(
+                    normalized_metric_formats[metric_name].format(
+                        metric=metric_name,
+                        value=format_value,
+                    )
+                )
+            elif metric_name == "count":
                 metric_parts.append(f"count={int(metric_value)}")
             else:
                 metric_parts.append(f"{metric_name}={metric_value:.3g}")

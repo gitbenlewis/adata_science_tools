@@ -61,6 +61,10 @@ def datapoints(
     violin_width: float = 0.8,
     violin_alpha: float = 0.25,
     legend_metrics: Sequence[Literal["mean", "median", "count", "std", "sem"]] | None = ("mean",),
+    legend_metric_formats: Mapping[
+        Literal["mean", "median", "count", "std", "sem"],
+        str,
+    ] | None = None,
     show_all_data_metrics: bool = True,
     highlight_negative_mean_legend: bool = True,
     group_annotations: Sequence[Mapping[str, Any]] | None = None,
@@ -102,7 +106,7 @@ def datapoints(
 | Status | Arguments |
 |---|---|
 | Existing | input selection, variable grouping/collapse, observation and variable filters, subset colors, panels, x categories, deterministic jitter, box/violin overlays, legend metrics, figure sizing, saving, and missing/zero handling |
-| New | `summary_filter_obs_by_isin_lists`, mapping-form `subset_palette`, `marker_by_obs_key`, `marker_order`, `marker_styles`, `group_annotations`, `yscale`, `y_reference_lines`, `append_marker_handles_to_legend`, and `append_reference_handles_to_legend` |
+| New | `summary_filter_obs_by_isin_lists`, mapping-form `subset_palette`, `marker_by_obs_key`, `marker_order`, `marker_styles`, `legend_metric_formats`, `group_annotations`, `yscale`, `y_reference_lines`, `append_marker_handles_to_legend`, and `append_reference_handles_to_legend` |
 
 ### Synthetic example
 
@@ -140,6 +144,11 @@ fig, axes, plot_df = adtl.datapoints(
             "format": "{value:.2f}",
         }
     ],
+    legend_metrics=("count", "mean"),
+    legend_metric_formats={
+        "count": "n={value:d}",
+        "mean": "average={value:.2f}",
+    },
     y_reference_lines=[
         {"value": 5.0, "label": "Guide", "linestyle": "--"}
     ],
@@ -243,7 +252,17 @@ plot_df[[
     `std`, and `sem`. When `legend=True`, labels include all-data metrics plus
     per-`subset_obs_key` group metrics. Metrics are computed after value
     filtering and from `summary_included` rows only. Panel-level metrics pool
-    x categories when a panel contains more than one.
+    x categories when a panel contains more than one. `legend_metric_formats`
+    optionally replaces the text for individual selected metrics while
+    retaining `legend_metrics` order and group order. Each mapping value may use
+    only the exact `{metric}` and `{value}` fields. Count values are supplied as
+    integers; mean, median, standard deviation, and standard error values are
+    supplied as floats. Metrics without an override retain the existing
+    `count=N` or `<metric>=<three-significant-digit value>` text. Unsupported
+    metric keys, non-string formats, invalid fields, and incompatible format
+    specifications raise `ValueError` before drawing. Formatting changes legend
+    text only; it does not change summary calculations, artists, annotations,
+    returned rows, or the return tuple.
 
 14. LEGEND ORDER: Existing subset and metric entries remain first. Marker
     handles and then labeled reference handles are appended in configured

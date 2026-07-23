@@ -1,6 +1,20 @@
 # Public plotting feature roadmap for `adata_science_tools`
 
-Status: proposed public feature plan
+Status: stages 1 through 5 implemented
+
+## Implementation outcome
+
+1. All five stages in this roadmap are implemented in the current public plotting API.
+
+2. `adtl.corr_dotplot()` is the sole correlation-scatter entry point and includes marginal panels, fit visibility, identity lines, scales, limits, padding, and axis-specific reference lines.
+
+3. `adtl.adata_histograms()` and `adtl.datapoints()` include the additive controls specified below, including KDE underfill and per-metric legend formatting, without changing their existing defaults or returns.
+
+4. `adtl.ranked_waterfall()`, `adtl.category_composition()`, `adtl.residual_diagnostic()`, `adtl.longitudinal_trajectories()`, `adtl.kaplan_meier_plot()`, and `adtl.continuous_effect_plot()` are exported through both the package root and plotting namespace.
+
+5. The implemented baseline is deterministic, documented, and covered by focused tests. No development correlation alias or separate concordance function is part of the public API.
+
+6. Stage 5 completes the remaining public APIs required by downstream analytical pipelines: KDE underfill, custom legend metric formatting, precomputed Kaplan-Meier rendering, and precomputed continuous-effect rendering without inferential fitting.
 
 ## 1. Purpose
 
@@ -22,6 +36,10 @@ The current correlation function is `adtl.corr_dotplot()` (singular). It now inc
 | Ranked vertical waterfall bars | Existing column and row plot helpers | Add a new focused function; the existing helpers have different orientation and semantics |
 | Ordered stacked category composition | Existing column plot helpers | Add a new focused function; no existing API returns the required composition table |
 | Supplied-residual diagnostic | `adtl.corr_dotplot()` | Add a new focused function so residual plots do not compute or imply correlation/regression inference |
+| KDE curve underfill in histogram panels | `adtl.adata_histograms()` | Extend the existing histogram function with additive fill controls |
+| Per-metric formatting in categorical summary legends | `adtl.datapoints()` | Extend the existing metric legend contract with a validated format mapping |
+| Precomputed Kaplan-Meier curve, censor, confidence-band, and risk-table display | Existing tabular plot helpers | Add a focused renderer that performs no survival fitting |
+| Precomputed continuous-effect curve with confidence band and observed-data layer | Existing correlation and tabular plot helpers | Add a focused renderer that performs no model fitting or prediction |
 
 ### 2.1 Latest baseline incorporated
 
@@ -326,6 +344,8 @@ def adata_histograms(
     element: Literal["bars", "step", "poly"] | None = None,
     fill: bool | None = True,
     kde: bool = True,
+    kde_fill: bool = False,
+    kde_fill_alpha: float = 0.20,
     kde_bw_method: str | float | None = None,
     kde_grid_points: int | None = None,
     kde_clip: tuple[float, float] | None = None,
@@ -366,6 +386,14 @@ def adata_histograms(
 5. KDE settings are identical across groups; a group with fewer than two distinct values skips only its KDE layer.
 
 6. Existing zero/mean switches remain backward compatible and de-duplicate equivalent configured reference lines.
+
+7. `kde_fill=True` fills only KDE curve artists from zero to the rendered KDE height, using the corresponding KDE line color and `kde_fill_alpha`.
+
+8. KDE underfill uses the same normalization as the rendered KDE. In particular, count-scaled histograms retain count-scaled KDE curves and underfill rather than silently switching to density.
+
+9. KDE underfill is skipped when the corresponding KDE is skipped, never creates a legend entry, and never fills zero, mean, or other reference lines.
+
+10. `kde_fill_alpha` must be finite and within `[0, 1]`. Existing calls remain unfilled because `kde_fill` defaults to `False`.
 
 ## 6. Stage 3: update existing `adtl.datapoints()`
 
@@ -425,6 +453,10 @@ def datapoints(
     legend_metrics: Sequence[
         Literal["mean", "median", "count", "std", "sem"]
     ] | None = ("mean",),
+    legend_metric_formats: Mapping[
+        Literal["mean", "median", "count", "std", "sem"],
+        str,
+    ] | None = None,
     show_all_data_metrics: bool = True,
     highlight_negative_mean_legend: bool = True,
     group_annotations: Sequence[Mapping[str, Any]] | None = None,
@@ -476,6 +508,14 @@ def datapoints(
 6. Log scale validates every rendered point and summary value.
 
 7. Existing legend entries remain first; marker handles and reference-line handles are appended in deterministic order.
+
+8. `legend_metric_formats` optionally overrides the text for individual metrics while preserving the configured `legend_metrics` and group order.
+
+9. Each format string may reference `{metric}` and `{value}`. Count values are passed as integers; mean, median, standard deviation, and standard error are passed as floats.
+
+10. Metrics without a custom format retain the existing default formatting. Unsupported metric names, non-string formats, or invalid placeholders raise `ValueError` before drawing.
+
+11. Formatting changes legend text only. It does not change summary populations, calculated values, point rows, boxes, violins, annotations, returned plot data, or the existing return tuple.
 
 ## 7. Stage 4: add new `adtl.longitudinal_trajectories()`
 
@@ -558,6 +598,122 @@ Required compatibility behavior:
 
 7. Returned fit, correlation, and p-value remain numerically compatible with the current implementation.
 
+## 8A. Stage 5: remaining public analytical renderers
+
+Stage 5 completes four downstream requirements without introducing model fitting or dataset-specific behavior. The two existing-function additions are specified in Sections 5 and 6. The following two functions are new focused renderers.
+
+### 8A.1 Add new `adtl.kaplan_meier_plot()`
+
+The function accepts caller-precomputed survival steps, confidence limits, censor coordinates, and numbers at risk. It must not calculate a Kaplan-Meier estimator, confidence interval, censor status, risk set, cutoff, group definition, or log-rank statistic.
+
+#### Proposed full signature
+
+```python
+def kaplan_meier_plot(
+    curve_df: pd.DataFrame,
+    risk_table_df: pd.DataFrame,
+    *,
+    censor_df: pd.DataFrame | None = None,
+    time: str = "time",
+    survival: str = "survival",
+    ci_lower: str = "ci_lower",
+    ci_upper: str = "ci_upper",
+    group: str = "group",
+    risk_time: str = "time",
+    risk_count: str = "n_at_risk",
+    group_order: Sequence[Any] | None = None,
+    palette: Mapping[Any, Any] | Sequence[Any] | str | None = None,
+    ci_alpha: float = 0.20,
+    censor_marker: str = "+",
+    censor_size: float = 42,
+    xlabel: str = "Time",
+    ylabel: str = "Survival probability",
+    title: str | None = None,
+    legend_title: str | None = None,
+    legend_labels: Mapping[Any, str] | None = None,
+    figsize: tuple[float, float] = (8, 6.5),
+    show: bool = True,
+) -> tuple[
+    plt.Figure,
+    dict[str, plt.Axes],
+    pd.DataFrame,
+    pd.DataFrame,
+]:
+```
+
+#### Required behavior
+
+1. Draw one post-step curve and confidence band per resolved group, plus supplied censor markers at their supplied survival coordinates.
+
+2. Draw a vertically aligned numbers-at-risk panel sharing the time axis. Every displayed risk time must resolve once for every displayed group.
+
+3. Validate finite numeric plotted values, probabilities and confidence bounds within `[0, 1]`, `ci_lower <= survival <= ci_upper`, nonnegative risk counts, matching curve/risk groups, and censor groups contained in the curve groups.
+
+4. Resolve group and palette order deterministically. Explicit mappings retain stable colors when a group is absent or input rows are reordered.
+
+5. Preserve time-zero censor markers and time-zero risk counts exactly as supplied.
+
+6. Return prepared curve and risk tables in rendered order. Do not mutate any caller-owned table.
+
+7. Export the function through both `adtl.kaplan_meier_plot` and `adtl.pl.kaplan_meier_plot`.
+
+### 8A.2 Add new `adtl.continuous_effect_plot()`
+
+The function accepts a caller-precomputed continuous-effect curve, confidence limits, and optional observed-data layer. It must not fit a regression or survival model, calculate a prediction, derive a reference value, calculate confidence limits, jitter observations, or classify observed outcomes.
+
+#### Proposed full signature
+
+```python
+def continuous_effect_plot(
+    curve_df: pd.DataFrame,
+    *,
+    x: str,
+    estimate: str,
+    ci_lower: str,
+    ci_upper: str,
+    observed_df: pd.DataFrame | None = None,
+    observed_x: str | None = None,
+    observed_y: str | None = None,
+    observed_category: str | None = None,
+    observed_order: Sequence[Any] | None = None,
+    observed_styles: Mapping[Any, Mapping[str, Any]] | None = None,
+    line_color: Any = "#4477AA",
+    ci_alpha: float = 0.20,
+    xscale: str = "log",
+    ylims: Sequence[float] | None = None,
+    y_reference_lines: Sequence[Mapping[str, Any]] | None = None,
+    xlabel: str | None = None,
+    ylabel: str | None = None,
+    title: str | None = None,
+    annotation: str | None = None,
+    annotation_xy: tuple[float, float] = (0.03, 0.97),
+    ax: plt.Axes | None = None,
+    figsize: tuple[float, float] = (6.5, 5),
+    show: bool = True,
+) -> tuple[
+    plt.Figure,
+    plt.Axes,
+    pd.DataFrame,
+    pd.DataFrame,
+]:
+```
+
+#### Required behavior
+
+1. Draw the supplied estimate curve and confidence band in stable x order without recalculating any value.
+
+2. Draw an optional observed layer either as one neutral group or by caller-supplied category order and styles.
+
+3. Support caller-owned reference lines, labels, limits, annotation text, and an existing axis for deterministic multi-panel composition.
+
+4. Validate complete finite curve coordinates, `ci_lower <= estimate <= ci_upper`, positive x values for logarithmic display, complete finite observed coordinates, increasing y limits, and supported observed style keys.
+
+5. Return prepared curve and observed tables in rendered order without mutating caller input.
+
+6. When `ax` is supplied, draw only on that axis and do not show, close, or lay out the owning figure. When `ax` is omitted, create and manage the figure according to `figsize` and `show`.
+
+7. Export the function through both `adtl.continuous_effect_plot` and `adtl.pl.continuous_effect_plot`.
+
 ## 9. Shared reference-line contract
 
 Every new `x_reference_lines` or `y_reference_lines` argument accepts an ordered sequence of mappings.
@@ -621,6 +777,14 @@ Required behavior:
 
 9. Run focused tests for each function before the full package suite.
 
+10. For KDE underfill, assert collection count, line-matched color, configured alpha, exact curve coordinates, count-versus-density scaling, no legend entry, and no fill for skipped KDEs or reference lines.
+
+11. For legend formatting, assert mixed default/custom formats, deterministic group order, integer count formatting, float metric formatting, invalid placeholders, and unchanged returned data.
+
+12. For Kaplan-Meier rendering, assert step coordinates, confidence polygons, censor coordinates including time zero, group/color order, risk-table values and alignment, and input immutability.
+
+13. For continuous-effect rendering, assert line/band coordinates, observed style/order, reference lines, external-axis behavior, log-domain validation, annotations, returned tables, and input immutability.
+
 ## 12. Delivery order
 
 1. Stage 1: extend `corr_dotplot`; add waterfall, composition, and residual functions.
@@ -630,6 +794,8 @@ Required behavior:
 3. Stage 3: extend `datapoints`.
 
 4. Stage 4: add `longitudinal_trajectories` while retaining `paired_datapoints` unchanged.
+
+5. Stage 5: add histogram KDE underfill, datapoint legend metric formats, `kaplan_meier_plot`, and `continuous_effect_plot`.
 
 Each stage includes implementation, focused tests, documentation, compatibility review, and a full plotting-suite run before the next stage begins.
 
@@ -649,359 +815,6 @@ Each stage includes implementation, focused tests, documentation, compatibility 
 
 ## 14. Definition of done
 
-The roadmap is complete when the updated and new functions match their documented full signatures, preserve legacy defaults, are deterministic and test-backed, and can produce the described general plot families without handwritten post-processing.
+The roadmap is complete when the updated and new functions, including stage 5, match their documented full signatures, preserve legacy defaults, are deterministic and test-backed, and can produce the described general plot families without handwritten post-processing.
 
 This public version intentionally contains no motivating project details, local paths, report metadata, group labels, data values, counts, or dataset-specific acceptance results.
-
-## 15. Implementation plan
-
-### 15.1 Scope and invariants
-
-1. Treat the complete signatures in Sections 4–7 as the target public API, including argument order, keyword-only placement, defaults, type annotations, and tuple shapes.
-
-2. Preserve existing default behavior unless this roadmap explicitly defines a change. In particular, keep the current correlation calculations, filtering order, marginal rendering, legacy zero/mean-line switches, deterministic jitter defaults, and `paired_datapoints()` semantics.
-
-3. Do not change a statistical model, threshold, biological assumption, or interpretation rule. The new functions are descriptive plotting utilities; `residual_diagnostic()` must use caller-supplied residuals and must not fit a model.
-
-4. Add no external dependency. Use the package's existing pandas, NumPy, Matplotlib, seaborn, scipy, statsmodels, and AnnData stack.
-
-5. For AnnData inputs, select required observations and variables before conversion and densify only the selected sparse block needed for the plot.
-
-6. Implement one stage at a time. Each stage includes code, focused tests, exports, documentation, compatibility review, and verification before the next stage starts.
-
-### 15.2 File ownership and proposed structure
-
-| File | Planned responsibility |
-|---|---|
-| `_plotting/_utils.py` | Hold only behavior-identical helpers reused by at least two public functions, such as reference-line validation/drawing, scale-domain validation, or style normalization. |
-| `_plotting/_corr_dotplots.py` | Extend `corr_dotplot()` without changing its calculation path or conditional axes return. Keep `corr_dotplot_dev()` as a deprecated wrapper rather than a second implementation. |
-| `_plotting/_tabular_plots.py` | New module for `ranked_waterfall()`, `category_composition()`, and `residual_diagnostic()`. |
-| `_plotting/_histograms.py` | Extend `adata_histograms()` with group eligibility, legend metrics, KDE controls, style mappings, and reference lines. |
-| `_plotting/_datapoints.py` | Extend `datapoints()` with summary-only filtering, marker encodings, annotations, scale handling, and reference lines. Leave `paired_datapoints()` unchanged. |
-| `_plotting/_longitudinal.py` | New module for `longitudinal_trajectories()`. |
-| `_plotting/__init__.py` | Import the new modules so functions are exposed through both `adtl` and `adtl.pl`. |
-| `tests/test_corr_dotplots.py` | Lock legacy behavior and test the new correlation branches. |
-| `tests/test_tabular_plots.py` | New returned-data and artist-structure tests for the Stage 1 tabular functions. |
-| `tests/test_histograms.py` | Cover Stage 2 additions while retaining the current histogram regression matrix. |
-| `tests/test_datapoints.py` | Cover Stage 3 additions while retaining current input, grouping, faceting, overlay, and jitter tests. |
-| `tests/test_longitudinal.py` | New ordering, segment, style, validation, and determinism tests for Stage 4. |
-| `docs/_corr_dotplots.md`, `docs/_histograms.md`, `docs/_datapoints.md` | Publish updated signatures, new-argument notes, synthetic examples, and detailed contracts. |
-| `docs/_tabular_plots.md`, `docs/_longitudinal.md` | New API pages with complete signatures, synthetic examples, return schemas, and failure behavior. |
-| `docs/_plotting_updates.md` | New release-notes page classifying every argument as existing or new. |
-| `docs/README.md` | Add the new pages to the plotting documentation index. |
-
-The root `__init__.py` already wildcard-re-exports `_plotting`, so it should not need an edit. Prove root export behavior with tests instead of changing it preemptively.
-
-### 15.3 Stage 0: baseline and shared contracts
-
-1. Before code changes, run `python tests/test_corr_dotplots.py`, `python tests/test_histograms.py`, `python tests/test_datapoints.py`, and `python tests/test_paired_datapoints.py`; record results and warnings in Section 16.
-
-2. Add legacy-contract tests before implementing new branches. Lock current numerical correlation results, default artists, marginal axes return shapes, histogram zero/mean behavior, datapoint return columns, deterministic jitter, and paired behavior.
-
-3. Define one internal reference-line contract. Validate without mutating caller mappings, require a finite numeric `value`, reject unsupported keys, preserve configured order, and return handles in that order for legends.
-
-4. Add scale or style helpers only when a second identical call site exists. Keep function-specific data preparation in the owning module and avoid a new plotting framework.
-
-5. Keep validation deterministic and side-effect free. Do not mutate caller DataFrames, categorical definitions, or supplied palette/style mappings.
-
-### 15.4 Stage 1: correlation and simple tabular plots
-
-#### 15.4.1 Extend `corr_dotplot()`
-
-1. Add the remaining parameters in the exact Section 4.1 order: `show_fit`, identity controls, scales, explicit limits, padding fractions, and axis-specific reference lines.
-
-2. Leave data assembly, filtering, fit calculation, correlation calculation, p-value calculation, and returned numerical values on the current code path. `show_fit=False` suppresses fit artists only.
-
-3. Separate fit computation from rendering narrowly enough that `show_fit`, `show_fit_legend`, `show_stats_text`, and `show_all_obs_fit` remain independent and testable.
-
-4. Validate identity mode, scales, limits, and padding before drawing. Reject reversed or non-finite limits, negative padding, and nonpositive values that would actually be rendered on a log axis.
-
-5. Resolve automatic limits from finite rendered data. Explicit limits override padding. Use deterministic finite padding for zero-span ranges and transformed-space padding for log axes.
-
-6. For `identity_limits=shared_axes`, draw y=x over the intersection of the final visible x/y ranges. For `data`, use the combined finite data range and allow axes clipping.
-
-7. When an axis-specific reference sequence is `None`, retain that axis's legacy `axes_lines` origin behavior. An explicit sequence, including an empty one, replaces legacy behavior for that axis.
-
-8. Synchronize enabled marginal scales and limits with the main axes without changing marginal bins, KDE, grouping, palette order, filtering, or returned observations.
-
-9. Preserve one `Axes` when both marginals are disabled and the three-key axes dictionary when either is enabled. Keep `corr_dotplot_dev()` as a deprecated forwarding wrapper because the roadmap forbids further public removals.
-
-10. Test numerical compatibility separately from artist visibility, then structurally assert identity coordinates, scales, limits, padding, reference order, log failures, and all four marginal layouts.
-
-#### 15.4.2 Add `ranked_waterfall()`
-
-1. Validate required columns, finite numeric values, duplicate-label policy, tie-breaker presence, palette coverage, reference lines, and positive bar dimensions before creating a figure.
-
-2. Sort stably by value, optionally by `tie_breaker`, and finally by original input order; then assign zero-based ranks.
-
-3. Resolve colors from the full configured category order before drawing. Draw bars at returned rank positions and align ticks with returned row order.
-
-4. Return a new ranked DataFrame containing the plotted fields plus stable `rank` and `resolved_color` columns without mutating the input.
-
-5. Test both sort directions, ties, duplicate-label behavior, mapping and sequence palettes, reference order, returned columns, bar positions, legends, and `show=False`.
-
-#### 15.4.3 Add `category_composition()`
-
-1. Validate required columns, explicit orders, normalization, missing policy, annotation format, and palette coverage. Prefer explicit order, then categorical dtype order, then deterministic first-observed order.
-
-2. Apply missing-category handling before aggregation. Reindex counts to resolved x/category orders so unobserved levels appear only when requested.
-
-3. Compute counts first and derive fractions or percentages vectorially. Represent zero-total x groups with zeros rather than infinities or implicit drops.
-
-4. Draw and legend stacks in category order. Generate annotations from the exact returned values.
-
-5. Return the exact plotted count, fraction, or percentage table with named index and columns.
-
-6. Test observed/unobserved levels, explicit orders, missing policies, zero-total groups, all normalization modes, palettes, annotations, legends, returned values, and `show=False`.
-
-#### 15.4.4 Add `residual_diagnostic()`
-
-1. Validate required columns, construct numeric working arrays for only x and residual values, apply `dropna` once, and never mutate the source DataFrame.
-
-2. Compute only the requested x transformation. Reject invalid log domains and do not fit, center, smooth, correlate, or otherwise transform residuals.
-
-3. Draw supplied residuals and ordered y references. Return original x, transformed x, and residual values for every rendered point.
-
-4. Test every transform, invalid domains, missing-data behavior, references, returned values, artist coordinates, `show=False`, and the absence of any inferred fit line.
-
-### 15.5 Stage 2: extend `adata_histograms()`
-
-1. Add Stage 2 parameters in the exact signature order while preserving current defaults. Expand `subset_palette` to mappings without changing existing sequence or named-palette behavior.
-
-2. Preserve current data selection, variable grouping, filtering, aggregation, and sparse slicing. Calculate subgroup finite counts only after existing missing/zero handling.
-
-3. Resolve subgroup order and complete palette mappings before small-group policy is applied so exclusions cannot shift surviving colors.
-
-4. Implement explicit exclude, error, and keep branches for `subset_small_group_policy`; validate `subset_min_count` as a nonnegative integer.
-
-5. Compute requested legend metrics from exact drawn values. Restrict format fields to `group`, `count`, `mean`, and `median`, validating formats before plotting.
-
-6. Apply identical KDE settings across groups. A group with fewer than two distinct finite values loses only its KDE layer, not its histogram.
-
-7. Apply zero/mean styles and ordered references through the shared line contract. De-duplicate only lines with exactly equal numeric values after validation.
-
-8. Test eligibility timing, all policies, mapping stability, labels/metrics, KDE forwarding and degenerate groups, styles, reference de-duplication, and legacy defaults.
-
-9. Update `docs/_histograms.md` with the full signature, existing/new table, synthetic examples, eligibility timing, KDE behavior, references, palettes, and unchanged return contract.
-
-### 15.6 Stage 3: extend `datapoints()`
-
-1. Add Stage 3 parameters in exact order while keeping current input aliases, filtering, grouping, faceting, overlay defaults, saving behavior, and return tuple.
-
-2. Build current point-level data first, then add `summary_included` using `summary_filter_obs_by_isin_lists`. Existing filters continue to control point visibility.
-
-3. Use only `summary_included` rows for boxes, violins, metrics, and annotations. A summary-empty group retains points but receives no data-derived summary artist.
-
-4. Resolve marker categories independently from subset colors. Validate marker-style fields and return stable columns for category, symbol, fill, colors, size, and alpha.
-
-5. Preserve deterministic jitter and returned row order; marker changes must not alter jitter or subset colors.
-
-6. Calculate annotations from the same summary rows used by overlays and metrics. Support count, mean, median, standard deviation, and standard error at metric or axes-relative positions.
-
-7. Validate scale and limits after filtering but before drawing. Reject every nonpositive point, overlay input, metric, annotation, limit, or reference that would render on a log axis.
-
-8. Assemble legends in deterministic blocks: existing point/subset entries, marker handles, then reference handles. Preserve axis/figure scope and de-duplicate labels.
-
-9. Test point-versus-summary inclusion, returned fields, marker mapping/fill, jitter, annotations, log validation, limits, references, legend order, panels, and unchanged defaults.
-
-10. Update `docs/_datapoints.md` with the signature, existing/new table, point-versus-summary examples, marker/annotation schemas, scales, references, legends, and return additions.
-
-### 15.7 Stage 4: add `longitudinal_trajectories()`
-
-1. Add `_plotting/_longitudinal.py` rather than extending `paired_datapoints()`. Validate required columns, unique nonempty `x_order`, duplicate subject/x pairs, connect mode, scale/limits, styles, and references.
-
-2. Build a prepared table with resolved x position, exact y, display y, eligibility, jittered x, colors, marker fields, and line color without mutating input.
-
-3. Use `y` for line eligibility and `display_y` for points; when absent, `display_y` defaults to `y`. An optional eligibility column is an additional boolean condition.
-
-4. In adjacent mode connect only consecutive configured positions. In all mode connect consecutive available eligible points across gaps. In none mode create no segments.
-
-5. Assign stable segment identifiers before drawing and return each row's deterministic segment membership so every line is auditable.
-
-6. Resolve line color, point color, and marker style independently. Generate jitter after stable ordering and reuse the same endpoints for points and incident lines.
-
-7. Apply `dropna_display` only to point eligibility. Missing exact y independently prevents line eligibility. Validate all rendered values, endpoints, limits, and references on log scale.
-
-8. Draw segments, then points, then references. Build separate ordered color and marker legends.
-
-9. Test duplicates, ordering, exact/display values, eligibility, all connect modes, gaps, independent styles, jitter/segment determinism, missing display, log behavior, schemas, legends, and `show=False`.
-
-10. Add `docs/_longitudinal.md` with the signature, synthetic example, value semantics, connection rules, styles, missing handling, return schema, and separation from paired plots.
-
-### 15.8 Documentation, exports, and release notes
-
-1. Import both new modules from `_plotting/__init__.py` and test every new function at `adtl.<name>` and `adtl.pl.<name>`.
-
-2. Publish every full signature in its API page. Use `docs/_plotting_updates.md` to classify arguments as existing or new and link to detailed behavior.
-
-3. Use small generic synthetic examples. For new tabular functions, show returned plot data alongside the call.
-
-4. Document category order, palette resolution, missing handling, scales, limits, references, and return shapes. State the conditional correlation axes contract prominently.
-
-5. Update `docs/README.md`. Change the root README only if these public pages would otherwise be undiscoverable.
-
-### 15.9 Verification gates
-
-1. Record focused baseline and post-change commands, results, elapsed times, warnings, and deviations in Section 16.
-
-2. Minimum focused gates are the correlation, tabular, histogram, datapoint, paired-datapoint, and longitudinal test modules as they become applicable.
-
-3. After every stage run `python -m unittest discover -s tests`; report pre-existing warnings separately and do not claim broad compatibility if this command is skipped or fails.
-
-4. Compile changed Python modules/tests, inspect public signatures with `inspect.signature`, verify both namespaces, assert returned-table column order, and run `git diff --check`.
-
-5. Prefer structural assertions for patches, scatter offsets, line coordinates, scales, limits, colors, markers, annotations, axes dictionaries, and legend order. Use only a few tolerance-based image tests where structure is insufficient.
-
-6. Before closing a stage, audit for input mutation, accidental API/default changes, full-matrix densification, nondeterminism, unrelated formatting, new dependencies, and statistical changes.
-
-### 15.10 Stage-level diff boundaries
-
-1. Stage 1: correlation module/tests/docs; new tabular module/tests/docs; immediately reused utilities; plotting exports; release-notes page; documentation index.
-
-2. Stage 2: histogram module/tests/docs; already-established shared helpers if required; histogram release-note entries.
-
-3. Stage 3: datapoint module/tests/docs; already-established shared helpers if required; datapoint release-note entries.
-
-4. Stage 4: new longitudinal module/tests/docs; plotting export; documentation index and release-note entries.
-
-5. Do not mix cleanup of column plots, general plots, deprecated helpers, examples, or unrelated documentation into these stages.
-
-### 15.11 Completion criteria
-
-1. Updated and new functions match this roadmap; legacy calls that omit new keywords retain numerical results, default artists, and tuple shapes.
-
-2. Every new function is exposed from both namespaces and returns documented prepared data without mutating caller input.
-
-3. Sorting, palettes, jitter, markers, segments, annotations, and legends are deterministic and test-backed.
-
-4. References, scales, limits, missing values, invalid domains, duplicate keys, sparse selections, degenerate groups, and unobserved categories are documented and tested.
-
-5. Focused and repository suites, compilation, signature/export checks, and diff checks pass; skipped commands and remaining risks are recorded.
-
-6. Documentation contains full signatures, existing/new argument classification, generic examples, returns, and distinctions among visible, summary, exact, display, and line-eligible values.
-
-## 16. Implementation scratchpad
-
-This is a live engineering record. Append implementation evidence and move resolved decisions into the locked section rather than silently rewriting history.
-
-### 16.1 Baseline observations recorded during planning
-
-1. `corr_dotplot()` already has promoted x/y marginals and the conditional axes return. Remaining work is fit visibility, identity, scales, limits, padding, and references.
-
-2. `corr_dotplot_dev()` remains a deprecated wrapper. `corr_dotplot()` is canonical, while the no-removals non-goal requires retaining the wrapper.
-
-3. `adata_histograms()` already supports advertised inputs, variable grouping/collapse, observation groups, filtering, palette sequences, zero/mean lines, seaborn controls, and its two-item return.
-
-4. `datapoints()` already supports input dispatch, variable grouping, faceting, deterministic jitter, box/violin overlays, metrics, limits, legend scopes, and returned data.
-
-5. `paired_datapoints()` has dedicated regression coverage and is not the implementation base for multi-timepoint trajectories.
-
-6. `_plotting/_utils.py` is small while larger modules contain local logic. Introduce helpers only for identical new contracts, not as a broad refactor.
-
-7. Wildcard exports should expose imported new modules through both public namespaces, but export tests must prove this.
-
-8. Tests use `unittest`, a noninteractive Matplotlib backend, and structural assertions, matching this plan.
-
-9. No current release-notes file covers this family, so the plan adds `docs/_plotting_updates.md`.
-
-### 16.2 Locked decisions
-
-1. Retain `corr_dotplot_dev()` only as a deprecated forwarding wrapper.
-
-2. Put the Stage 1 DataFrame-only functions in `_plotting/_tabular_plots.py` and trajectories in `_plotting/_longitudinal.py`.
-
-3. Use original input order as the final stable row tie breaker. For categories prefer explicit order, then categorical dtype order, then first-observed order.
-
-4. Resolve palettes from complete configured orders before drawing-only exclusions.
-
-5. Treat reference values as equivalent only when exactly equal after numeric validation and float conversion, avoiding silent merging of nearby scientific thresholds.
-
-6. Apply padding in transformed space for log axes and data space for linear axes, with deterministic finite handling for zero spans.
-
-7. Keep returned data in plot order with explicit resolved-style fields and no opaque artist objects.
-
-8. Prefer structural tests; reserve image tests for combined encodings that artist/data inspection cannot verify.
-
-9. Missing waterfall values or labels raise because no drop policy authorizes silent removal.
-
-10. A composition `missing_label` that collides with a real category raises rather than merging meanings.
-
-11. An explicit empty reference sequence draws no configured lines; only `None` invokes an applicable legacy fallback.
-
-12. `subset_min_count=0` makes every representable resolved subgroup eligible.
-
-13. The all-observation histogram overlay is excluded from subgroup labels and metrics, preserving its legacy label.
-
-14. Marker styles accept `marker`, `filled`, `label`, `facecolor`, `edgecolor`, `size`, and `alpha`. Defaults cycle deterministic symbols, use filled markers, inherit point color, size, and alpha, and render open markers without a face.
-
-15. Unobserved reserved x categories retain their position and omit data-derived annotations.
-
-16. Longitudinal segment endpoints with conflicting configured line colors raise.
-
-17. Longitudinal `segment_ids` are deterministic tuples, with an empty tuple for points in no segment.
-
-18. Longitudinal input x values absent from `x_order` raise rather than being silently excluded.
-
-### 16.3 Decisions resolved during stage review
-
-All ten pre-implementation questions were resolved as approved and are recorded in Section 16.2, items 9 through 18.
-
-### 16.4 Risk register
-
-1. Large signatures can introduce accidental parameter/default changes. Mitigation: explicit signature assertions.
-
-2. Correlation rendering changes can alter numerical inputs. Mitigation: retain the calculation path and compare returned baseline values.
-
-3. Shared preparation can densify full AnnData matrices. Mitigation: selected-block extraction and sparse regression tests.
-
-4. Matplotlib/seaborn can reorder combined legends. Mitigation: explicitly assemble and test ordered handle blocks.
-
-5. Log validation can reject too much or too little. Mitigation: validate prepared values that will actually render.
-
-6. Missing/unobserved categories and exclusions can shift colors/order. Mitigation: resolve orders and mappings before drawing and return exact plot data.
-
-7. Annotations can diverge from summary artists. Mitigation: use one summary inclusion mask and metric path.
-
-8. Trajectory jitter, gaps, and styles can disconnect lines from points. Mitigation: resolve auditable segments and endpoint coordinates before drawing.
-
-9. Legacy modules invite unrelated cleanup. Mitigation: enforce Section 15.10 diff boundaries.
-
-### 16.5 Implementation log template
-
-For each stage append: date/status; approved scope and resolved decisions; baseline commands/results/warnings; files and behavior changed; focused tests; broad tests and static checks; deviations; remaining risks and next gate.
-
-### 16.6 Current status
-
-1. Planning and all four implementation stages completed on 2026-07-22.
-
-2. The roadmap is implemented additively; existing defaults, scientific calculations, and public return-tuple shapes remain unchanged unless a new keyword is used.
-
-3. The broad compatibility gate passes all 293 discovered tests.
-
-4. The implementation is ready for final diff review and a user-directed commit.
-
-### 16.7 Implementation log
-
-1. Scope and decisions: implementation was authorized with `approve_2_through_9`; the ten stage decisions were resolved as recorded in Section 16.2.
-
-2. Baselines: `python tests/test_corr_dotplots.py` passed 25 tests, `python tests/test_histograms.py` passed 43, `python tests/test_datapoints.py` passed 33, and `python tests/test_paired_datapoints.py` passed 28. Per-module elapsed times were not captured.
-
-3. Stage 1: added shared reference normalization/drawing helpers; extended correlation plots with fit visibility, identity, scale, limit, padding, and reference controls; added ranked waterfall, category composition, and residual diagnostic APIs; used selected-column AnnData extraction to avoid whole-matrix densification.
-
-4. Stage 2: extended histograms with finite subgroup eligibility, small-group policies, subgroup metrics, mapping palettes, KDE controls, styles, and ordered references while retaining the all-observation overlay contract.
-
-5. Stage 3: extended datapoints with summary-only inclusion, independent marker styles, annotations, scale/limit validation, ordered references, deterministic legend blocks, and auditable returned fields; `paired_datapoints()` was left unchanged.
-
-6. Stage 4: added longitudinal trajectories with exact/display values, adjacent/all/none connection modes, deterministic segment tuples, independent color/marker channels, gap rules, log validation, and auditable prepared output.
-
-7. Focused post-change results: new correlation 16/16, histogram 12/12, datapoints 15/15, tabular 8/8, longitudinal 14/14, and cross-roadmap edge coverage 7/7. Legacy correlation, histogram, datapoints, and paired-datapoints modules also remained green.
-
-8. Broad gate: `/usr/bin/time -p python -m unittest discover -s tests` passed 293 tests in 18.843 test seconds and 20.65 wall seconds.
-
-9. Static and security checks: changed Python modules and tests compile; exact public signatures and exports pass focused assertions; `git diff --check` passes; intended APIs resolve identically from both public namespaces; helper imports remain private; changed and new files contain no detected credentials, email addresses, private paths, internal hosts, or sensitive organizational information.
-
-10. Warnings and deviations: only pre-existing seaborn long-palette warnings and small-sample SciPy/statsmodels warnings were observed. No statistical models, thresholds, biological assumptions, external dependencies, or paired-plot semantics were changed. No roadmap deviations remain.
-
-11. Post-review hardening added finite-only histogram rendering, collision-safe mixed-type subgroup legends, strict mean-legend switches, numeric subgroup formatting, generic correlation matrix shape validation, early scale checks, collision-safe datapoint scratch fields, pre-draw result-field collision errors, annotation error normalization, and private helper imports.
-
-12. Correlation scales now include base-2 `log2` and `log1p`/`expm1`. Nonlinear fit and identity artists densely sample their raw-coordinate relations; drawable subgroup fits validate before figure creation; automatic limits include active fit, reference, and applicable origin coordinates; marginals stay synchronized; and returned statistics remain on the untransformed values.
