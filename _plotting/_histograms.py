@@ -38,6 +38,7 @@ def _apply_isin_filters(
 
 _LINE_STYLE_KEYS = {"color", "linestyle", "linewidth", "alpha", "zorder"}
 _SUBSET_METRICS = {"count", "mean", "median"}
+_KDE_LINE_GID = "_adtl_histogram_kde"
 
 
 def _normalize_line_style(
@@ -184,6 +185,8 @@ def adata_histograms(
     element: Literal["bars", "step", "poly"] | None = None,
     fill: bool | None = True,
     kde: bool = True,
+    kde_fill: bool = False,
+    kde_fill_alpha: float = 0.20,
     kde_bw_method: str | float | None = None,
     kde_grid_points: int | None = None,
     kde_clip: tuple[float, float] | None = None,
@@ -265,6 +268,16 @@ def adata_histograms(
         x_reference_lines,
         param_name="x_reference_lines",
     )
+    if (
+        isinstance(kde_fill_alpha, (bool, np.bool_))
+        or not isinstance(
+            kde_fill_alpha,
+            (int, float, np.integer, np.floating),
+        )
+        or not np.isfinite(kde_fill_alpha)
+        or not 0 <= kde_fill_alpha <= 1
+    ):
+        raise ValueError("'kde_fill_alpha' must be finite and within [0, 1].")
     if isinstance(kde_bw_method, (bool, np.bool_)) or (
         kde_bw_method is not None
         and not isinstance(kde_bw_method, (str, int, float, np.integer, np.floating))
@@ -477,6 +490,8 @@ def adata_histograms(
         "common_norm": common_norm,
         "cumulative": cumulative,
     }
+    if kde_fill:
+        hist_kwargs["line_kws"] = {"gid": _KDE_LINE_GID}
     kde_kws: dict[str, Any] = {}
     if kde_bw_method is not None:
         kde_kws["bw_method"] = kde_bw_method
@@ -987,6 +1002,19 @@ def adata_histograms(
                     drawn_line_values.add(float(mean_value))
                     if add_mean_to_legend and legend:
                         axes.legend(**legend_position_kwargs)
+
+        if kde_fill:
+            for kde_line in axes.lines:
+                if kde_line.get_gid() != _KDE_LINE_GID:
+                    continue
+                axes.fill_between(
+                    kde_line.get_xdata(),
+                    0,
+                    kde_line.get_ydata(),
+                    color=kde_line.get_color(),
+                    alpha=kde_fill_alpha,
+                    label="_nolegend_",
+                )
 
         if add_zero_line:
             zero_kwargs = dict(zero_style)

@@ -138,7 +138,10 @@ def _normalize_reference_lines(
     for index, line in enumerate(reference_lines):
         if not isinstance(line, Mapping):
             raise ValueError(f"'{param_name}[{index}]' must be a mapping.")
-        unsupported = sorted(set(line).difference(_REFERENCE_LINE_KEYS))
+        unsupported = sorted(
+            (key for key in line if key not in _REFERENCE_LINE_KEYS),
+            key=repr,
+        )
         if unsupported:
             raise ValueError(
                 f"Unsupported key(s) in '{param_name}[{index}]': {unsupported}."

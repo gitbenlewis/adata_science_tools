@@ -527,9 +527,126 @@ class DatapointsUpdateTests(unittest.TestCase):
             )
         self.assertEqual(plt.get_fignums(), existing_figures)
 
+    def test_legend_metric_formats_preserve_metric_and_group_order(self):
+        metric_formats = {
+            "mean": "{metric}_average={value:.1f}",
+            "std": "sd={value:.2f}",
+            "count": "n={value:d}",
+        }
+        original_formats = metric_formats.copy()
+        fig = None
+        try:
+            fig, axes, _ = adtl.datapoints(
+                adata=self.make_adata(),
+                var_names=["signal"],
+                subset_obs_key="subset",
+                subset_order=["right", "left"],
+                legend_metrics=("count", "median", "mean"),
+                legend_metric_formats=metric_formats,
+                boxplot=False,
+                show=False,
+            )
+
+            self.assertEqual(
+                [text.get_text() for text in axes["all"].get_legend().get_texts()],
+                [
+                    "right (n=2, median=150, mean_average=150.0)",
+                    "left (n=2, median=2, mean_average=2.0)",
+                    "All data (n=4, median=51.5, mean_average=76.0)",
+                ],
+            )
+            self.assertEqual(metric_formats, original_formats)
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_legend_metric_formats_change_only_legend_text(self):
+        adata = self.make_adata()
+        original_obs = adata.obs.copy(deep=True)
+        original_x = np.array(adata.X, copy=True)
+        baseline_fig = None
+        formatted_fig = None
+        try:
+            baseline_fig, _, baseline_df = adtl.datapoints(
+                adata=adata,
+                var_names=["signal"],
+                subset_obs_key="subset",
+                legend_metrics=("mean", "count"),
+                boxplot=False,
+                random_seed=9,
+                show=False,
+            )
+            formatted_fig, _, formatted_df = adtl.datapoints(
+                adata=adata,
+                var_names=["signal"],
+                subset_obs_key="subset",
+                legend_metrics=("mean", "count"),
+                legend_metric_formats={
+                    "mean": "average={value:.2f}",
+                    "count": "n={value:d}",
+                },
+                boxplot=False,
+                random_seed=9,
+                show=False,
+            )
+
+            pd.testing.assert_frame_equal(formatted_df, baseline_df)
+            pd.testing.assert_frame_equal(adata.obs, original_obs)
+            np.testing.assert_array_equal(adata.X, original_x)
+        finally:
+            if baseline_fig is not None:
+                plt.close(baseline_fig)
+            if formatted_fig is not None:
+                plt.close(formatted_fig)
+
+    def test_invalid_legend_metric_formats_raise_before_drawing(self):
+        invalid_formats = [
+            [("mean", "{value:.2f}")],
+            {"variance": "{value:.2f}"},
+            {"mean": 3},
+            {"mean": "{unknown}"},
+            {"mean": "{0}"},
+            {"mean": "{value.real}"},
+            {"count": "{metric:{value.real}}"},
+            {"mean": "{value:d}"},
+            {"mean": "{"},
+        ]
+        for legend_metric_formats in invalid_formats:
+            with self.subTest(legend_metric_formats=legend_metric_formats):
+                existing_figures = plt.get_fignums()
+                with self.assertRaises(ValueError):
+                    adtl.datapoints(
+                        adata=self.make_adata(),
+                        var_names=["signal"],
+                        legend_metric_formats=legend_metric_formats,
+                        show=False,
+                    )
+                self.assertEqual(plt.get_fignums(), existing_figures)
+
+    def test_custom_mean_legend_format_keeps_negative_highlighting(self):
+        adata = self.make_adata()
+        adata.X[:, 0] = [-1.0, -2.0, -3.0, -4.0]
+        fig = None
+        try:
+            fig, axes, _ = adtl.datapoints(
+                adata=adata,
+                var_names=["signal"],
+                legend_metric_formats={"mean": "average={value:.1f}"},
+                boxplot=False,
+                show=False,
+            )
+
+            legend_text = axes["all"].get_legend().get_texts()[0]
+            self.assertEqual(legend_text.get_text(), "All data (average=-2.5)")
+            self.assertEqual(legend_text.get_color(), "red")
+            self.assertEqual(legend_text.get_fontweight(), "bold")
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
     def test_helper_imports_are_private_to_datapoints(self):
         module = sys.modules["adata_science_tools._plotting._datapoints"]
-        for name in ("Real", "mcolors", "mscale", "Line2D", "MarkerStyle"):
+        for name in ("Real", "Formatter", "mcolors", "mscale", "Line2D", "MarkerStyle"):
             with self.subTest(name=name):
                 self.assertNotIn(name, vars(module))
                 self.assertFalse(hasattr(adtl, name))

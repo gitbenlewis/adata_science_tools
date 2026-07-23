@@ -11,6 +11,7 @@ from ._forest import *
 from ._histograms import *
 from ._tabular_plots import *
 from ._longitudinal import *
+from ._analytical_plots import *
 from . import palettes
 from ._plots_depreciated import *
 #from ._venn_plots import *  

@@ -7,12 +7,14 @@ This release implements the public plotting roadmap additively. Existing functio
 | Public API | Existing behavior retained | Additive controls or outputs |
 |---|---|---|
 | `corr_dotplot` | Filtering, correlation/fit values, subgroup fits, optional marginals, conditional axes return | Hidden fit artists, identity line, linear/log/log2/log1p scales, limits/padding, ordered axis references |
-| `adata_histograms` | Input selection, collapse modes, filters, histograms/KDE, mean/zero lines, two-item return | Subgroup eligibility/metrics, mapping palettes, KDE tuning, styled and ordered references |
-| `datapoints` | Input selection, filters, faceting, jitter, boxes/violins, metric legends, three-item return | Summary-only filters, markers, annotations, log scale, ordered references |
+| `adata_histograms` | Input selection, collapse modes, filters, histograms/KDE, mean/zero lines, two-item return | Subgroup eligibility/metrics, mapping palettes, KDE tuning and underfill, styled and ordered references |
+| `datapoints` | Input selection, filters, faceting, jitter, boxes/violins, metric legends, three-item return | Summary-only filters, markers, annotations, per-metric legend formats, log scale, ordered references |
 | `ranked_waterfall` | New API | Stable ranked bars and returned ranked rows |
 | `category_composition` | New API | Ordered stacked composition and returned wide table |
 | `residual_diagnostic` | New API | Supplied-residual coordinates without model fitting |
 | `longitudinal_trajectories` | New API; `paired_datapoints` remains unchanged | Multi-timepoint exact/display values and auditable segment tuples |
+| `kaplan_meier_plot` | New precomputed-data API | Supplied post-step curves, confidence bands, censors, aligned risk table, and normalized audit tables without survival fitting |
+| `continuous_effect_plot` | New precomputed-data API | Supplied effect curve, confidence band, optional styled observations, references, external-axis composition, and normalized audit tables without model fitting |
 
 ## Existing-function argument classification
 
@@ -28,13 +30,13 @@ Existing arguments: `df`, `adata`, `layer`, `x_df`, `var_df`, `obs_df`, `column_
 
 ### `adata_histograms`
 
-New arguments: `subset_min_count`, `subset_small_group_policy`, `subset_legend_metrics`, `subset_label_format`, `zero_line_style`, `mean_line_style`, `x_reference_lines`, `kde_bw_method`, `kde_grid_points`, and `kde_clip`. The existing `subset_palette` argument now also accepts mappings.
+New arguments: `subset_min_count`, `subset_small_group_policy`, `subset_legend_metrics`, `subset_label_format`, `zero_line_style`, `mean_line_style`, `x_reference_lines`, `kde_fill`, `kde_fill_alpha`, `kde_bw_method`, `kde_grid_points`, and `kde_clip`. The existing `subset_palette` argument now also accepts mappings.
 
 Existing arguments: `adata`, `df`, `var_df`, `var_names`, `var_groupby_key`, `collapse_mode`, `collapse_func`, `ref_values_obsm_key`, `layer`, `use_raw`, `filter_vars_by_isin_lists`, `filter_obs_by_isin_lists`, `subset_obs_key`, `subset_order`, `palette`, `subset_palette`, `show_all_obs_hist`, `all_obs_color`, `all_obs_alpha`, `ncols`, `figsize`, `sharex`, `xlims`, `add_zero_line`, `add_mean_line`, `add_mean_to_legend`, `highlight_negative_mean_legend`, `bins`, `binwidth`, `binrange`, `stat`, `multiple`, `element`, `fill`, `kde`, `common_bins`, `common_norm`, `discrete`, `cumulative`, `alpha`, `color`, `xlabel`, `ylabel`, `title`, `subplot_title_var_col`, `title_fontsize`, `axis_label_fontsize`, `tick_label_fontsize`, `legend_fontsize`, `legend_loc`, `legend_bbox_to_anchor`, `legend`, `dropna`, `nas2zeros`, `dropzeros`, and `show`.
 
 ### `datapoints`
 
-New arguments: `summary_filter_obs_by_isin_lists`, `marker_by_obs_key`, `marker_order`, `marker_styles`, `group_annotations`, `yscale`, `y_reference_lines`, `append_marker_handles_to_legend`, and `append_reference_handles_to_legend`. The existing `subset_palette` argument now also accepts mappings.
+New arguments: `summary_filter_obs_by_isin_lists`, `marker_by_obs_key`, `marker_order`, `marker_styles`, `legend_metric_formats`, `group_annotations`, `yscale`, `y_reference_lines`, `append_marker_handles_to_legend`, and `append_reference_handles_to_legend`. The existing `subset_palette` argument now also accepts mappings.
 
 Existing arguments: `input_data`, `adata`, `df`, `var_df`, `var_names`, `var_groupby_key`, `collapse_mode`, `collapse_func`, `layer`, `use_raw`, `filter_vars_by_isin_lists`, `filter_obs_by_isin_lists`, `subset_obs_key`, `subset_order`, `subplot_by_obs_key`, `subplot_by_var_key`, `subplot_by_var_missing_label`, `subplot_order`, `x_order`, `x_order_include_unobserved`, `x_by_obs_key`, `x_by_obs_missing_label`, `x_by_obs_multi_var_mode`, `palette`, `subset_palette`, `color`, `jitter_amount`, `random_seed`, `point_size`, `point_alpha`, `boxplot`, `boxplot_width`, `boxplot_showfliers`, `violinplot`, `violin_width`, `violin_alpha`, `legend_metrics`, `show_all_data_metrics`, `highlight_negative_mean_legend`, `ncols`, `figsize`, `sharey`, `ylims`, `add_zero_line`, `xlabel`, `ylabel`, `title`, `title_fontsize`, `axis_label_fontsize`, `tick_label_fontsize`, `legend_fontsize`, `legend_loc`, `legend_bbox_to_anchor`, `legend_scope`, `legend`, `dropna`, `nas2zeros`, `dropzeros`, `show`, `savefig`, `file_name`, `logger`, `log_level`, `allow_unused_params`, and `params`.
 
@@ -49,6 +51,10 @@ All arguments of these new functions are new in this release:
 - `residual_diagnostic`: `df`, `x`, `residual`, `x_transform`, `y_reference_lines`, `point_color`, `point_size`, `point_alpha`, `xlabel`, `ylabel`, `title`, `figsize`, `dropna`, and `show`.
 
 - `longitudinal_trajectories`: `df`, `x`, `y`, `subject`, `x_order`, `display_y`, `line_eligible`, `connect`, `line_color_by`, `point_color_by`, `color_order`, `palette`, `marker_by`, `marker_order`, `marker_styles`, `line_color`, `line_width`, `line_alpha`, `point_size`, `point_alpha`, `x_jitter`, `random_seed`, `yscale`, `ylims`, `y_reference_lines`, `xlabel`, `ylabel`, `title`, `figsize`, `color_legend_title`, `marker_legend_title`, `color_legend_kwargs`, `marker_legend_kwargs`, `dropna_display`, and `show`.
+
+- `kaplan_meier_plot`: `curve_df`, `risk_table_df`, `censor_df`, `time`, `survival`, `ci_lower`, `ci_upper`, `group`, `risk_time`, `risk_count`, `group_order`, `palette`, `ci_alpha`, `censor_marker`, `censor_size`, `xlabel`, `ylabel`, `title`, `legend_title`, `legend_labels`, `figsize`, and `show`.
+
+- `continuous_effect_plot`: `curve_df`, `x`, `estimate`, `ci_lower`, `ci_upper`, `observed_df`, `observed_x`, `observed_y`, `observed_category`, `observed_order`, `observed_styles`, `line_color`, `ci_alpha`, `xscale`, `ylims`, `y_reference_lines`, `xlabel`, `ylabel`, `title`, `annotation`, `annotation_xy`, `ax`, `figsize`, and `show`.
 
 ## Shared reference contract
 
