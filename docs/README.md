@@ -12,6 +12,7 @@ This directory holds module-level documentation for public `adata_science_tools`
 - [`_datapoints.md`](_datapoints.md): unpaired variable-level datapoint plots with obs/var filters, grouped variables, optional box/violin overlays, and metric legends.
 - [`_diff_test.md`](_diff_test.md): differential testing across independent, paired, and nested paired group comparisons, including CSV-backed input workflows.
 - [`_expectation_based_covar_correction.md`](_expectation_based_covar_correction.md): expectation-model fitting, artifact export, prediction, regression-based correction, and residual or ratio transforms for `AnnData` objects.
+- [`_forest.md`](_forest.md): single-effect forest plots for supplied coefficients, odds ratios, confidence intervals, and p-values.
 - [`_histograms.md`](_histograms.md): AnnData and wide-DataFrame histogram plotting with obs/var filters and subgroup overlays.
 - [`_longitudinal.md`](_longitudinal.md): multi-timepoint subject trajectories with exact/display values and auditable segments.
 - [`_metab_IO.md`](_metab_IO.md): Metabolon Excel ingestion, layer creation, optional metadata merge, and dataset export behavior.
@@ -31,4 +32,4 @@ This directory holds module-level documentation for public `adata_science_tools`
 
 - These pages document the current implementation in `adata_science_tools`, not an earlier design draft.
 - The first source of truth for behavior is the code in `_tools/`, `_io/`, `_simulate_data/`, and the tests in `tests/`.
-- Within `_plotting`, direct regression coverage includes correlation, histogram, datapoint, paired-datapoint, tabular, and longitudinal plotting APIs.
+- Within `_plotting`, direct regression coverage includes correlation, histogram, datapoint, paired-datapoint, tabular, longitudinal, and forest plotting APIs.
