@@ -105,6 +105,12 @@ fig, axes, plotted_curves, plotted_risk = adtl.kaplan_meier_plot(
 )
 ```
 
+### Gallery example
+
+<img src="assets/plotting_gallery/kaplan_meier_plot__grouped_risk_censor.png" alt="Survival curves with numbers at risk" width="720">
+
+*`grouped_risk_censor` — Survival curves with numbers at risk. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+
 ### Validation and deliberate non-validation
 
 Curve, censor, and risk coordinates must be complete finite real numbers.
@@ -270,6 +276,12 @@ fig, ax, plotted_curve, plotted_observed = adtl.continuous_effect_plot(
     show=False,
 )
 ```
+
+### Gallery example
+
+<img src="assets/plotting_gallery/continuous_effect_plot__observed_categories.png" alt="Continuous exposure effect" width="720">
+
+*`observed_categories` — Continuous exposure effect. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
 
 ### Validation, axes ownership, and returns
 

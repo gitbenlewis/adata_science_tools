@@ -128,3 +128,10 @@ diff_datapoint_plots_params:
       dotplot_annotate_labels:
        - 'l2fc: '
        - 'RAW pvalue: '
+
+plotting_gallery_params:
+  output_dir: docs/assets/plotting_gallery
+  log_dir: example_plotting_gallery/results/logs
+  renderer_names: null
+  case_ids: null
+  continue_on_error: false

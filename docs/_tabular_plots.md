@@ -45,6 +45,10 @@ fig, ax, ranked = adtl.ranked_waterfall(
 )
 ```
 
+<img src="assets/plotting_gallery/ranked_waterfall__direction_colored.png" alt="Ranked feature effects" width="720">
+
+*`direction_colored` — Ranked feature effects. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+
 ## `category_composition`
 
 ```python
@@ -87,6 +91,10 @@ fig, ax, composition = adtl.category_composition(
 )
 ```
 
+<img src="assets/plotting_gallery/category_composition__percent_annotated.png" alt="Response composition by cohort" width="720">
+
+*`percent_annotated` — Response composition by cohort. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+
 ## `residual_diagnostic`
 
 ```python
@@ -121,6 +129,11 @@ fig, ax, plotted = adtl.residual_diagnostic(
     show=False,
 )
 ```
+
+<img src="assets/plotting_gallery/residual_diagnostic__log_fitted.png" alt="Residuals versus fitted abundance" width="720">
+
+*`log_fitted` — Residuals versus fitted abundance. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+
 ## Returned-data inspection and validation
 
 The third return value is designed for audit and can be inspected or saved directly:

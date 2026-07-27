@@ -79,6 +79,12 @@ fig, axes = adtl.barh_column(
 )
 ```
 
+### Gallery example
+
+<img src="assets/plotting_gallery/barh_column__grouped_expression.png" alt="Feature abundance by treatment" width="720">
+
+*`grouped_expression` — Feature abundance by treatment. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+
 Important behavior:
 
 - `feature_list` is required.
@@ -130,6 +136,12 @@ fig, ax = adtl.l2fc_dotplot_single(
     dotplot_l2fc_vars_col_label="log2FoldChange",
 )
 ```
+
+### Gallery example
+
+<img src="assets/plotting_gallery/l2fc_dotplot_single__single_axis.png" alt="Differential effect overview" width="720">
+
+*`single_axis` — Differential effect overview. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
 
 Important behavior:
 
@@ -193,6 +205,12 @@ fig, axes = adtl.l2fc_dotplot_column(
     dotplot_sharex=True,
 )
 ```
+
+### Gallery example
+
+<img src="assets/plotting_gallery/l2fc_dotplot_column__multi_feature.png" alt="Differential effects by feature" width="720">
+
+*`multi_feature` — Differential effects by feature. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
 
 Important behavior:
 
@@ -281,6 +299,12 @@ fig, subfigs = adtl.barh_l2fc_dotplot_column(
     file_name="results/barh_l2fc_dotplot.png",
 )
 ```
+
+### Gallery example
+
+<img src="assets/plotting_gallery/barh_l2fc_dotplot_column__two_panel.png" alt="Expression and differential effect" width="720">
+
+*`two_panel` — Expression and differential effect. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
 
 ### Layout
 
@@ -585,6 +609,26 @@ def barh_4X_dotplot_column(
     ):
 ```
 
+### Gallery examples
+
+#### `barh_dotplot_dotplot_column`
+
+<img src="assets/plotting_gallery/barh_dotplot_dotplot_column__three_panel.png" alt="Expression with two differential summaries" width="720">
+
+*`three_panel` — Expression with two differential summaries. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+
+#### `barh_dotplot_dotplot_dotplot_column`
+
+<img src="assets/plotting_gallery/barh_dotplot_dotplot_dotplot_column__four_panel.png" alt="Expression with three differential summaries" width="720">
+
+*`four_panel` — Expression with three differential summaries. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+
+#### `barh_4X_dotplot_column`
+
+<img src="assets/plotting_gallery/barh_4X_dotplot_column__five_panel.png" alt="Expression with four inferential summaries" width="720">
+
+*`five_panel` — Expression with four inferential summaries. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+
 Each added dotplot column gets its own parameter family:
 
 - `dotplot2_*`
@@ -603,4 +647,4 @@ Important behavior:
 - Many functions call `plt.show()` internally.
 - `savefig=True` writes the figure with `plt.savefig(...)`.
 - Missing required features raise early `KeyError` or `ValueError`.
-- There do not appear to be dedicated regression tests for this module; this page is based on current code and the example plotting scripts.
+- Direct renderer regression coverage is in `tests/test_column_plot_renderers.py`; the gallery integration checks are in `tests/test_plotting_gallery.py`.

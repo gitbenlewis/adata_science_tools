@@ -78,6 +78,10 @@ fig, ax, plot_data = adtl.longitudinal_trajectories(
 )
 ```
 
+<img src="assets/plotting_gallery/longitudinal_trajectories__markers_and_gaps.png" alt="Longitudinal trajectories with visit gaps" width="720">
+
+*`markers_and_gaps` — Longitudinal trajectories with visit gaps. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+
 ## Value and connection semantics
 
 `y` supplies exact line endpoint values. `display_y` supplies point positions and defaults to `y`. A missing exact value prevents that row from entering a segment but does not hide a finite display point. `line_eligible` is an additional boolean gate; missing eligibility values are false.

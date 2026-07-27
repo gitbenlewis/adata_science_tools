@@ -1569,8 +1569,8 @@ def spearman_cor_dotplot(*args, **kwargs):
 
 def spearman_cor_dotplot_2(df, column_key_x, column_key_y, hue, hue_right, figsize=(20, 10)):
     df = df.loc[(df[column_key_x].isna() == False) & (df[column_key_y].isna() == False), :].copy()
-    df[hue].cat.remove_unused_categories(inplace=True)
-    df[hue_right].cat.remove_unused_categories(inplace=True)
+    df[hue] = df[hue].cat.remove_unused_categories()
+    df[hue_right] = df[hue_right].cat.remove_unused_categories()
 
     XY_spearman = df[column_key_x].corr(df[column_key_y], method='spearman')
 

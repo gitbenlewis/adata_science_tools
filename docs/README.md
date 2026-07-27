@@ -22,6 +22,7 @@ This directory holds module-level documentation for public `adata_science_tools`
 - [`_paired_datapoints.md`](_paired_datapoints.md): paired ref/target or Pre/Post datapoint plots with obs/var filters, grouping, and a synthetic example image.
 - [`_plots.md`](_plots.md): volcano plots, QQ plots for p-values, and paired time-series datapoint plots.
 - [`_plots_depreciated.md`](_plots_depreciated.md): legacy plotting APIs kept for backward compatibility, with preferred modern replacements.
+- [`plotting_gallery.md`](plotting_gallery.md): deterministic visual examples for maintained, compatibility, and deprecated plotting renderers, with analysis provenance and known coverage limits.
 - [`_preprocessing.md`](_preprocessing.md): row-wise AnnData preprocessing helpers, including paired target-vs-reference transforms.
 - [`_row_plots.md`](_row_plots.md): grouped bar-plus-swarm row layouts from plain `DataFrame` input.
 - [`_simulate_data.md`](_simulate_data.md): covariate-driven dataset simulation helpers plus the config-driven example workflow used in `example_simulated_data/`.

@@ -66,6 +66,14 @@ ax = adtl.volcano_plot_generic(
 )
 ```
 
+<img src="assets/plotting_gallery/volcano_plot_generic__significance.png" alt="Differential-test volcano plot" width="720">
+
+*`significance` — Differential-test volcano plot. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+
+<img src="assets/plotting_gallery/volcano_plot_generic__feature_class.png" alt="Volcano plot with feature-class highlighting" width="720">
+
+*`feature_class` — Volcano plot with feature-class highlighting. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+
 ### Important behavior
 
 - Input is a plain `DataFrame`; the function does not currently accept `AnnData` directly.
@@ -118,6 +126,10 @@ out = adtl.qqplot(
     filename="results/model_fdr_qqplot.png",
 )
 ```
+
+<img src="assets/plotting_gallery/qqplot__differential_pvalues.png" alt="Differential-test p-value QQ plot" width="720">
+
+*`differential_pvalues` — Differential-test p-value QQ plot. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
 
 ### Supported input modes
 
@@ -222,6 +234,10 @@ adtl.timeseries_paired_datapoints(
 )
 ```
 
+<img src="assets/plotting_gallery/timeseries_paired_datapoints__faceted_time_series.png" alt="Paired time-series datapoints" width="720">
+
+*`faceted_time_series` — Paired time-series datapoints. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+
 ### Important behavior
 
 - This function is `AnnData`-only.
@@ -239,4 +255,4 @@ The current implementation does not return a figure object. Treat it as a show-a
 
 ## Coverage note
 
-This page documents current code in `_plotting/_plots.py` and repo example usage such as `example_PMID_33969320/scripts/make_volcano_plots.py`. Dedicated datapoint regression coverage lives in `tests/test_datapoints.py` and `tests/test_paired_datapoints.py`; the functions on this page are based on current code and repo example usage.
+Direct renderer regression coverage is in `tests/test_general_plot_renderers.py`. Additional datapoint coverage lives in `tests/test_datapoints.py` and `tests/test_paired_datapoints.py`.

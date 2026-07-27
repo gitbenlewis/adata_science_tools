@@ -30,6 +30,10 @@ adtl.plot_columns(
 )
 ```
 
+<img src="assets/plotting_gallery/plot_columns__multi_metric.png" alt="Grouped covariate summaries" width="720">
+
+*`multi_metric` — Grouped covariate summaries. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+
 ### Important behavior
 
 - Input is a plain `DataFrame`.
@@ -45,4 +49,4 @@ The current implementation does not explicitly return the figure or axes. Treat 
 
 ## Coverage note
 
-There do not appear to be direct tests for this module in `tests/`.
+Direct `plot_columns(...)` regression coverage is in `tests/test_general_plot_renderers.py`.

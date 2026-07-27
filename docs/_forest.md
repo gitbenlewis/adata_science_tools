@@ -124,6 +124,12 @@ using the shared plotting schema. Each mapping requires a finite numeric
 `value` and may contain `label`, `color`, `linestyle`, `linewidth`, `alpha`,
 and `zorder`.
 
+### `forest` gallery: ratio scale
+
+<img src="assets/plotting_gallery/forest__ratio_scale.png" alt="Ratio-scale effects" width="720">
+
+*`ratio_scale` — Ratio-scale effects. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+
 ## P-value encoding
 
 With the compatibility default, `pvalue_color_mode="auto"` and no observation
@@ -351,6 +357,12 @@ fig, ax, plotted = adtl.forest(
     show=False,
 )
 ```
+
+### `forest` gallery: grouped estimates
+
+<img src="assets/plotting_gallery/forest__grouped_estimates.png" alt="Grouped model estimates" width="720">
+
+*`grouped_estimates` — Grouped model estimates. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
 
 ## Validation
 

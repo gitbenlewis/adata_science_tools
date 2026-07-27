@@ -25,6 +25,10 @@ import adata_science_tools as adtl
 adtl.show_tol_colors()
 ```
 
+<img src="assets/plotting_gallery/show_tol_colors__tol_palette.png" alt="Paul Tol plotting palette" width="720">
+
+*`tol_palette` — Paul Tol plotting palette. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+
 Important behavior:
 
 - If `colors` is omitted, the function uses the built-in Tol palette.
@@ -55,6 +59,10 @@ adtl.show_colors(
 )
 ```
 
+<img src="assets/plotting_gallery/show_colors__categorical_palette.png" alt="Categorical plotting palette" width="720">
+
+*`categorical_palette` — Categorical plotting palette. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+
 Important behavior:
 
 - `colors` should be a list-like set of color strings.
@@ -65,4 +73,4 @@ Important behavior:
 
 ## Coverage note
 
-This module is documented from current code. There do not appear to be dedicated regression tests for it.
+Direct `show_colors(...)` regression coverage is in `tests/test_general_plot_renderers.py`.

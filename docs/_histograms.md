@@ -251,6 +251,12 @@ adtl.adata_histograms(
 )
 ```
 
+### Gallery example: feature grouping
+
+<img src="assets/plotting_gallery/adata_histograms__feature_group_collapse.png" alt="Grouped feature distributions" width="720">
+
+*`feature_group_collapse` — Grouped feature distributions. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+
 ## Filtering and Subsets
 
 1. `filter_obs_by_isin_lists={"column": ["allowed"]}` filters observations with AND semantics.
@@ -346,6 +352,12 @@ adtl.adata_histograms(
     show=False,
 )
 ```
+
+### Gallery example: subgroup KDE
+
+<img src="assets/plotting_gallery/adata_histograms__subgroup_kde.png" alt="Distributions by treatment" width="720">
+
+*`subgroup_kde` — Distributions by treatment. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
 
 ## Line styles and references
 

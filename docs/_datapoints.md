@@ -165,6 +165,14 @@ plot_df[[
 ]]
 ```
 
+<img src="assets/plotting_gallery/datapoints__grouped_markers.png" alt="Feature values with independent marker and color encodings" width="720">
+
+*`grouped_markers` — Feature values with independent marker and color encodings. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+
+<img src="assets/plotting_gallery/datapoints__feature_group_collapse.png" alt="Collapsed feature-group datapoints" width="720">
+
+*`feature_group_collapse` — Collapsed feature-group datapoints. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+
 ### Important behavior
 
 1. INPUTS: Provide exactly one of `input_data`, `adata`, or `df`. For wide

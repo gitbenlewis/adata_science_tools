@@ -189,6 +189,10 @@ fig, ax, plotted, table = adtl.meta_forest(
 )
 ```
 
+<img src="assets/plotting_gallery/meta_forest__study_summary_prediction.png" alt="Meta-analysis summary" width="720">
+
+*`study_summary_prediction` — Meta-analysis summary. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+
 ## Interval clipping
 
 When explicit `xlims` cut through a confidence or prediction interval, only the

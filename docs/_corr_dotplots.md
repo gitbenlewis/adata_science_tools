@@ -117,6 +117,14 @@ top_hist_ax = axes["x_marginal"]
 right_hist_ax = axes["y_marginal"]
 ```
 
+<img src="assets/plotting_gallery/corr_dotplot__subgroup_marginals.png" alt="Correlation with subgroup fits and marginals" width="720">
+
+*`subgroup_marginals` — Correlation with subgroup fits and marginals. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+
+<img src="assets/plotting_gallery/corr_dotplot__log1p_identity.png" alt="Correlation on synchronized log1p axes" width="720">
+
+*`log1p_identity` — Correlation on synchronized log1p axes. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+
 ### Supported input modes
 
 - `df=...` with preassembled plotting columns
@@ -189,6 +197,10 @@ The config-driven example uses `corr_dotplot(...)` with both marginals enabled:
 
 For compatibility, its second return value is always the three-key axes dictionary, including when both marginals are disabled. New code should use `corr_dotplot(...)` and follow the conditional return contract above.
 
+<img src="assets/plotting_gallery/corr_dotplot_dev__replacement_smoke.png" alt="Deprecated correlation wrapper" width="720">
+
+*`replacement_smoke` — Deprecated correlation wrapper. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance). Deprecated: use `corr_dotplot` instead.*
+
 ## `spearman_cor_dotplot`
 
 `spearman_cor_dotplot(...)` is a backward-compatible wrapper around `corr_dotplot(...)`.
@@ -209,6 +221,10 @@ fig, ax, fit, corr_value, corr_pvalue = adtl.spearman_cor_dotplot(
 )
 ```
 
+<img src="assets/plotting_gallery/spearman_cor_dotplot__spearman_fit.png" alt="Spearman correlation compatibility API" width="720">
+
+*`spearman_fit` — Spearman correlation compatibility API. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance). Compatibility API: prefer `corr_dotplot` for new code.*
+
 Important behavior:
 
 - It forces `method="spearman"` even if a different method is passed.
@@ -226,11 +242,33 @@ Creates a two-panel scatter plot of the same x/y pair with two different hue col
 def spearman_cor_dotplot_2(df, column_key_x, column_key_y, hue, hue_right, figsize=(20, 10)):
 ```
 
+<img src="assets/plotting_gallery/spearman_cor_dotplot_2__dual_hue.png" alt="Correlation under two categorical encodings" width="720">
+
+*`dual_hue` — Correlation under two categorical encodings. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+
 ### Rank-comparison helpers
 
 - `plot_rank_scatter`, `plot_rank_heatmap`, and `plot_rank_scatter_density` compare two ranked lists using the ranks of shared elements.
 - They return `(correlation, p_value)`.
 - If the lists share no common elements, they return `(None, None)`.
+
+#### `plot_rank_scatter`
+
+<img src="assets/plotting_gallery/plot_rank_scatter__rank_agreement.png" alt="Rank agreement" width="720">
+
+*`rank_agreement` — Rank agreement. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+
+#### `plot_rank_heatmap`
+
+<img src="assets/plotting_gallery/plot_rank_heatmap__rank_hexbin.png" alt="Rank agreement density" width="720">
+
+*`rank_hexbin` — Rank agreement density. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+
+#### `plot_rank_scatter_density`
+
+<img src="assets/plotting_gallery/plot_rank_scatter_density__rank_density.png" alt="Rank agreement with local density" width="720">
+
+*`rank_density` — Rank agreement with local density. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
 
 ### `pairwise_spearman_corr_matrix`
 
@@ -243,6 +281,14 @@ Computes the Spearman correlation between two ranked lists without plotting and 
 ### `plot_heatmap`
 
 Heatmap helper for numeric matrices or `DataFrame` input. This function is documented from code rather than regression tests; use it as a convenience helper rather than a heavily stabilized API.
+
+<img src="assets/plotting_gallery/plot_heatmap__clustered.png" alt="Clustered rank-correlation heatmap" width="720">
+
+*`clustered` — Clustered rank-correlation heatmap. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+
+<img src="assets/plotting_gallery/plot_heatmap__fixed_order.png" alt="Fixed-order rank-correlation heatmap" width="720">
+
+*`fixed_order` — Fixed-order rank-correlation heatmap. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
 
 ## Example with plain `DataFrame`
 

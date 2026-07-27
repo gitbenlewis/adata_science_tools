@@ -121,6 +121,10 @@ fig, axes, plot_df = adtl.paired_datapoints(
 )
 ```
 
+<img src="assets/plotting_gallery/paired_datapoints__paired_groups.png" alt="Paired changes by treatment" width="720">
+
+*`paired_groups` — Paired changes by treatment. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+
 ## Title and axis label placement
 
 Use `title_y` and `subplot_title_y` to move the figure title or subplot titles
@@ -337,6 +341,10 @@ fig, axes, plot_df = adtl.paired_datapoints(
     show=False,
 )
 ```
+
+<img src="assets/plotting_gallery/paired_datapoints__precomputed_pair_values.png" alt="Paired values from preserved source matrices" width="720">
+
+*`precomputed_pair_values` — Paired values from preserved source matrices. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
 
 ## Filtering and subsets
 
