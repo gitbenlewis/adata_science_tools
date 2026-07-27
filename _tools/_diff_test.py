@@ -777,11 +777,24 @@ def diff_test(adata, layer=None, use_raw=False,
             X, adata, group1_idx, group2_idx, pair_by_key,
             groupby_key_target_values, groupby_key_ref_values
         )
+        paired_diff = data1_rel - data2_rel
+        # Permutations require at least two pairs; 9999 exceeds 2**13 for exhaustive tests.
+        wilcoxon_method = (
+            stats.PermutationMethod(n_resamples=9999, batch=32)
+            if 2 <= paired_diff.shape[0] <= 13
+            else "auto"
+        )
         # Perform Wilcoxon rank-sum tests
         #w_stat, w_test_pvals = stats.ranksums(data1_rel, data2_rel)
-        w_stat, w_test_pvals = stats.wilcoxon(data1_rel, data2_rel,alternative='two-sided',axis=0,correction=True)
+        w_stat, w_test_pvals = stats.wilcoxon(
+            data1_rel,
+            data2_rel,
+            alternative='two-sided',
+            axis=0,
+            correction=True,
+            method=wilcoxon_method,
+        )
         # Guard degenerate zero-variance paired differences.
-        paired_diff = data1_rel - data2_rel
         const_paired_mask = np.ptp(paired_diff, axis=0) == 0
         if np.any(const_paired_mask):
             w_stat = w_stat.astype(float, copy=False)
@@ -924,6 +937,13 @@ def diff_test(adata, layer=None, use_raw=False,
         # Compute the difference for each pair and run the paired Wilcoxon rank-sum test
         target_diff = data_target_rel - data_targetControl_rel
         ref_diff = data_ref_rel - data_refControl_rel
+        nested_diff = target_diff - ref_diff
+        # Permutations require at least two pairs; 9999 exceeds 2**13 for exhaustive tests.
+        wilcoxon_method = (
+            stats.PermutationMethod(n_resamples=9999, batch=32)
+            if 2 <= nested_diff.shape[0] <= 13
+            else "auto"
+        )
         # Perform Wilcoxon rank-sum tests
         #w_nested_stat, w_nested_test_pvals = stats.ranksums(target_diff, ref_diff) ### wrong drrrdadrr: this breaks the pairing
         # Compute paired Wilcoxon on per-feature differences (keeps pairing intact)
@@ -934,9 +954,9 @@ def diff_test(adata, layer=None, use_raw=False,
             alternative="two-sided",
             correction=True,   # keep continuity correction as before
             zero_method="wilcox",  # or "pratt" if you want to keep zeros
+            method=wilcoxon_method,
         )
         # Guard degenerate zero-variance nested differences.
-        nested_diff = target_diff - ref_diff
         const_nested_mask = np.ptp(nested_diff, axis=0) == 0
         if np.any(const_nested_mask):
             w_nested_stat = w_nested_stat.astype(float, copy=False)

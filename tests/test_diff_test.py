@@ -6,10 +6,12 @@ import unittest
 import warnings
 from contextlib import contextmanager
 from pathlib import Path
+from unittest import mock
 
 import anndata as ad
 import numpy as np
 import pandas as pd
+from scipy import stats
 
 
 REPO_PARENT = Path(__file__).resolve().parents[2]
@@ -348,6 +350,120 @@ class DiffTestRegressionTests(unittest.TestCase):
         self.assertTrue(pd.isna(results.loc["feat_constant", "WilcoxonSigned_stat_target_ref"]))
         self.assertTrue(pd.isna(results.loc["feat_constant", "WilcoxonSigned_pvals_target_ref"]))
 
+    def test_small_paired_wilcoxon_uses_bounded_exhaustive_permutations(self):
+        adata = self._make_standard_adata()
+        adata.X[:, 0] = [7.0, 5.0, 6.0, 6.0, 7.0, 8.0, 5.0, 8.0]
+        target = np.array([5.0, 7.0, 8.0, 6.0])
+        reference = np.array([5.0, 6.0, 7.0, 8.0])
+        exhaustive = stats.wilcoxon(
+            target,
+            reference,
+            alternative="two-sided",
+            correction=True,
+            method=stats.PermutationMethod(n_resamples=2 ** target.size, batch=1),
+        )
+
+        with mock.patch.object(stats, "wilcoxon", wraps=stats.wilcoxon) as wilcoxon:
+            results = self._call_diff_test(
+                adata,
+                suffix="small_wilcoxon",
+                groupby_key="Treatment",
+                groupby_key_target_values=["drug"],
+                groupby_key_ref_values=["vehicle"],
+                tests=["ttest_rel", "WilcoxonSigned"],
+                pair_by_key="SubjectID",
+            )
+
+        method = wilcoxon.call_args.kwargs["method"]
+        self.assertIsInstance(method, stats.PermutationMethod)
+        self.assertEqual(method.n_resamples, 9999)
+        self.assertEqual(method.batch, 32)
+        self.assertEqual(wilcoxon.call_args.args[0].shape[0], 4)
+        self.assertAlmostEqual(results.loc["feat_signal", "WilcoxonSigned_stat_target_ref"], exhaustive.statistic)
+        self.assertAlmostEqual(results.loc["feat_signal", "WilcoxonSigned_pvals_target_ref"], exhaustive.pvalue)
+        self.assertTrue(bool(results.loc["feat_constant", "WilcoxonSigned_constVAR_target_ref"]))
+        self.assertTrue(pd.isna(results.loc["feat_constant", "WilcoxonSigned_stat_target_ref"]))
+        self.assertTrue(pd.isna(results.loc["feat_constant", "WilcoxonSigned_pvals_target_ref"]))
+        self.assertNotIn("feat_zero", results.index)
+
+        repeated = self._call_diff_test(
+            adata,
+            suffix="small_wilcoxon_repeat",
+            groupby_key="Treatment",
+            groupby_key_target_values=["drug"],
+            groupby_key_ref_values=["vehicle"],
+            tests=["ttest_rel", "WilcoxonSigned"],
+            pair_by_key="SubjectID",
+        )
+        wilcoxon_columns = [
+            "WilcoxonSigned_constVAR_target_ref",
+            "WilcoxonSigned_stat_target_ref",
+            "WilcoxonSigned_pvals_target_ref",
+            "WilcoxonSigned_pvals_FDR_target_ref",
+        ]
+        pd.testing.assert_frame_equal(results[wilcoxon_columns], repeated[wilcoxon_columns])
+
+    def test_paired_wilcoxon_method_boundary(self):
+        for n_pairs in (13, 14):
+            with self.subTest(n_pairs=n_pairs):
+                pair_ids = [f"S{i:02d}" for i in range(n_pairs)]
+                reference = np.arange(n_pairs, dtype=float) + 20.0
+                target = reference + (np.arange(n_pairs) % 5) - 2.0
+                obs = pd.DataFrame(
+                    {
+                        "Treatment": ["drug"] * n_pairs + ["vehicle"] * n_pairs,
+                        "SubjectID": pair_ids + pair_ids,
+                    },
+                    index=[f"drug_{pair_id}" for pair_id in pair_ids]
+                    + [f"vehicle_{pair_id}" for pair_id in pair_ids],
+                )
+                adata = ad.AnnData(
+                    X=np.concatenate([target, reference])[:, None],
+                    obs=obs,
+                    var=pd.DataFrame(index=["feat_signal"]),
+                )
+
+                with mock.patch.object(stats, "wilcoxon", wraps=stats.wilcoxon) as wilcoxon:
+                    self._call_diff_test(
+                        adata,
+                        suffix=f"boundary_{n_pairs}_wilcoxon",
+                        groupby_key="Treatment",
+                        groupby_key_target_values=["drug"],
+                        groupby_key_ref_values=["vehicle"],
+                        tests=["ttest_rel", "WilcoxonSigned"],
+                        pair_by_key="SubjectID",
+                    )
+
+                self.assertEqual(wilcoxon.call_args.args[0].shape[0], n_pairs)
+                method = wilcoxon.call_args.kwargs["method"]
+                if n_pairs == 13:
+                    self.assertIsInstance(method, stats.PermutationMethod)
+                    self.assertEqual(method.n_resamples, 9999)
+                    self.assertEqual(method.batch, 32)
+                else:
+                    self.assertEqual(method, "auto")
+
+    def test_single_paired_wilcoxon_preserves_auto_method(self):
+        adata = self._make_standard_adata()
+        adata = adata[adata.obs["SubjectID"] == "S1"].copy()
+        adata = adata[:, ["feat_signal"]].copy()
+
+        with mock.patch.object(stats, "wilcoxon", wraps=stats.wilcoxon) as wilcoxon:
+            results = self._call_diff_test(
+                adata,
+                suffix="single_wilcoxon",
+                groupby_key="Treatment",
+                groupby_key_target_values=["drug"],
+                groupby_key_ref_values=["vehicle"],
+                tests=["ttest_rel", "WilcoxonSigned"],
+                pair_by_key="SubjectID",
+            )
+
+        self.assertEqual(wilcoxon.call_args.args[0].shape[0], 1)
+        self.assertEqual(wilcoxon.call_args.kwargs["method"], "auto")
+        self.assertTrue(pd.isna(results.loc["feat_signal", "WilcoxonSigned_stat_target_ref"]))
+        self.assertTrue(pd.isna(results.loc["feat_signal", "WilcoxonSigned_pvals_target_ref"]))
+
     def test_nested_alignment_and_var_annotations(self):
         results = self._call_diff_test(
             self._make_nested_adata(),
@@ -381,6 +497,49 @@ class DiffTestRegressionTests(unittest.TestCase):
         self.assertTrue(pd.isna(results.loc["feat_constant", "ttest_rel_nested_pvals_target_con_ref_con"]))
         self.assertTrue(pd.isna(results.loc["feat_constant", "WilcoxonSigned_nested_stat_target_con_ref_con"]))
         self.assertTrue(pd.isna(results.loc["feat_constant", "WilcoxonSigned_nested_pvals_target_con_ref_con"]))
+
+    def test_small_nested_wilcoxon_uses_bounded_permutations(self):
+        with mock.patch.object(stats, "wilcoxon", wraps=stats.wilcoxon) as wilcoxon:
+            self._call_diff_test(
+                self._make_nested_adata(),
+                suffix="small_nested_wilcoxon",
+                groupby_key="Treatment",
+                groupby_key_target_values=["drug"],
+                groupby_key_ref_values=["vehicle"],
+                nested_groupby_key_target_values=[("drug", "predoseDrug")],
+                nested_groupby_key_ref_values=[("vehicle", "predoseVeh")],
+                tests=["ttest_rel_nested", "WilcoxonSigned_nested"],
+                pair_by_key="AnimalID",
+            )
+
+        method = wilcoxon.call_args.kwargs["method"]
+        self.assertIsInstance(method, stats.PermutationMethod)
+        self.assertEqual(method.n_resamples, 9999)
+        self.assertEqual(method.batch, 32)
+        self.assertEqual(wilcoxon.call_args.args[0].shape[0], 3)
+
+    def test_single_nested_wilcoxon_preserves_auto_method(self):
+        adata = self._make_nested_adata()
+        adata = adata[adata.obs["AnimalID"] == "A1"].copy()
+        adata = adata[:, ["feat_signal"]].copy()
+
+        with mock.patch.object(stats, "wilcoxon", wraps=stats.wilcoxon) as wilcoxon:
+            results = self._call_diff_test(
+                adata,
+                suffix="single_nested_wilcoxon",
+                groupby_key="Treatment",
+                groupby_key_target_values=["drug"],
+                groupby_key_ref_values=["vehicle"],
+                nested_groupby_key_target_values=[("drug", "predoseDrug")],
+                nested_groupby_key_ref_values=[("vehicle", "predoseVeh")],
+                tests=["ttest_rel_nested", "WilcoxonSigned_nested"],
+                pair_by_key="AnimalID",
+            )
+
+        self.assertEqual(wilcoxon.call_args.args[0].shape[0], 1)
+        self.assertEqual(wilcoxon.call_args.kwargs["method"], "auto")
+        self.assertTrue(pd.isna(results.loc["feat_signal", "WilcoxonSigned_nested_stat_target_con_ref_con"]))
+        self.assertTrue(pd.isna(results.loc["feat_signal", "WilcoxonSigned_nested_pvals_target_con_ref_con"]))
 
     def test_nested_results_saved_to_uns_as_json_strings(self):
         adata = self._make_nested_adata()
