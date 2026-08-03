@@ -1358,6 +1358,8 @@ def datapoints(
 
         if not uses_default_panel:
             ax.set_title(panel_name)
+        elif panel_df["variable"].nunique() == 1:
+            ax.set_title(str(panel_df["variable"].iloc[0]))
         ax.set_xticks(x_positions)
         ax.set_xticklabels(x_labels, rotation=45, ha="right")
         ax.set_xlabel(

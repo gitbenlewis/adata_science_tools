@@ -63,6 +63,7 @@ class DatapointsTests(unittest.TestCase):
             )
 
             self.assertEqual(list(axes), ["all"])
+            self.assertEqual(axes["all"].get_title(), "")
             self.assertFalse(plt.fignum_exists(fig.number))
             self.assertTrue(
                 {
@@ -82,12 +83,12 @@ class DatapointsTests(unittest.TestCase):
             if fig is not None:
                 plt.close(fig)
 
-    def test_title_does_not_display_internal_default_panel_name(self):
+    def test_title_uses_single_feature_for_default_panel_title(self):
         fig = None
         try:
             fig, axes, plot_df = adtl.datapoints(
                 adata=self.make_adata(),
-                var_names=["A_v1", "B_v1"],
+                var_names=["A_v1"],
                 title="Custom title",
                 show=False,
             )
@@ -95,7 +96,7 @@ class DatapointsTests(unittest.TestCase):
             self.assertIsNotNone(fig._suptitle)
             self.assertEqual(fig._suptitle.get_text(), "Custom title")
             self.assertEqual(list(axes), ["all"])
-            self.assertEqual(axes["all"].get_title(), "")
+            self.assertEqual(axes["all"].get_title(), "A_v1")
             self.assertEqual(plot_df["panel"].unique().tolist(), ["all"])
         finally:
             if fig is not None:
@@ -312,6 +313,7 @@ class DatapointsTests(unittest.TestCase):
             self.assertEqual(list(pd.unique(plot_df["x_label"])), ["case", "control"])
             self.assertEqual(plot_df["condition"].tolist(), ["case", "control", "case", "control"])
             self.assertEqual(plot_df["x_order"].tolist(), [1, 2, 1, 2])
+            self.assertEqual(axes["all"].get_title(), "A_v1")
             self.assertEqual(axes["all"].get_xlabel(), "condition")
         finally:
             if fig is not None:
@@ -647,6 +649,7 @@ class DatapointsTests(unittest.TestCase):
             )
 
             self.assertEqual(list(axes), ["all"])
+            self.assertEqual(axes["all"].get_title(), "")
             self.assertEqual(plot_df["panel"].unique().tolist(), ["all"])
             self.assertEqual(
                 plot_df.loc[plot_df["x_label"] == "case", "value"].tolist(),
@@ -672,7 +675,7 @@ class DatapointsTests(unittest.TestCase):
         fig_stack = None
         fig_all = None
         try:
-            fig_aggregate, _, aggregate_df = adtl.datapoints(
+            fig_aggregate, aggregate_axes, aggregate_df = adtl.datapoints(
                 adata=adata,
                 var_groupby_key="Gene",
                 var_names=["GENE_A"],
@@ -680,16 +683,18 @@ class DatapointsTests(unittest.TestCase):
                 collapse_func="mean",
                 show=False,
             )
+            self.assertEqual(aggregate_axes["all"].get_title(), "GENE_A")
             self.assertEqual(aggregate_df["x_label"].unique().tolist(), ["GENE_A"])
             self.assertEqual(aggregate_df["value"].tolist(), [5.5, 11.0, 16.5, 22.0])
 
-            fig_stack, _, stack_df = adtl.datapoints(
+            fig_stack, stack_axes, stack_df = adtl.datapoints(
                 adata=adata,
                 var_groupby_key="Gene",
                 var_names=["GENE_A"],
                 collapse_mode="stack",
                 show=False,
             )
+            self.assertEqual(stack_axes["all"].get_title(), "GENE_A")
             self.assertEqual(list(pd.unique(stack_df["x_label"])), ["A_v1", "A_v2"])
             self.assertEqual(list(pd.unique(stack_df["variable"])), ["GENE_A"])
 
