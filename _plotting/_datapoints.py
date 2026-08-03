@@ -91,6 +91,7 @@ def datapoints(
     xlabel: str | None = None,
     ylabel: str | None = None,
     title: str | None = None,
+    title_axes_top: float | None = None,
     title_fontsize: int = 14,
     axis_label_fontsize: int = 12,
     tick_label_fontsize: int | None = None,
@@ -1442,7 +1443,9 @@ def datapoints(
                     legend_text.set_fontweight("bold")
 
     plt.tight_layout()
-    if title is not None:
+    if title_axes_top is not None:
+        fig.subplots_adjust(top=title_axes_top)
+    elif title is not None:
         fig.subplots_adjust(top=0.88)
     if savefig:
         fig.savefig(file_name, dpi=300, bbox_inches="tight")
@@ -1515,6 +1518,7 @@ def paired_datapoints(
     ylabel: str | None = None,
     xlabel: str | None = None,
     title: str | None = None,
+    title_axes_top: float | None = None,
     subplot_title_var_col: str | None = None,
     subplot_title_y: float | None = None,
     title_fontsize: int = 14,
@@ -2400,6 +2404,8 @@ def paired_datapoints(
             fig.legend(legend_handles, legend_labels, **legend_kwargs)
 
     plt.tight_layout()
+    if title_axes_top is not None:
+        fig.subplots_adjust(top=title_axes_top)
     if savefig:
         fig.savefig(file_name, dpi=300, bbox_inches="tight")
     if show:

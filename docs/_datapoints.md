@@ -78,6 +78,7 @@ def datapoints(
     xlabel: str | None = None,
     ylabel: str | None = None,
     title: str | None = None,
+    title_axes_top: float | None = None,
     title_fontsize: int = 14,
     axis_label_fontsize: int = 12,
     tick_label_fontsize: int | None = None,
@@ -106,7 +107,7 @@ def datapoints(
 | Status | Arguments |
 |---|---|
 | Existing | input selection, variable grouping/collapse, observation and variable filters, subset colors, panels, x categories, deterministic jitter, box/violin overlays, legend metrics, figure sizing, saving, and missing/zero handling |
-| New | `summary_filter_obs_by_isin_lists`, mapping-form `subset_palette`, `marker_by_obs_key`, `marker_order`, `marker_styles`, `legend_metric_formats`, `group_annotations`, `yscale`, `y_reference_lines`, `append_marker_handles_to_legend`, and `append_reference_handles_to_legend` |
+| New | `summary_filter_obs_by_isin_lists`, mapping-form `subset_palette`, `marker_by_obs_key`, `marker_order`, `marker_styles`, `legend_metric_formats`, `group_annotations`, `yscale`, `y_reference_lines`, `title_axes_top`, `append_marker_handles_to_legend`, and `append_reference_handles_to_legend` |
 
 ### Synthetic example
 
@@ -172,6 +173,39 @@ plot_df[[
 <img src="assets/plotting_gallery/datapoints__feature_group_collapse.png" alt="Collapsed feature-group datapoints" width="720">
 
 *`feature_group_collapse` — Collapsed feature-group datapoints. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+
+### Figure and subplot titles
+
+`title` sets the overall figure title; it does not replace a semantic subplot
+title. For example:
+
+```python
+fig, axes, plot_df = adtl.datapoints(
+    adata=adata,
+    var_names=["IL6"],
+    title="Custom title",
+    title_axes_top=0.76,
+    show=False,
+)
+```
+
+The figure title is `"Custom title"`, while the subplot title remains `"IL6"`,
+matching the title hierarchy used by `paired_datapoints()`. The returned axis is
+still keyed as `axes["all"]`; that internal key is not used as the visible title
+of an unfaceted plot.
+
+Set `title_axes_top` to the normalized figure coordinate for the top edge of the
+subplot area. It is applied as `fig.subplots_adjust(top=title_axes_top)` after
+`tight_layout()`; decreasing the value moves subplot titles farther below the
+figure title. When omitted, a titled `datapoints()` plot retains its existing
+`top=0.88` layout.
+
+For an unfaceted plot, the sole logical feature or variable group is used as the
+subplot title. If multiple logical variables share that axis, no single subplot
+title is drawn. Explicit observation or variable facets and automatic
+per-variable panels retain their panel names, including a genuine panel named
+`"all"`. With `collapse_mode="all"`, `"all"` is the explicitly requested logical
+variable label and therefore remains visible.
 
 ### Important behavior
 

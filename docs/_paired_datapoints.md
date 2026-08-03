@@ -79,6 +79,7 @@ def paired_datapoints(
     ylabel: str | None = None,
     xlabel: str | None = None,
     title: str | None = None,
+    title_axes_top: float | None = None,
     subplot_title_var_col: str | None = None,
     subplot_title_y: float | None = None,
     title_fontsize: int = 14,
@@ -127,9 +128,17 @@ fig, axes, plot_df = adtl.paired_datapoints(
 
 ## Title and axis label placement
 
-Use `title_y` and `subplot_title_y` to move the figure title or subplot titles
-vertically. Use `xlabel=""` to suppress the x-axis label below the Pre/Post tick
-labels.
+`title` sets the overall figure title and does not replace the selected feature
+or variable-group subplot titles. `subplot_title_var_col` can instead source
+single-variable subplot titles from variable metadata. Use `title_y` and
+`subplot_title_y` to move the figure title or subplot titles vertically. Use
+`xlabel=""` to suppress the x-axis label below the Pre/Post tick labels.
+
+Set `title_axes_top` to the normalized figure coordinate for the top edge of the
+subplot area. It is applied as `fig.subplots_adjust(top=title_axes_top)` after
+`tight_layout()`; decreasing the value moves subplot titles farther below the
+figure title. When omitted, `paired_datapoints()` retains its existing
+`tight_layout()` result.
 
 ```python
 fig, axes, plot_df = adtl.paired_datapoints(
@@ -139,6 +148,7 @@ fig, axes, plot_df = adtl.paired_datapoints(
     title="Paired IL6",
     title_y=1.03,
     subplot_title_y=1.05,
+    title_axes_top=0.76,
     xlabel="",
     show=False,
 )

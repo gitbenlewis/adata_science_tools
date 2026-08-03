@@ -95,9 +95,27 @@ class DatapointsTests(unittest.TestCase):
 
             self.assertIsNotNone(fig._suptitle)
             self.assertEqual(fig._suptitle.get_text(), "Custom title")
+            self.assertAlmostEqual(fig.subplotpars.top, 0.88)
             self.assertEqual(list(axes), ["all"])
             self.assertEqual(axes["all"].get_title(), "A_v1")
             self.assertEqual(plot_df["panel"].unique().tolist(), ["all"])
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_title_axes_top_adjusts_subplot_area(self):
+        fig = None
+        try:
+            fig, axes, _ = adtl.datapoints(
+                adata=self.make_adata(),
+                var_names=["A_v1"],
+                title="Custom title",
+                title_axes_top=0.76,
+                show=False,
+            )
+
+            self.assertAlmostEqual(fig.subplotpars.top, 0.76)
+            self.assertEqual(axes["all"].get_title(), "A_v1")
         finally:
             if fig is not None:
                 plt.close(fig)

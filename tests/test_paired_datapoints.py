@@ -765,6 +765,7 @@ class PairedDatapointsTests(unittest.TestCase):
                 title="Paired values",
                 title_y=1.03,
                 subplot_title_y=1.05,
+                title_axes_top=0.76,
                 xlabel="",
                 show=False,
             )
@@ -772,6 +773,7 @@ class PairedDatapointsTests(unittest.TestCase):
 
             self.assertIsNotNone(fig._suptitle)
             self.assertAlmostEqual(fig._suptitle.get_position()[1], 1.03)
+            self.assertAlmostEqual(fig.subplotpars.top, 0.76)
             self.assertAlmostEqual(axes["A_v1"].title.get_position()[1], 1.05)
             self.assertEqual(axes["A_v1"].get_xlabel(), "")
         finally:
