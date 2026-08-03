@@ -28,11 +28,11 @@ This directory holds module-level documentation for public `adata_science_tools`
 - [`_simulate_data.md`](_simulate_data.md): covariate-driven dataset simulation helpers plus the config-driven example workflow used in `example_simulated_data/`.
 - [`_somascan_IO.md`](_somascan_IO.md): SomaScan `.adat` ingestion, sample-type cleanup, index normalization, and SomaScan-specific DataFrame export helpers.
 - [`_utils.md`](_utils.md): plotting helper functions for previewing and optionally saving color palettes.
-- [`_venn_plots.md`](_venn_plots.md): Venn and enrichment-overlap utilities in the package directory that are not currently re-exported at the package top level.
+- [`_venn_plots.md`](_venn_plots.md): public two-set, three-set, and gene-set enrichment Venn renderers, including the retained legacy enrichment API.
 - [`palettes.md`](palettes.md): named palette constants exposed as `adata_science_tools.palettes`.
 
 ## Notes
 
 - These pages document the current implementation in `adata_science_tools`, not an earlier design draft.
 - The first source of truth for behavior is the code in `_tools/`, `_io/`, `_simulate_data/`, and the tests in `tests/`.
-- Within `_plotting`, direct regression coverage includes analytical, correlation, histogram, datapoint, paired-datapoint, tabular, longitudinal, forest, and meta-analysis forest plotting APIs.
+- Within `_plotting`, direct regression coverage includes analytical, correlation, histogram, datapoint, paired-datapoint, tabular, longitudinal, forest, meta-analysis forest, and Venn plotting APIs.

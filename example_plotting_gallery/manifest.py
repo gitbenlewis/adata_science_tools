@@ -270,6 +270,36 @@ RENDERER_MANIFEST: tuple[RendererSpec, ...] = (
         ),
     ),
     RendererSpec(
+        name="geneset_enrichemnt_ol_ven_M_n_N_x",
+        module="_plotting._venn_plots",
+        status="deprecated",
+        provenance="fixed synthetic universe, hit, and gene-set identifiers passed through the legacy enrichment API",
+        replacement="geneset_enrichment_venn",
+        cases=(
+            GalleryCase(
+                case_id="replacement_smoke",
+                title="Legacy gene-set enrichment overlap",
+                asset="geneset_enrichemnt_ol_ven_M_n_N_x__replacement_smoke.png",
+                features=("legacy invocation", "hypergeometric p-value", "replacement guidance"),
+                tier="smoke",
+            ),
+        ),
+    ),
+    RendererSpec(
+        name="geneset_enrichment_venn",
+        module="_plotting._venn_plots",
+        status="maintained",
+        provenance="fixed synthetic universe, hit, and gene-set identifiers; library-derived upper-tail hypergeometric p-value",
+        cases=(
+            GalleryCase(
+                case_id="universe_filtered",
+                title="Gene-set enrichment overlap",
+                asset="geneset_enrichment_venn__universe_filtered.png",
+                features=("universe filtering", "overlap count", "hypergeometric p-value"),
+            ),
+        ),
+    ),
+    RendererSpec(
         name="kaplan_meier_plot",
         module="_plotting._analytical_plots",
         status="maintained",
@@ -646,6 +676,34 @@ RENDERER_MANIFEST: tuple[RendererSpec, ...] = (
         ),
     ),
     RendererSpec(
+        name="venn_plot_2list",
+        module="_plotting._venn_plots",
+        status="maintained",
+        provenance="fixed synthetic feature identifiers with deterministic two-set membership",
+        cases=(
+            GalleryCase(
+                case_id="two_set_overlap",
+                title="Two feature-set overlap",
+                asset="venn_plot_2list__two_set_overlap.png",
+                features=("exclusive regions", "shared region", "set totals"),
+            ),
+        ),
+    ),
+    RendererSpec(
+        name="venn_plot_3list",
+        module="_plotting._venn_plots",
+        status="maintained",
+        provenance="fixed synthetic feature identifiers spanning all seven three-set regions",
+        cases=(
+            GalleryCase(
+                case_id="three_set_overlap",
+                title="Three feature-set overlap",
+                asset="venn_plot_3list__three_set_overlap.png",
+                features=("seven exclusive regions", "three-way overlap", "set totals"),
+            ),
+        ),
+    ),
+    RendererSpec(
         name="volcano_plot_generic",
         module="_plotting._plots",
         status="maintained",
@@ -698,6 +756,8 @@ EXPECTED_RENDERER_NAMES = frozenset(
         "corr_dotplot_dev",
         "datapoints",
         "forest",
+        "geneset_enrichemnt_ol_ven_M_n_N_x",
+        "geneset_enrichment_venn",
         "kaplan_meier_plot",
         "l2fc_dotplot_column",
         "l2fc_dotplot_single",
@@ -723,6 +783,8 @@ EXPECTED_RENDERER_NAMES = frozenset(
         "spearman_cor_dotplot",
         "spearman_cor_dotplot_2",
         "timeseries_paired_datapoints",
+        "venn_plot_2list",
+        "venn_plot_3list",
         "volcano_plot_generic",
         "volcano_plot_sns_single_comparison_generic",
     }
@@ -735,8 +797,6 @@ EXCLUDED_PUBLIC_CALLABLES = {
     "spearmanr": "SciPy callable leaked by a star import",
 }
 
-EXCLUDED_MODULES = frozenset({"_plotting._venn_plots"})
-
 RENDERER_NAMES = frozenset(spec.name for spec in RENDERER_MANIFEST)
 MANIFEST_BY_NAME = {spec.name: spec for spec in RENDERER_MANIFEST}
 
@@ -744,8 +804,8 @@ MANIFEST_BY_NAME = {spec.name: spec for spec in RENDERER_MANIFEST}
 def validate_manifest() -> None:
     """Raise ``ValueError`` when the gallery coverage contract is inconsistent."""
 
-    if len(RENDERER_MANIFEST) != 39:
-        raise ValueError(f"Expected 39 renderer entries, found {len(RENDERER_MANIFEST)}.")
+    if len(RENDERER_MANIFEST) != 43:
+        raise ValueError(f"Expected 43 renderer entries, found {len(RENDERER_MANIFEST)}.")
     if len(RENDERER_NAMES) != len(RENDERER_MANIFEST):
         raise ValueError("Renderer names must be unique.")
     if RENDERER_NAMES != EXPECTED_RENDERER_NAMES:

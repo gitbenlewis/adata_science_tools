@@ -590,6 +590,39 @@ def _invoke_case(
             show=False,
         )
 
+    if case_key == (
+        "geneset_enrichemnt_ol_ven_M_n_N_x",
+        "replacement_smoke",
+    ):
+        return renderer(
+            M_set=[f"feature_{index:02d}" for index in range(1, 13)],
+            n_set=["feature_01", "feature_02", "feature_03", "feature_04"],
+            N_set=["feature_03", "feature_04", "feature_05", "feature_06"],
+            plot_title="Legacy enrichment API",
+        )
+
+    if case_key == ("geneset_enrichment_venn", "universe_filtered"):
+        return renderer(
+            universe=[f"feature_{index:02d}" for index in range(1, 13)],
+            geneset=[
+                "feature_01",
+                "feature_02",
+                "feature_03",
+                "feature_04",
+                "outside_geneset",
+            ],
+            hits=[
+                "feature_03",
+                "feature_04",
+                "feature_05",
+                "feature_06",
+                "outside_hits",
+            ],
+            dataset_label="Selected features",
+            geneset_label="Reference pathway",
+            plot_title="Synthetic gene-set enrichment",
+        )
+
     if case_key == ("corr_dotplot", "subgroup_marginals"):
         return renderer(
             df=inputs.independent_frame.copy(),
@@ -1299,6 +1332,27 @@ def _invoke_case(
             file_name=str(asset_path),
         )
 
+    if case_key == ("venn_plot_2list", "two_set_overlap"):
+        return renderer(
+            list1=["STAT1", "IRF1", "CXCL10", "ISG15"],
+            list2=["IRF1", "CXCL10", "MKI67", "PCNA"],
+            set_label_list=["Signature A", "Signature B"],
+            plot_title="Synthetic two-set feature overlap",
+            show_plot=True,
+            return_df=False,
+        )
+
+    if case_key == ("venn_plot_3list", "three_set_overlap"):
+        return renderer(
+            list1=["A_only", "AB", "AC", "ABC"],
+            list2=["B_only", "AB", "BC", "ABC"],
+            list3=["C_only", "AC", "BC", "ABC"],
+            set_label_list=["Signature A", "Signature B", "Signature C"],
+            plot_title="Synthetic three-set feature overlap",
+            show_plot=True,
+            return_df=False,
+        )
+
     if spec.name == "volcano_plot_generic":
         pooled = inputs.pooled_diff_results
         if case.case_id == "significance":
@@ -1446,6 +1500,7 @@ def _generate_selected(
             np.random.seed(20260727)
             with (
                 patch.object(np.random, "default_rng", gallery_default_rng),
+                patch.object(plt, "show"),
                 plt.rc_context(
                     {
                         "figure.facecolor": "white",
@@ -1521,7 +1576,7 @@ def generate_gallery(
     output_dir
         Directory that receives the manifest-declared PNG filenames.
     renderer_names
-        Optional exported renderer names. By default all 39 are invoked.
+        Optional exported renderer names. By default all 43 are invoked.
     case_ids
         Optional manifest case IDs, applied within the selected renderer set.
     """

@@ -60,10 +60,10 @@ class PlottingGalleryTests(unittest.TestCase):
             public_functions,
             RENDERER_NAMES | set(EXCLUDED_PUBLIC_CALLABLES),
         )
-        self.assertEqual(len(RENDERER_MANIFEST), 39)
+        self.assertEqual(len(RENDERER_MANIFEST), 43)
         self.assertEqual(
             sum(len(spec.cases) for spec in RENDERER_MANIFEST),
-            46,
+            50,
         )
         for spec in RENDERER_MANIFEST:
             renderer = getattr(adtl.pl, spec.name)
@@ -201,8 +201,12 @@ class PlottingGalleryTests(unittest.TestCase):
                 temporary_directory,
                 renderer_names=[
                     "category_composition",
+                    "geneset_enrichemnt_ol_ven_M_n_N_x",
+                    "geneset_enrichment_venn",
                     "plot_heatmap",
                     "spearman_cor_dotplot_2",
+                    "venn_plot_2list",
+                    "venn_plot_3list",
                 ],
             )
 
@@ -210,9 +214,13 @@ class PlottingGalleryTests(unittest.TestCase):
                 {path.name for path in generated},
                 {
                     "category_composition__percent_annotated.png",
+                    "geneset_enrichemnt_ol_ven_M_n_N_x__replacement_smoke.png",
+                    "geneset_enrichment_venn__universe_filtered.png",
                     "plot_heatmap__clustered.png",
                     "plot_heatmap__fixed_order.png",
                     "spearman_cor_dotplot_2__dual_hue.png",
+                    "venn_plot_2list__two_set_overlap.png",
+                    "venn_plot_3list__three_set_overlap.png",
                 },
             )
             for path in generated:

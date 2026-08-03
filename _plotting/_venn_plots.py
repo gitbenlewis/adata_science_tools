@@ -5,29 +5,33 @@ from matplotlib_venn import venn2
 from matplotlib_venn import venn3
 import pandas as pd
 
-def venn_plot_2list(list1, list2,  set_label_list, plot_title,show_plot=True,return_df=True):
+__all__ = [
+    "venn_plot_2list",
+    "venn_plot_3list",
+    "geneset_enrichment_venn",
+    "geneset_enrichemnt_ol_ven_M_n_N_x",
+]
 
-    import matplotlib.pyplot as plt
-    from matplotlib_venn import venn2
-    from matplotlib_venn import venn3
+def venn_plot_2list(list1, list2,  set_label_list, plot_title,show_plot=True,return_df=True):
 
     set1 = set(list1)
     set2 = set(list2)
-    labels_with_totals=[f'{set_label_list[0]}\nTot:{len(set1)}\n', 
-                        f'{set_label_list[1]}\nTot:{len(set2)}\n', 
+    labels_with_totals=[f'{set_label_list[0]}\nTot:{len(set1)}\n',
+                        f'{set_label_list[1]}\nTot:{len(set2)}\n',
                         ]
 
     # Calculate intersections and unique elements
-    only1 = set1 - set2 
-    only2 = set2 - set1 
-    set1_set2 = set1 & set2 
+    only1 = set1 - set2
+    only2 = set2 - set1
+    set1_set2 = set1 & set2
     # Create a dictionary with overlapping set information
     overlap_dict = {
-        'Set Combination': ['Only Set 1', 'Only Set 2', 
+        'Set Combination': ['Only Set 1', 'Only Set 2',
                             'Set 1 & Set 2',
                             ],
-        'Elements': [str(list(only1)), str(list(only2)), 
-                     str(list(set1_set2)),
+        'Elements': [str(sorted(only1, key=repr)),
+                     str(sorted(only2, key=repr)),
+                     str(sorted(set1_set2, key=repr)),
                     ]
     }
 
@@ -47,15 +51,11 @@ def venn_plot_2list(list1, list2,  set_label_list, plot_title,show_plot=True,ret
 
 def venn_plot_3list(list1, list2, list3, set_label_list, plot_title,show_plot=False,return_df=False):
 
-    import matplotlib.pyplot as plt
-    from matplotlib_venn import venn2
-    from matplotlib_venn import venn3
-
     set1 = set(list1)
     set2 = set(list2)
     set3 = set(list3)
-    labels_with_totals=[f'{set_label_list[0]}\nTot:{len(set1)}\n', 
-                        f'{set_label_list[1]}\nTot:{len(set2)}\n', 
+    labels_with_totals=[f'{set_label_list[0]}\nTot:{len(set1)}\n',
+                        f'{set_label_list[1]}\nTot:{len(set2)}\n',
                         f'{set_label_list[2]}\nTot:{len(set3)}\n']
 
     # Calculate intersections and unique elements
@@ -71,9 +71,13 @@ def venn_plot_3list(list1, list2, list3, set_label_list, plot_title,show_plot=Fa
         'Set Combination': ['Only Set 1', 'Only Set 2', 'Only Set 3',
                             'Set 1 & Set 2', 'Set 1 & Set 3', 'Set 2 & Set 3',
                             'Set 1 & Set 2 & Set 3'],
-        'Elements': [list(only1), list(only2), list(only3),
-                     list(set1_set2), list(set1_set3), list(set2_set3),
-                     list(set1_set2_set3)]
+        'Elements': [sorted(only1, key=repr),
+                     sorted(only2, key=repr),
+                     sorted(only3, key=repr),
+                     sorted(set1_set2, key=repr),
+                     sorted(set1_set3, key=repr),
+                     sorted(set2_set3, key=repr),
+                     sorted(set1_set2_set3, key=repr)]
     }
 
     # Convert the dictionary to DataFrame
@@ -97,10 +101,7 @@ def geneset_enrichment_venn(universe, geneset, hits,
                             plot_title="",
                             shift_overlap=True,
                             shift_overlap_labely=0.1):
-    import numpy as np
     from scipy.stats import hypergeom
-    import matplotlib.pyplot as plt
-    from matplotlib_venn import venn2
 
     universe = set(universe)
     geneset = set(geneset) & universe
@@ -162,10 +163,7 @@ def geneset_enrichemnt_ol_ven_M_n_N_x(
             ' GEX with GeneSet =', x,
             ' hypergeometric p-value =', pvalue
             '''
-            import numpy as np
             from scipy.stats import hypergeom
-            import matplotlib.pyplot as plt
-            from matplotlib_venn import venn2
 
             # Cast to sets
             M_set, n_set, N_set = set(M_set), set(n_set), set(N_set)

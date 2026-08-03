@@ -18,6 +18,7 @@ dependencies:
   - ipywidgets
   - leidenalg
   - matplotlib
+  - matplotlib-venn
   - networkx
   - numba
   - numpy

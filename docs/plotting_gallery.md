@@ -4,7 +4,7 @@ This gallery is a repository-owned visual catalog for the plotting functions
 exported by `adata_science_tools._plotting`. The coverage contract and asset
 filenames come from
 [`example_plotting_gallery/manifest.py`](../example_plotting_gallery/manifest.py):
-39 renderers and 46 cases, split across maintained, compatibility, and
+43 renderers and 50 cases, split across maintained, compatibility, and
 deprecated APIs.
 
 The examples are for rendering and API coverage. They are not benchmark
@@ -30,6 +30,7 @@ functions:
 | `fit_smf_ols_models_and_summarize_adata` coefficients, confidence intervals, p-values, and sample counts | Both `forest` cases, plus the adjusted OLS panels in `barh_dotplot_dotplot_dotplot_column` and `barh_4X_dotplot_column`. |
 | `calculate_expectations`, `predict_expectation`, and `excess_expectation` fitted values and residuals | `residual_diagnostic`. |
 | `pairwise_spearman_corr_matrix` rank-correlation matrix | Both `plot_heatmap` cases. The three `plot_rank_*` renderers instead calculate their displayed rank summaries from the deterministic ranked lists passed to them. |
+| `scipy.stats.hypergeom` upper-tail probability from fixed synthetic universe, hit, and gene-set identifiers | `geneset_enrichment_venn` and the deprecated `geneset_enrichemnt_ol_ven_M_n_N_x`. The maintained API also demonstrates filtering out-of-universe identifiers; every legacy-case identifier is already contained in its supplied universe. |
 
 `run_independent_diff_test` never assigns a sorted or filtered result table
 directly to `AnnData.var`. It starts from a copy of the original `AnnData` and
@@ -40,20 +41,10 @@ analysis values.
 
 ## Coverage boundaries
 
-The manifest labels 30 renderers as maintained, 1 as a compatibility API, and 8
+The manifest labels 33 renderers as maintained, 1 as a compatibility API, and 9
 as deprecated. Compatibility and deprecated entries remain in the catalog so
 their current call paths and recommended replacements are visible; their
 screenshots do not change their support status.
-
-### Excluded Venn module
-
-The gallery also excludes `_plotting._venn_plots`. That module is not
-re-exported by `_plotting/__init__.py`, and importing it requires the optional
-`matplotlib-venn` package, which is not installed in the gallery environment.
-The four non-exported functions are `venn_plot_2list`, `venn_plot_3list`,
-`geneset_enrichment_venn`, and
-`geneset_enrichemnt_ol_ven_M_n_N_x`. See
-[`_venn_plots.md`](_venn_plots.md) for their source-level documentation.
 
 ## Regenerate the assets
 
@@ -77,7 +68,7 @@ The entries, order, case IDs, titles, statuses, replacements, and filenames
 below are derived from `RENDERER_MANIFEST`; the manifest remains authoritative
 if coverage changes.
 
-### Maintained renderers (30)
+### Maintained renderers (33)
 
 | Renderer | Gallery cases |
 | --- | --- |
@@ -92,6 +83,7 @@ if coverage changes.
 | `corr_dotplot`<br><small>`_plotting._corr_dotplots`</small> | <a href="assets/plotting_gallery/corr_dotplot__subgroup_marginals.png"><img src="assets/plotting_gallery/corr_dotplot__subgroup_marginals.png" alt="Correlation with subgroup fits and marginals" width="260"></a><br>`subgroup_marginals` — Correlation with subgroup fits and marginals<br><br><a href="assets/plotting_gallery/corr_dotplot__log1p_identity.png"><img src="assets/plotting_gallery/corr_dotplot__log1p_identity.png" alt="Correlation on synchronized log1p axes" width="260"></a><br>`log1p_identity` — Correlation on synchronized log1p axes |
 | `datapoints`<br><small>`_plotting._datapoints`</small> | <a href="assets/plotting_gallery/datapoints__grouped_markers.png"><img src="assets/plotting_gallery/datapoints__grouped_markers.png" alt="Feature values with independent marker and color encodings" width="260"></a><br>`grouped_markers` — Feature values with independent marker and color encodings<br><br><a href="assets/plotting_gallery/datapoints__feature_group_collapse.png"><img src="assets/plotting_gallery/datapoints__feature_group_collapse.png" alt="Collapsed feature-group datapoints" width="260"></a><br>`feature_group_collapse` — Collapsed feature-group datapoints |
 | `forest`<br><small>`_plotting._forest`</small> | <a href="assets/plotting_gallery/forest__grouped_estimates.png"><img src="assets/plotting_gallery/forest__grouped_estimates.png" alt="Grouped model estimates" width="260"></a><br>`grouped_estimates` — Grouped model estimates<br><br><a href="assets/plotting_gallery/forest__ratio_scale.png"><img src="assets/plotting_gallery/forest__ratio_scale.png" alt="Ratio-scale effects" width="260"></a><br>`ratio_scale` — Ratio-scale effects |
+| `geneset_enrichment_venn`<br><small>`_plotting._venn_plots`</small> | <a href="assets/plotting_gallery/geneset_enrichment_venn__universe_filtered.png"><img src="assets/plotting_gallery/geneset_enrichment_venn__universe_filtered.png" alt="Gene-set enrichment overlap" width="260"></a><br>`universe_filtered` — Gene-set enrichment overlap |
 | `kaplan_meier_plot`<br><small>`_plotting._analytical_plots`</small> | <a href="assets/plotting_gallery/kaplan_meier_plot__grouped_risk_censor.png"><img src="assets/plotting_gallery/kaplan_meier_plot__grouped_risk_censor.png" alt="Survival curves with numbers at risk" width="260"></a><br>`grouped_risk_censor` — Survival curves with numbers at risk |
 | `l2fc_dotplot_column`<br><small>`_plotting._column_plots`</small> | <a href="assets/plotting_gallery/l2fc_dotplot_column__multi_feature.png"><img src="assets/plotting_gallery/l2fc_dotplot_column__multi_feature.png" alt="Differential effects by feature" width="260"></a><br>`multi_feature` — Differential effects by feature |
 | `l2fc_dotplot_single`<br><small>`_plotting._column_plots`</small> | <a href="assets/plotting_gallery/l2fc_dotplot_single__single_axis.png"><img src="assets/plotting_gallery/l2fc_dotplot_single__single_axis.png" alt="Differential effect overview" width="260"></a><br>`single_axis` — Differential effect overview |
@@ -110,6 +102,8 @@ if coverage changes.
 | `show_tol_colors`<br><small>`_plotting._utils`</small> | <a href="assets/plotting_gallery/show_tol_colors__tol_palette.png"><img src="assets/plotting_gallery/show_tol_colors__tol_palette.png" alt="Paul Tol plotting palette" width="260"></a><br>`tol_palette` — Paul Tol plotting palette |
 | `spearman_cor_dotplot_2`<br><small>`_plotting._corr_dotplots`</small> | <a href="assets/plotting_gallery/spearman_cor_dotplot_2__dual_hue.png"><img src="assets/plotting_gallery/spearman_cor_dotplot_2__dual_hue.png" alt="Correlation under two categorical encodings" width="260"></a><br>`dual_hue` — Correlation under two categorical encodings |
 | `timeseries_paired_datapoints`<br><small>`_plotting._plots`</small> | <a href="assets/plotting_gallery/timeseries_paired_datapoints__faceted_time_series.png"><img src="assets/plotting_gallery/timeseries_paired_datapoints__faceted_time_series.png" alt="Paired time-series datapoints" width="260"></a><br>`faceted_time_series` — Paired time-series datapoints |
+| `venn_plot_2list`<br><small>`_plotting._venn_plots`</small> | <a href="assets/plotting_gallery/venn_plot_2list__two_set_overlap.png"><img src="assets/plotting_gallery/venn_plot_2list__two_set_overlap.png" alt="Two feature-set overlap" width="260"></a><br>`two_set_overlap` — Two feature-set overlap |
+| `venn_plot_3list`<br><small>`_plotting._venn_plots`</small> | <a href="assets/plotting_gallery/venn_plot_3list__three_set_overlap.png"><img src="assets/plotting_gallery/venn_plot_3list__three_set_overlap.png" alt="Three feature-set overlap" width="260"></a><br>`three_set_overlap` — Three feature-set overlap |
 | `volcano_plot_generic`<br><small>`_plotting._plots`</small> | <a href="assets/plotting_gallery/volcano_plot_generic__significance.png"><img src="assets/plotting_gallery/volcano_plot_generic__significance.png" alt="Differential-test volcano plot" width="260"></a><br>`significance` — Differential-test volcano plot<br><br><a href="assets/plotting_gallery/volcano_plot_generic__feature_class.png"><img src="assets/plotting_gallery/volcano_plot_generic__feature_class.png" alt="Volcano plot with feature-class highlighting" width="260"></a><br>`feature_class` — Volcano plot with feature-class highlighting |
 
 ### Compatibility renderers (1)
@@ -118,11 +112,12 @@ if coverage changes.
 | --- | --- |
 | `spearman_cor_dotplot`<br><small>`_plotting._corr_dotplots`</small><br>Replacement: `corr_dotplot` | <a href="assets/plotting_gallery/spearman_cor_dotplot__spearman_fit.png"><img src="assets/plotting_gallery/spearman_cor_dotplot__spearman_fit.png" alt="Spearman correlation compatibility API" width="260"></a><br>`spearman_fit` — Spearman correlation compatibility API |
 
-### Deprecated renderers (8)
+### Deprecated renderers (9)
 
 | Renderer | Gallery cases |
 | --- | --- |
 | `corr_dotplot_dev`<br><small>`_plotting._corr_dotplots`</small><br>Replacement: `corr_dotplot` | <a href="assets/plotting_gallery/corr_dotplot_dev__replacement_smoke.png"><img src="assets/plotting_gallery/corr_dotplot_dev__replacement_smoke.png" alt="Deprecated correlation wrapper" width="260"></a><br>`replacement_smoke` — Deprecated correlation wrapper |
+| `geneset_enrichemnt_ol_ven_M_n_N_x`<br><small>`_plotting._venn_plots`</small><br>Replacement: `geneset_enrichment_venn` | <a href="assets/plotting_gallery/geneset_enrichemnt_ol_ven_M_n_N_x__replacement_smoke.png"><img src="assets/plotting_gallery/geneset_enrichemnt_ol_ven_M_n_N_x__replacement_smoke.png" alt="Legacy gene-set enrichment overlap" width="260"></a><br>`replacement_smoke` — Legacy gene-set enrichment overlap |
 | `l2fc_pvalue_dotplot_gex`<br><small>`_plotting._plots_depreciated`</small><br>Replacement: `l2fc_dotplot_single` | <a href="assets/plotting_gallery/l2fc_pvalue_dotplot_gex__replacement_smoke.png"><img src="assets/plotting_gallery/l2fc_pvalue_dotplot_gex__replacement_smoke.png" alt="Legacy gene-expression effect dotplot" width="260"></a><br>`replacement_smoke` — Legacy gene-expression effect dotplot |
 | `l2fc_pvalue_dotplot_protein_metabolite`<br><small>`_plotting._plots_depreciated`</small><br>Replacement: `l2fc_dotplot_single` | <a href="assets/plotting_gallery/l2fc_pvalue_dotplot_protein_metabolite__replacement_smoke.png"><img src="assets/plotting_gallery/l2fc_pvalue_dotplot_protein_metabolite__replacement_smoke.png" alt="Legacy protein/metabolite effect dotplot" width="260"></a><br>`replacement_smoke` — Legacy protein/metabolite effect dotplot |
 | `plot_column_of_bar_h_2groups_GEX_adata`<br><small>`_plotting._plots_depreciated`</small><br>Replacement: `barh_column` | <a href="assets/plotting_gallery/plot_column_of_bar_h_2groups_GEX_adata__replacement_smoke.png"><img src="assets/plotting_gallery/plot_column_of_bar_h_2groups_GEX_adata__replacement_smoke.png" alt="Legacy grouped expression bars" width="260"></a><br>`replacement_smoke` — Legacy grouped expression bars |
