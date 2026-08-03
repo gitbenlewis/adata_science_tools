@@ -82,6 +82,46 @@ class DatapointsTests(unittest.TestCase):
             if fig is not None:
                 plt.close(fig)
 
+    def test_title_does_not_display_internal_default_panel_name(self):
+        fig = None
+        try:
+            fig, axes, plot_df = adtl.datapoints(
+                adata=self.make_adata(),
+                var_names=["A_v1", "B_v1"],
+                title="Custom title",
+                show=False,
+            )
+
+            self.assertIsNotNone(fig._suptitle)
+            self.assertEqual(fig._suptitle.get_text(), "Custom title")
+            self.assertEqual(list(axes), ["all"])
+            self.assertEqual(axes["all"].get_title(), "")
+            self.assertEqual(plot_df["panel"].unique().tolist(), ["all"])
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    def test_real_panel_named_all_keeps_panel_title(self):
+        adata = self.make_adata()
+        adata.obs["batch"] = ["all", "all", "B", "B"]
+
+        fig = None
+        try:
+            fig, axes, _ = adtl.datapoints(
+                adata=adata,
+                var_names=["A_v1"],
+                subplot_by_obs_key="batch",
+                title="Custom title",
+                show=False,
+            )
+
+            self.assertEqual(list(axes), ["all", "B"])
+            self.assertEqual(axes["all"].get_title(), "all")
+            self.assertEqual(axes["B"].get_title(), "B")
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
     def test_dataframe_input_and_config_input_alias(self):
         adata = self.make_adata()
         wide_df = adata.obs.join(

@@ -783,6 +783,7 @@ def datapoints(
                 labels[value] = repr(value)
         return labels
 
+    uses_default_panel = False
     if panel_by_x_variable:
         panel_names = [
             str(value)
@@ -807,7 +808,9 @@ def datapoints(
             )
         ]
     else:
+        # "all" is the internal key for an unfaceted plot, not a display panel label.
         panel_names = ["all"]
+        uses_default_panel = True
 
     plot_ncols = min(ncols, len(panel_names))
     plot_nrows = math.ceil(len(panel_names) / plot_ncols)
@@ -1353,7 +1356,8 @@ def datapoints(
                     **text_kwargs,
                 )
 
-        ax.set_title(panel_name)
+        if not uses_default_panel:
+            ax.set_title(panel_name)
         ax.set_xticks(x_positions)
         ax.set_xticklabels(x_labels, rotation=45, ha="right")
         ax.set_xlabel(
