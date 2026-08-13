@@ -46,6 +46,7 @@ def fit_smf_ols_models_and_summarize_adata(
         save_results_to_original_adata_uns: bool = False,
         # whether to return the filtered adata (work_adata) in addition to results
         return_filtered_adata: bool = False,
+        threads: int = 1,
     ):
 ```
 
@@ -62,6 +63,7 @@ ols_results = adtl.fit_smf_ols_models_and_summarize_adata(
     save_path="results/ols_results.csv",
     save_result_to_adata_uns_as_dict=True,
     include_fdr=False,
+    threads=4,
 )
 ```
 
@@ -104,6 +106,7 @@ def fit_smf_mixedlm_models_and_summarize_adata(
         save_results_to_original_adata_uns: bool = False,
         # whether to return the filtered adata (work_adata) in addition to results
         return_filtered_adata: bool = False,
+        threads: int = 1,
     ):
 ```
 
@@ -120,6 +123,7 @@ mixedlm_results = adtl.fit_smf_mixedlm_models_and_summarize_adata(
     save_path="results/mixedlm_results.csv",
     save_result_to_adata_uns_as_dict=True,
     include_fdr=False,
+    threads=4,
 )
 ```
 
@@ -176,6 +180,7 @@ def fit_smf_ols_models_and_summarize_wide(
         predictors=None,
         model_name='OLS',
         include_fdr=True,
+        threads: int = 1,
     ):
 ```
 
@@ -188,6 +193,7 @@ def fit_smf_mixedlm_models_and_summarize_wide(
         model_name='mixedlm',
         reml=True,
         include_fdr=True,
+        threads: int = 1,
     ):
 ```
 
@@ -197,6 +203,19 @@ Use them when the combined table already exists or when you want to bypass `AnnD
 - `fit_smf_mixedlm_models_and_summarize_wide(obs_X_df, feature_columns, predictors, group=..., ...)`
 
 The `*_adata(...)` wrappers build this table internally with `make_df_obs_adataX(...)`, so most users should start with the `AnnData` APIs unless they already have the combined matrix.
+
+## Feature-level threading
+
+All four maintained model-fit APIs accept `threads`, a positive integer that defaults to `1`.
+
+- `threads=1` uses the existing serial feature-fit path.
+- `threads>1` fits independent features concurrently with standard-library threads. Result rows retain `feature_columns` order, and FDR is calculated only after all feature summaries have been assembled.
+- The setting controls outer feature-level concurrency only. NumPy, SciPy, or the linked BLAS implementation may use additional native threads, so large values can oversubscribe CPUs and reduce performance.
+- Each concurrent fit creates its own feature-specific working table, so peak memory use can increase with `threads`.
+- Fit warnings remain assigned to their originating feature. On Python 3.10 this requires temporary process-wide warning hooks and filters. Warnings from unrelated threads are delegated to the prior handler but may become visible while the `always` filter is active, and concurrent external warning-filter or hook changes can still interfere.
+- Model-fit phases from separate top-level calls are serialized so their process-wide warning contexts cannot overwrite each other; `threads` parallelizes features within one call.
+
+`threads` is execution metadata and is not written to model-spec YAML files.
 
 ## Result table schema
 

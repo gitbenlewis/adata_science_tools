@@ -655,6 +655,7 @@ def calculate_expectations(
     model_name: str | None = None,
     add_adata_var_column_key_list: list[str] | tuple[str, ...] | None = None,
     include_metadata: bool = True,
+    threads: int = 1,
 ) -> pd.DataFrame:
     """
     Fit per-feature OLS expectation models and return the coefficient table.
@@ -662,7 +663,7 @@ def calculate_expectations(
     The returned DataFrame stores the in-memory prediction spec in
     ``expectation_df.attrs["model_spec"]`` so the same object can be passed
     directly to :func:`predict_expectation`, :func:`regress_out`, and
-    :func:`excess_expectation`.
+    :func:`excess_expectation`. ``threads`` controls concurrent feature fits.
     """
     if fit_method != "ols":
         raise ValueError("calculate_expectations currently supports fit_method='ols' only.")
@@ -735,6 +736,7 @@ def calculate_expectations(
         save_table=False,
         save_result_to_adata_uns_as_dict=False,
         include_fdr=False,
+        threads=threads,
     )
     expectation_df = _build_expectation_table(
         summary_df,

@@ -6,6 +6,8 @@
 # updated 2026-03-19 added new _save_model_fit_results_csv(...) helper and switches all OLS and MixedLM CSV writes to index=False
 from .. _io._IO import make_df_obs_adataX
 
+from concurrent.futures import ThreadPoolExecutor as _ThreadPoolExecutor
+from contextlib import contextmanager as _contextmanager
 import pandas as pd
 import numpy as np
 import statsmodels.api as sm
@@ -15,6 +17,73 @@ from scipy.stats import chi2
 from statsmodels.stats.multitest import multipletests
 import warnings
 import yaml
+import threading as _threading
+
+
+# Python 3.10 warning hooks are process-wide, so separate model-fit calls must not
+# install overlapping capture contexts.
+_MODEL_FIT_WARNING_LOCK = _threading.Lock()
+
+
+def _validate_threads(threads):
+    if isinstance(threads, (bool, np.bool_)) or not isinstance(threads, (int, np.integer)):
+        raise TypeError("threads must be a positive integer.")
+    if threads < 1:
+        raise ValueError("threads must be a positive integer.")
+    return int(threads)
+
+
+@_contextmanager
+def _capture_model_fit_warnings(warning_state):
+    if warning_state is None:
+        with warnings.catch_warnings(record=True) as caught_warnings:
+            warnings.simplefilter("always")
+            yield caught_warnings
+        return
+
+    caught_warnings = []
+    warning_state.caught_warnings = caught_warnings
+    try:
+        yield caught_warnings
+    finally:
+        del warning_state.caught_warnings
+
+
+def _run_feature_fits(feature_columns, fit_feature, threads):
+    """Run independent feature fits in input order with per-feature warnings."""
+    threads = _validate_threads(threads)
+    with _MODEL_FIT_WARNING_LOCK:
+        if threads == 1:
+            return [fit_feature(feature, None) for feature in feature_columns]
+
+        warning_state = _threading.local()
+        with warnings.catch_warnings():
+            previous_showwarning = warnings.showwarning
+
+            def route_warning(message, category, filename, lineno, file=None, line=None):
+                caught_warnings = getattr(warning_state, "caught_warnings", None)
+                if caught_warnings is None:
+                    previous_showwarning(message, category, filename, lineno, file, line)
+                    return
+                caught_warnings.append(
+                    warnings.WarningMessage(
+                        message,
+                        category,
+                        filename,
+                        lineno,
+                        file=file,
+                        line=line,
+                    )
+                )
+
+            warnings.showwarning = route_warning
+            warnings.simplefilter("always")
+
+            def fit_threaded(feature):
+                return fit_feature(feature, warning_state)
+
+            with _ThreadPoolExecutor(max_workers=threads) as executor:
+                return list(executor.map(fit_threaded, feature_columns))
 
 # Helper inside the module (near top)
 def _ensure_list(x, name):
@@ -101,14 +170,12 @@ def fit_smf_ols_models_and_summarize_wide(
         predictors=None,
         model_name='OLS',
         include_fdr=True,
+        threads: int = 1,
     ):
     import statsmodels.api as sm
     import statsmodels.formula.api as smf
 
-    # Store models and any fit warnings in a dictionary keyed by feature
-    models = {}
-    skipped_reasons = {}
-    for feature in feature_columns:
+    def fit_feature(feature, warning_state):
         columns2keep = [feature] + predictors
         df = obs_X_df[columns2keep].replace([np.inf, -np.inf], np.nan)
         # Coerce numeric-like predictors (e.g. Age loaded as strings/categories) to numeric
@@ -125,19 +192,31 @@ def fit_smf_ols_models_and_summarize_wide(
         model_summary_formula = f'{feature} ~ {" + ".join(predictors)}'
         complete_case_mask = df.notna().all(axis=1)
         if not complete_case_mask.any():
-            skipped_reasons[feature] = (
+            skipped_reason = (
                 f"No complete-case rows after dropping NaN/inf for columns {columns2keep}."
             )
-            models[feature] = (None, [], model_summary_formula)
-            continue
+            return feature, (None, [], model_summary_formula), skipped_reason
         df = df.loc[complete_case_mask]
-        with warnings.catch_warnings(record=True) as caught_warnings:
-            warnings.simplefilter("always")
+        skipped_reason = None
+        with _capture_model_fit_warnings(warning_state) as caught_warnings:
             try:
-                models[feature] = (smf.ols(model_string, df).fit(), caught_warnings, model_summary_formula)
+                model = smf.ols(model_string, df).fit()
             except Exception as e:
-                skipped_reasons[feature] = f"{type(e).__name__}: {e}"
-                models[feature] = (None, caught_warnings, model_summary_formula)
+                model = None
+                skipped_reason = f"{type(e).__name__}: {e}"
+        return feature, (model, caught_warnings, model_summary_formula), skipped_reason
+
+    # Store models and any fit warnings in dictionaries keyed by feature.
+    models = {}
+    skipped_reasons = {}
+    for feature, model_data, skipped_reason in _run_feature_fits(
+        feature_columns,
+        fit_feature,
+        threads,
+    ):
+        models[feature] = model_data
+        if skipped_reason is not None:
+            skipped_reasons[feature] = skipped_reason
 
     # make a results dataframe from the dict of models
     summary_rows = []
@@ -290,6 +369,7 @@ def fit_smf_ols_models_and_summarize_adata(
         save_results_to_original_adata_uns: bool = False,
         # whether to return the filtered adata (work_adata) in addition to results
         return_filtered_adata: bool = False,
+        threads: int = 1,
     ):
     """
     Fit OLS models for features in an AnnData and return a summary DataFrame.
@@ -303,6 +383,7 @@ def fit_smf_ols_models_and_summarize_adata(
       - If save_results_to_original_adata_uns is True and work_adata is a filtered
         copy, the same results are also saved into the original adata.uns.
       - return_filtered_adata=True will return (results, work_adata) instead of results.
+      - threads>1 fits independent features concurrently while preserving result order.
 
     Backwards-compatible defaults preserve previous behaviour when no filter args are given.
     """
@@ -336,8 +417,15 @@ def fit_smf_ols_models_and_summarize_adata(
     obs_X_df = make_df_obs_adataX(work_adata, layer=layer, use_raw=use_raw, include_obs=True,)
     feature_columns = feature_columns if feature_columns is not None else work_adata.var_names.tolist()
 
-    # Delegate the heavy lifting to the wide-version (unchanged behavior)
-    results = fit_smf_ols_models_and_summarize_wide(obs_X_df, feature_columns, predictors, model_name=model_name, include_fdr=include_fdr)
+    # Delegate the heavy lifting to the wide version; threads=1 preserves serial fitting.
+    results = fit_smf_ols_models_and_summarize_wide(
+        obs_X_df,
+        feature_columns,
+        predictors,
+        model_name=model_name,
+        include_fdr=include_fdr,
+        threads=threads,
+    )
     model_spec = None
     if save_model_spec_yaml:
         model_spec = _build_model_fit_model_spec(
@@ -413,6 +501,7 @@ def fit_smf_mixedlm_models_and_summarize_wide(
         model_name='mixedlm',
         reml=True,
         include_fdr=True,
+        threads: int = 1,
     ):
     import statsmodels.api as sm
     import statsmodels.formula.api as smf
@@ -422,9 +511,7 @@ def fit_smf_mixedlm_models_and_summarize_wide(
     if group is None:
         raise ValueError("fit_smf_mixedlm_models_and_summarize_wide requires a non-empty group column name.")
 
-    # Store models and any fit warnings in a dictionary keyed by feature
-    models = {}
-    for feature in feature_columns:
+    def fit_feature(feature, warning_state):
         columns2keep = [feature] + predictors + [group]
         missing_cols = [col for col in columns2keep if col not in obs_X_df.columns]
         if missing_cols:
@@ -460,9 +547,18 @@ def fit_smf_mixedlm_models_and_summarize_wide(
         predictors_q = [f'Q("{p}")' for p in predictors]
         model_string = f'Q("{feature}") ~ {" + ".join(predictors_q)}'
         summary_formula = f'{feature} ~ {" + ".join(predictors)} | {group}'
-        with warnings.catch_warnings(record=True) as caught_warnings:
-            warnings.simplefilter("always")
-            models[feature] = (smf.mixedlm(model_string, df, groups=df[group]).fit(reml=reml), caught_warnings, summary_formula)
+        with _capture_model_fit_warnings(warning_state) as caught_warnings:
+            model = smf.mixedlm(model_string, df, groups=df[group]).fit(reml=reml)
+        return feature, (model, caught_warnings, summary_formula)
+
+    # Store models and any fit warnings in a dictionary keyed by feature.
+    models = dict(
+        _run_feature_fits(
+            feature_columns,
+            fit_feature,
+            threads,
+        )
+    )
 
     # make a results dataframe from the dict of models
     summary_rows = []
@@ -612,6 +708,7 @@ def fit_smf_mixedlm_models_and_summarize_adata(
         save_results_to_original_adata_uns: bool = False,
         # whether to return the filtered adata (work_adata) in addition to results
         return_filtered_adata: bool = False,
+        threads: int = 1,
     ):
     """
     Fit MixedLM models for features in an AnnData and return a summary DataFrame.
@@ -625,6 +722,7 @@ def fit_smf_mixedlm_models_and_summarize_adata(
       - If save_results_to_original_adata_uns is True and work_adata is a filtered
         copy, the same results are also saved into the original adata.uns.
       - return_filtered_adata=True will return (results, work_adata) instead of results.
+      - threads>1 fits independent features concurrently while preserving result order.
 
     Backwards-compatible defaults preserve previous behaviour when no filter args are given.
     """
@@ -670,6 +768,7 @@ def fit_smf_mixedlm_models_and_summarize_adata(
         model_name=model_name,
         reml=reml,
         include_fdr=include_fdr,
+        threads=threads,
     )
     model_spec = None
     if save_model_spec_yaml:

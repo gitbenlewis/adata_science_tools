@@ -166,6 +166,31 @@ class ExpectationCorrectionTests(unittest.TestCase):
             )
             self.assertTrue(bool(self.expectation_df.loc[feature_name, "fit_ok"]))
 
+    def test_calculate_expectations_threads_preserve_results(self):
+        threaded = adtl.calculate_expectations(
+            self.adata,
+            predictors=self.predictors,
+            layer="pgml",
+            model_name="expectation_unit",
+            threads=2,
+        )
+        pd.testing.assert_frame_equal(
+            self.expectation_df,
+            threaded,
+            check_exact=False,
+            rtol=1e-12,
+            atol=1e-12,
+        )
+        self.assertEqual(self.expectation_df.attrs, threaded.attrs)
+
+        with self.assertRaisesRegex(ValueError, "threads must be a positive integer"):
+            adtl.calculate_expectations(
+                self.adata,
+                predictors=self.predictors,
+                layer="pgml",
+                threads=0,
+            )
+
     def test_dataset_cfg_filter_matches_explicit_prefilter(self):
         filtered_adata = self.adata[self.adata.obs["use_for_expectation"].astype(bool), :].copy()
         explicit_df = adtl.calculate_expectations(
@@ -689,6 +714,7 @@ class ExpectationCorrectionTests(unittest.TestCase):
                     "predictors": ["Age"],
                     "layer": "pgml",
                     "model_name": "wrapper_cfg",
+                    "threads": 2,
                     "filter_obs_boolean_column": "use_for_expectation",
                     "save_path": str(Path(temp_dir) / "cfg_expectation.csv"),
                 },

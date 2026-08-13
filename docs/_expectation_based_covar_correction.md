@@ -56,6 +56,7 @@ def calculate_expectations(
     model_name: str | None = None,
     add_adata_var_column_key_list: list[str] | tuple[str, ...] | None = None,
     include_metadata: bool = True,
+    threads: int = 1,
 ) -> pd.DataFrame:
 ```
 
@@ -67,6 +68,7 @@ expectation_df = adtl.calculate_expectations(
     predictors=["NHS_Case", "Age", "Gender"],
     layer="pgml",
     model_name="case_age_gender",
+    threads=4,
 )
 ```
 
@@ -75,6 +77,7 @@ expectation_df = adtl.calculate_expectations(
 - `fit_method="ols"` is currently the only supported fit mode.
 - `predictors` is the primary argument; `covariates` is accepted as an alias.
 - Rows can be filtered before fitting with either explicit filter arguments or `dataset_cfg`.
+- `threads` is a positive integer controlling feature-level OLS fits and defaults to serial execution. Higher values can increase memory use or oversubscribe native BLAS threads; the warning-handling caveats are described under [feature-level threading](_model_fit.md#feature-level-threading).
 - The returned `DataFrame` stores a prediction spec in `expectation_df.attrs["model_spec"]`.
 - If `save_result_to_adata_uns_as_dict=True`, the result is stored in `adata.uns["expectation_model"][model_name]`.
 
@@ -488,6 +491,7 @@ dataset_cfg = {
         "predictors": ["Age"],
         "layer": "pgml",
         "model_name": "wrapper_cfg",
+        "threads": 2,
         "filter_obs_boolean_column": "use_for_expectation",
         "save_path": "results/cfg_expectation.csv",
     },
