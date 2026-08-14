@@ -223,6 +223,7 @@ def fit_smf_ols_models_and_summarize_wide(
             and '"' not in feature
             and "\\" not in feature
         )
+        direct_numeric_response = False
         if cache_eligible:
             response = df[feature]
             if (
@@ -238,6 +239,11 @@ def fit_smf_ols_models_and_summarize_wide(
                         .any()
                     )
                     cache_eligible = not missing_rows_have_complete_predictors
+                direct_numeric_response = (
+                    cache_eligible
+                    and type(response) is pd.Series
+                    and isinstance(response.dtype, np.dtype)
+                )
             else:
                 cache_eligible = False
         df = df.loc[complete_case_mask]
@@ -297,19 +303,24 @@ def fit_smf_ols_models_and_summarize_wide(
                         design_values, design_columns = cached_design
                         warning_count = len(caught_warnings)
                         try:
-                            response_df = patsy.dmatrix(
-                                f'Q("{feature}") - 1',
-                                df,
-                                return_type="dataframe",
-                            )
-                            if (
-                                len(response_df.columns) != 1
-                                or not response_df.index.equals(df.index)
-                            ):
-                                raise ValueError(
-                                    "Cached OLS response design did not preserve rows."
+                            if direct_numeric_response:
+                                # Patsy only casts ordinary numeric responses to
+                                # float64 here, so avoid rebuilding that design.
+                                response = df[feature].astype(float, copy=False)
+                            else:
+                                response_df = patsy.dmatrix(
+                                    f'Q("{feature}") - 1',
+                                    df,
+                                    return_type="dataframe",
                                 )
-                            response = response_df.iloc[:, 0]
+                                if (
+                                    len(response_df.columns) != 1
+                                    or not response_df.index.equals(df.index)
+                                ):
+                                    raise ValueError(
+                                        "Cached OLS response design did not preserve rows."
+                                    )
+                                response = response_df.iloc[:, 0]
                             response.name = feature
                             feature_design_df = pd.DataFrame(
                                 design_values.copy(),

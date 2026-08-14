@@ -354,7 +354,7 @@ class ModelFitSidecarTests(unittest.TestCase):
         serial_dmatrix.assert_not_called()
         threaded_formula_ols.assert_not_called()
         self.assertEqual(threaded_direct_ols.call_count, 3)
-        self.assertEqual(threaded_dmatrix.call_count, 4)
+        self.assertEqual(threaded_dmatrix.call_count, 1)
         self.assertEqual(
             sum(
                 call.args[0] == 'Q("x value") + Q("x duplicate") + Q("group")'
@@ -373,6 +373,81 @@ class ModelFitSidecarTests(unittest.TestCase):
         self.assertEqual(threaded.index.tolist(), feature_order)
         self.assertEqual(threaded["var_names"].tolist(), feature_order)
         self.assertEqual(threaded["cached_ols_nobs"].tolist(), [n_obs - 1] * 3)
+
+    def test_threaded_ols_bypasses_response_design_only_for_numpy_dtypes(self):
+        n_obs = 32
+        x = np.linspace(-2.0, 2.0, n_obs)
+        feature_a = 20.0 + 2.0 * x + np.resize([0.0, 1.0, 3.0, 1.0], n_obs)
+        feature_b = 30.0 - 1.5 * x + np.resize([2.0, 0.0, 1.0, 4.0], n_obs)
+        real_formula_ols = MODEL_FIT_MODULE.smf.ols
+        real_direct_ols = MODEL_FIT_MODULE.sm.OLS
+        real_dmatrix = MODEL_FIT_MODULE.patsy.dmatrix
+
+        for dtype in (np.float64, np.float32, np.int64, np.uint16, "Float64", "Int64"):
+            with self.subTest(dtype=dtype):
+                integer_dtype = dtype in (np.int64, np.uint16, "Int64")
+                values_a = np.rint(feature_a) if integer_dtype else feature_a
+                values_b = np.rint(feature_b) if integer_dtype else feature_b
+                wide_df = pd.DataFrame(
+                    {
+                        "x": x,
+                        "feature_a": pd.Series(values_a, dtype=dtype),
+                        "feature_b": pd.Series(values_b, dtype=dtype),
+                    },
+                    index=np.repeat(np.arange(n_obs // 2), 2),
+                )
+                kwargs = {
+                    "feature_columns": ["feature_a", "feature_b"],
+                    "predictors": ["x"],
+                    "model_name": "numeric_response",
+                    "include_fdr": False,
+                }
+                serial = adtl.fit_smf_ols_models_and_summarize_wide(
+                    wide_df,
+                    threads=1,
+                    **kwargs,
+                )
+
+                with (
+                    mock.patch.object(
+                        MODEL_FIT_MODULE.smf,
+                        "ols",
+                        wraps=real_formula_ols,
+                    ) as formula_ols,
+                    mock.patch.object(
+                        MODEL_FIT_MODULE.sm,
+                        "OLS",
+                        wraps=real_direct_ols,
+                    ) as direct_ols,
+                    mock.patch.object(
+                        MODEL_FIT_MODULE.patsy,
+                        "dmatrix",
+                        wraps=real_dmatrix,
+                    ) as dmatrix,
+                ):
+                    threaded = adtl.fit_smf_ols_models_and_summarize_wide(
+                        wide_df,
+                        threads=2,
+                        **kwargs,
+                    )
+
+                pd.testing.assert_frame_equal(serial, threaded)
+                formula_ols.assert_not_called()
+                self.assertEqual(direct_ols.call_count, 2)
+                response_design_calls = sum(
+                    call.args[0].endswith(" - 1")
+                    for call in dmatrix.call_args_list
+                )
+                self.assertEqual(
+                    response_design_calls,
+                    2 if isinstance(dtype, str) else 0,
+                )
+                self.assertTrue(
+                    all(
+                        call.args[0].dtype == np.dtype("float64")
+                        for call in direct_ols.call_args_list
+                    )
+                )
 
     def test_ols_summary_materializes_result_vectors_once(self):
         wide_df = self._make_wide_frame()
