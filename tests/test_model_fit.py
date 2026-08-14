@@ -301,6 +301,20 @@ class ModelFitSidecarTests(unittest.TestCase):
         real_formula_ols = MODEL_FIT_MODULE.smf.ols
         real_direct_ols = MODEL_FIT_MODULE.sm.OLS
         real_dmatrix = MODEL_FIT_MODULE.patsy.dmatrix
+        real_insert = pd.DataFrame.insert
+        real_to_numeric = MODEL_FIT_MODULE.pd.to_numeric
+        prepared_predictor_frames = []
+        coerced_predictors = []
+        expected_predictors = kwargs["predictors"]
+
+        def tracked_insert(frame, *args, **kwargs):
+            if frame.columns.tolist() == expected_predictors:
+                prepared_predictor_frames.append(frame)
+            return real_insert(frame, *args, **kwargs)
+
+        def tracked_to_numeric(series, *args, **kwargs):
+            coerced_predictors.append(series.name)
+            return real_to_numeric(series, *args, **kwargs)
 
         with (
             mock.patch.object(
@@ -342,6 +356,16 @@ class ModelFitSidecarTests(unittest.TestCase):
                 "dmatrix",
                 wraps=real_dmatrix,
             ) as threaded_dmatrix,
+            mock.patch.object(
+                pd.DataFrame,
+                "insert",
+                new=tracked_insert,
+            ),
+            mock.patch.object(
+                MODEL_FIT_MODULE.pd,
+                "to_numeric",
+                side_effect=tracked_to_numeric,
+            ),
         ):
             threaded = adtl.fit_smf_ols_models_and_summarize_wide(
                 wide_df,
@@ -373,6 +397,16 @@ class ModelFitSidecarTests(unittest.TestCase):
         self.assertEqual(threaded.index.tolist(), feature_order)
         self.assertEqual(threaded["var_names"].tolist(), feature_order)
         self.assertEqual(threaded["cached_ols_nobs"].tolist(), [n_obs - 1] * 3)
+        self.assertEqual(coerced_predictors, expected_predictors)
+        self.assertEqual(len(prepared_predictor_frames), 3)
+        self.assertEqual(len({id(frame) for frame in prepared_predictor_frames}), 3)
+        predictor_arrays = [
+            frame["x duplicate"].to_numpy(copy=False)
+            for frame in prepared_predictor_frames
+        ]
+        for left_index, left_array in enumerate(predictor_arrays):
+            for right_array in predictor_arrays[left_index + 1:]:
+                self.assertFalse(np.shares_memory(left_array, right_array))
 
     def test_threaded_ols_bypasses_response_design_only_for_numpy_dtypes(self):
         n_obs = 32
@@ -751,10 +785,151 @@ class ModelFitSidecarTests(unittest.TestCase):
                         **extra_kwargs,
                     )
 
-                self.assertEqual(replace_targets.count(np.inf), 2)
-                self.assertEqual(replace_targets.count(-np.inf), 2)
+                expected_replacements = (
+                    3
+                    if fit_function is adtl.fit_smf_ols_models_and_summarize_wide
+                    else 2
+                )
+                self.assertEqual(replace_targets.count(np.inf), expected_replacements)
+                self.assertEqual(replace_targets.count(-np.inf), expected_replacements)
                 self.assertTrue(np.isposinf(wide_df.loc[0, "feature_a"]))
                 self.assertTrue(np.isneginf(wide_df.loc[1, "feature_b"]))
+
+    def test_threaded_ols_predictor_preparation_warning_or_failure_uses_original_path(self):
+        wide_df = self._make_wide_frame()
+        features = ["feature_a", "feature_b"]
+        real_replace = pd.DataFrame.replace
+        test_case = self
+
+        for preparation_outcome in ("warning", "failure"):
+            with self.subTest(preparation_outcome=preparation_outcome):
+                positive_replace_columns = []
+                warning_lock = threading.Lock()
+
+                def replace_with_warning_or_failure(frame, *args, **kwargs):
+                    to_replace = args[0] if args else kwargs.get("to_replace")
+                    if to_replace == np.inf and "x" in frame.columns:
+                        columns = tuple(frame.columns)
+                        positive_replace_columns.append(columns)
+                        if columns == ("x",):
+                            acquired = warning_lock.acquire(blocking=False)
+                            if acquired:
+                                warning_lock.release()
+                            test_case.assertFalse(acquired)
+                            if preparation_outcome == "failure":
+                                raise RuntimeError("forced predictor preparation failure")
+                        if preparation_outcome == "warning":
+                            warnings.warn(
+                                "forced predictor preparation warning",
+                                UserWarning,
+                            )
+                    return real_replace(frame, *args, **kwargs)
+
+                kwargs = {
+                    "feature_columns": features,
+                    "predictors": ["x"],
+                    "include_fdr": False,
+                }
+                with mock.patch.object(
+                    pd.DataFrame,
+                    "replace",
+                    new=replace_with_warning_or_failure,
+                ):
+                    with warnings.catch_warnings(record=True) as serial_warnings:
+                        warnings.simplefilter("always")
+                        serial = adtl.fit_smf_ols_models_and_summarize_wide(
+                            wide_df,
+                            threads=1,
+                            **kwargs,
+                        )
+
+                    positive_replace_columns.clear()
+                    with (
+                        mock.patch.object(
+                            MODEL_FIT_MODULE,
+                            "_MODEL_FIT_WARNING_LOCK",
+                            warning_lock,
+                        ),
+                        warnings.catch_warnings(record=True) as threaded_warnings,
+                    ):
+                        warnings.simplefilter("always")
+                        threaded = adtl.fit_smf_ols_models_and_summarize_wide(
+                            wide_df,
+                            threads=2,
+                            **kwargs,
+                        )
+
+                pd.testing.assert_frame_equal(serial, threaded)
+                expected_warnings = (
+                    [(UserWarning, "forced predictor preparation warning")]
+                    * len(features)
+                    if preparation_outcome == "warning"
+                    else []
+                )
+                self.assertEqual(
+                    [
+                        (warning.category, str(warning.message))
+                        for warning in serial_warnings
+                    ],
+                    expected_warnings,
+                )
+                self.assertEqual(
+                    [
+                        (warning.category, str(warning.message))
+                        for warning in threaded_warnings
+                    ],
+                    expected_warnings,
+                )
+                self.assertEqual(positive_replace_columns.count(("x",)), 1)
+                self.assertCountEqual(
+                    positive_replace_columns[1:],
+                    [(feature, "x") for feature in features],
+                )
+
+    def test_threaded_ols_odd_labels_keep_original_preparation_path(self):
+        n_obs = 24
+        feature_names = ["feature_a", "feature_b"]
+        real_to_numeric = MODEL_FIT_MODULE.pd.to_numeric
+
+        for predictor in ('x"quoted', "x\\path", "x\nline"):
+            with self.subTest(predictor=predictor):
+                x = np.linspace(-1.0, 1.0, n_obs)
+                wide_df = pd.DataFrame(
+                    {
+                        predictor: x,
+                        "feature_a": 2.0 + 0.4 * x + 0.03 * np.sin(np.arange(n_obs)),
+                        "feature_b": -1.0 - 0.7 * x + 0.02 * np.cos(np.arange(n_obs)),
+                    }
+                )
+                kwargs = {
+                    "feature_columns": feature_names,
+                    "predictors": [predictor],
+                    "include_fdr": False,
+                }
+                serial = adtl.fit_smf_ols_models_and_summarize_wide(
+                    wide_df,
+                    threads=1,
+                    **kwargs,
+                )
+                coerced_predictors = []
+
+                def tracked_to_numeric(series, *args, **kwargs):
+                    coerced_predictors.append(series.name)
+                    return real_to_numeric(series, *args, **kwargs)
+
+                with mock.patch.object(
+                    MODEL_FIT_MODULE.pd,
+                    "to_numeric",
+                    side_effect=tracked_to_numeric,
+                ):
+                    threaded = adtl.fit_smf_ols_models_and_summarize_wide(
+                        wide_df,
+                        threads=2,
+                        **kwargs,
+                    )
+
+                pd.testing.assert_frame_equal(serial, threaded)
+                self.assertEqual(coerced_predictors, [predictor] * len(feature_names))
 
     def test_threaded_fitters_lock_shared_frame_deep_copy(self):
         class TrackingLock:

@@ -188,28 +188,105 @@ def fit_smf_ols_models_and_summarize_wide(
         "columns": None,
         "disabled": False,
     }
+    prepared_predictor_frame = None
+    prepared_predictor_complete_mask = None
+    # Keep unusual labels, dtypes, and DataFrame subclasses on the established
+    # per-feature preparation path.
+    can_prepare_predictors = (
+        threads > 1
+        and type(obs_X_df) is pd.DataFrame
+        and isinstance(feature_columns, list)
+        and bool(feature_columns)
+        and isinstance(predictors, list)
+        and bool(predictors)
+        and obs_X_df.columns.is_unique
+        and all(
+            isinstance(column, str)
+            and column.isprintable()
+            and '"' not in column
+            and "\\" not in column
+            for column in feature_columns + predictors
+        )
+        and len(feature_columns) == len(set(feature_columns))
+        and len(predictors) == len(set(predictors))
+        and set(feature_columns).isdisjoint(predictors)
+        and all(
+            column in obs_X_df.columns
+            for column in feature_columns + predictors
+        )
+        and all(
+            isinstance(obs_X_df.dtypes.loc[feature], np.dtype)
+            and obs_X_df.dtypes.loc[feature].kind in {"f", "i", "u"}
+            for feature in feature_columns
+        )
+    )
+    if can_prepare_predictors:
+        candidate_predictor_frame = None
+        # A warning or failure must retain the original per-feature path so its
+        # warning count and order remain unchanged.
+        with _MODEL_FIT_WARNING_LOCK:
+            with warnings.catch_warnings(record=True) as preparation_warnings:
+                warnings.simplefilter("always")
+                try:
+                    candidate_predictor_frame = obs_X_df[predictors].copy(deep=True)
+                    candidate_predictor_frame.replace(np.inf, np.nan, inplace=True)
+                    candidate_predictor_frame.replace(-np.inf, np.nan, inplace=True)
+                    for predictor in predictors:
+                        series = candidate_predictor_frame[predictor]
+                        if not series.notna().any():
+                            continue
+                        numeric_values = pd.to_numeric(series, errors="coerce")
+                        if numeric_values.notna().sum() == series.notna().sum():
+                            candidate_predictor_frame[predictor] = numeric_values.astype(float)
+                    candidate_predictor_complete_mask = (
+                        candidate_predictor_frame.notna().all(axis=1)
+                    )
+                except Exception:
+                    candidate_predictor_frame = None
+        if candidate_predictor_frame is not None and not preparation_warnings:
+            prepared_predictor_frame = candidate_predictor_frame
+            prepared_predictor_complete_mask = candidate_predictor_complete_mask
 
     def fit_feature(feature, warning_state):
         columns2keep = [feature] + predictors
-        with dataframe_copy_lock:
-            df = obs_X_df[columns2keep].copy(deep=True)
-        # Scalar replacements avoid pandas' list-replacement path, which can raise
-        # IndexError while updating Copy-on-Write block references.
-        df.replace(np.inf, np.nan, inplace=True)
-        df.replace(-np.inf, np.nan, inplace=True)
-        # Coerce numeric-like predictors (e.g. Age loaded as strings/categories) to numeric
-        # so formula terms remain continuous instead of categorical dummies.
-        for predictor in predictors:
-            series = df[predictor]
-            if not series.notna().any():
-                continue
-            numeric_values = pd.to_numeric(series, errors="coerce")
-            if numeric_values.notna().sum() == series.notna().sum():
-                df[predictor] = numeric_values.astype(float)
+        if prepared_predictor_frame is None:
+            with dataframe_copy_lock:
+                df = obs_X_df[columns2keep].copy(deep=True)
+            # Scalar replacements avoid pandas' list-replacement path, which can raise
+            # IndexError while updating Copy-on-Write block references.
+            df.replace(np.inf, np.nan, inplace=True)
+            df.replace(-np.inf, np.nan, inplace=True)
+            # Coerce numeric-like predictors (e.g. Age loaded as strings/categories) to numeric
+            # so formula terms remain continuous instead of categorical dummies.
+            for predictor in predictors:
+                series = df[predictor]
+                if not series.notna().any():
+                    continue
+                numeric_values = pd.to_numeric(series, errors="coerce")
+                if numeric_values.notna().sum() == series.notna().sum():
+                    df[predictor] = numeric_values.astype(float)
+            complete_case_mask = df.notna().all(axis=1)
+        else:
+            # Deep-copy both shared inputs under the existing pandas copy lock so
+            # every worker continues with fully private DataFrame blocks.
+            with dataframe_copy_lock:
+                response_frame = obs_X_df[[feature]].copy(deep=True)
+                predictor_frame = prepared_predictor_frame.copy(deep=True)
+                predictor_complete_mask = prepared_predictor_complete_mask.copy(
+                    deep=True
+                )
+            response_frame.replace(np.inf, np.nan, inplace=True)
+            response_frame.replace(-np.inf, np.nan, inplace=True)
+            complete_case_mask = (
+                response_frame.notna().all(axis=1)
+                & predictor_complete_mask
+            )
+            df = predictor_frame
+            df.insert(0, feature, response_frame.iloc[:, 0])
+            del predictor_frame, response_frame
         predictors_q = [f'Q("{p}")' for p in predictors]
         model_string = f'Q("{feature}") ~ {" + ".join(predictors_q)}'
         model_summary_formula = f'{feature} ~ {" + ".join(predictors)}'
-        complete_case_mask = df.notna().all(axis=1)
         if not complete_case_mask.any():
             skipped_reason = (
                 f"No complete-case rows after dropping NaN/inf for columns {columns2keep}."
