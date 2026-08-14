@@ -222,6 +222,8 @@ class ModelFitSidecarTests(unittest.TestCase):
 
     def test_ols_threads_preserve_results_order_skips_and_fdr(self):
         wide_df = self._make_wide_frame()
+        wide_df.loc[0, "feature_a"] = np.inf
+        wide_df.loc[1, "feature_b"] = -np.inf
         feature_order = ["feature_skip", "feature_b", "feature_a"]
         kwargs = {
             "feature_columns": feature_order,
@@ -229,9 +231,10 @@ class ModelFitSidecarTests(unittest.TestCase):
             "model_name": "thread_ols",
             "include_fdr": True,
         }
-        default = adtl.fit_smf_ols_models_and_summarize_wide(wide_df, **kwargs)
-        serial = adtl.fit_smf_ols_models_and_summarize_wide(wide_df, threads=1, **kwargs)
-        parallel = adtl.fit_smf_ols_models_and_summarize_wide(wide_df, threads=2, **kwargs)
+        with pd.option_context("mode.copy_on_write", True):
+            default = adtl.fit_smf_ols_models_and_summarize_wide(wide_df, **kwargs)
+            serial = adtl.fit_smf_ols_models_and_summarize_wide(wide_df, threads=1, **kwargs)
+            parallel = adtl.fit_smf_ols_models_and_summarize_wide(wide_df, threads=2, **kwargs)
 
         pd.testing.assert_frame_equal(default, serial)
         pd.testing.assert_frame_equal(serial, parallel, check_exact=False, rtol=1e-12, atol=1e-12)
@@ -239,6 +242,8 @@ class ModelFitSidecarTests(unittest.TestCase):
         self.assertEqual(parallel["var_names"].tolist(), feature_order)
         self.assertFalse(bool(parallel.loc["feature_skip", "thread_ols_Converged"]))
         self.assertIn("No complete-case rows", parallel.loc["feature_skip", "thread_ols_Warnings"])
+        self.assertEqual(parallel.loc["feature_a", "thread_ols_nobs"], 23)
+        self.assertEqual(parallel.loc["feature_b", "thread_ols_nobs"], 23)
 
         pvalue_column = "thread_ols_P>|t|_x"
         fdr_column = f"{pvalue_column}_FDR"
@@ -248,6 +253,8 @@ class ModelFitSidecarTests(unittest.TestCase):
 
     def test_mixedlm_threads_preserve_results_and_order(self):
         wide_df = self._make_wide_frame()
+        wide_df.loc[0, "feature_a"] = np.inf
+        wide_df.loc[1, "feature_b"] = -np.inf
         feature_order = ["feature_b", "feature_a"]
         kwargs = {
             "feature_columns": feature_order,
@@ -257,14 +264,57 @@ class ModelFitSidecarTests(unittest.TestCase):
             "reml": False,
             "include_fdr": True,
         }
-        default = adtl.fit_smf_mixedlm_models_and_summarize_wide(wide_df, **kwargs)
-        serial = adtl.fit_smf_mixedlm_models_and_summarize_wide(wide_df, threads=1, **kwargs)
-        parallel = adtl.fit_smf_mixedlm_models_and_summarize_wide(wide_df, threads=2, **kwargs)
+        with pd.option_context("mode.copy_on_write", True):
+            default = adtl.fit_smf_mixedlm_models_and_summarize_wide(wide_df, **kwargs)
+            serial = adtl.fit_smf_mixedlm_models_and_summarize_wide(wide_df, threads=1, **kwargs)
+            parallel = adtl.fit_smf_mixedlm_models_and_summarize_wide(wide_df, threads=2, **kwargs)
 
         pd.testing.assert_frame_equal(default, serial)
         pd.testing.assert_frame_equal(serial, parallel, check_exact=False, rtol=1e-12, atol=1e-12)
         self.assertEqual(parallel.index.tolist(), feature_order)
         self.assertEqual(parallel["var_names"].tolist(), feature_order)
+        self.assertEqual(parallel.loc["feature_a", "thread_mixedlm_nobs"], 23)
+        self.assertEqual(parallel.loc["feature_b", "thread_mixedlm_nobs"], 23)
+
+    def test_threaded_fitters_avoid_pandas_list_replace(self):
+        for fit_function, extra_kwargs in (
+            (adtl.fit_smf_ols_models_and_summarize_wide, {}),
+            (
+                adtl.fit_smf_mixedlm_models_and_summarize_wide,
+                {"group": "group", "reml": False},
+            ),
+        ):
+            with self.subTest(function=fit_function.__name__):
+                wide_df = self._make_wide_frame()
+                wide_df.loc[0, "feature_a"] = np.inf
+                wide_df.loc[1, "feature_b"] = -np.inf
+                replace_targets = []
+                real_replace = pd.DataFrame.replace
+
+                def tracked_replace(frame, *args, **kwargs):
+                    to_replace = args[0] if args else kwargs.get("to_replace")
+                    if pd.api.types.is_list_like(to_replace):
+                        raise IndexError("pop index out of range")
+                    replace_targets.append(to_replace)
+                    return real_replace(frame, *args, **kwargs)
+
+                with (
+                    pd.option_context("mode.copy_on_write", True),
+                    mock.patch.object(pd.DataFrame, "replace", new=tracked_replace),
+                ):
+                    fit_function(
+                        wide_df,
+                        feature_columns=["feature_a", "feature_b"],
+                        predictors=["x"],
+                        include_fdr=False,
+                        threads=2,
+                        **extra_kwargs,
+                    )
+
+                self.assertEqual(replace_targets.count(np.inf), 2)
+                self.assertEqual(replace_targets.count(-np.inf), 2)
+                self.assertTrue(np.isposinf(wide_df.loc[0, "feature_a"]))
+                self.assertTrue(np.isneginf(wide_df.loc[1, "feature_b"]))
 
     def test_threaded_ols_warnings_stay_with_their_feature(self):
         wide_df = self._make_wide_frame()

@@ -175,9 +175,18 @@ def fit_smf_ols_models_and_summarize_wide(
     import statsmodels.api as sm
     import statsmodels.formula.api as smf
 
+    # pandas does not guarantee thread-safe copying from a shared DataFrame.
+    # Keep only selection and the deep copy serial; preprocessing and fitting stay parallel.
+    dataframe_copy_lock = _threading.Lock()
+
     def fit_feature(feature, warning_state):
         columns2keep = [feature] + predictors
-        df = obs_X_df[columns2keep].replace([np.inf, -np.inf], np.nan)
+        with dataframe_copy_lock:
+            df = obs_X_df[columns2keep].copy(deep=True)
+        # Scalar replacements avoid pandas' list-replacement path, which can raise
+        # IndexError while updating Copy-on-Write block references.
+        df.replace(np.inf, np.nan, inplace=True)
+        df.replace(-np.inf, np.nan, inplace=True)
         # Coerce numeric-like predictors (e.g. Age loaded as strings/categories) to numeric
         # so formula terms remain continuous instead of categorical dummies.
         for predictor in predictors:
@@ -511,6 +520,10 @@ def fit_smf_mixedlm_models_and_summarize_wide(
     if group is None:
         raise ValueError("fit_smf_mixedlm_models_and_summarize_wide requires a non-empty group column name.")
 
+    # pandas does not guarantee thread-safe copying from a shared DataFrame.
+    # Keep only selection and the deep copy serial; preprocessing and fitting stay parallel.
+    dataframe_copy_lock = _threading.Lock()
+
     def fit_feature(feature, warning_state):
         columns2keep = [feature] + predictors + [group]
         missing_cols = [col for col in columns2keep if col not in obs_X_df.columns]
@@ -518,7 +531,12 @@ def fit_smf_mixedlm_models_and_summarize_wide(
             raise ValueError(
                 f"[{model_name}] Missing required columns for feature '{feature}': {missing_cols}."
             )
-        df = obs_X_df[columns2keep].replace([np.inf, -np.inf], np.nan)
+        with dataframe_copy_lock:
+            df = obs_X_df[columns2keep].copy(deep=True)
+        # Scalar replacements avoid pandas' list-replacement path, which can raise
+        # IndexError while updating Copy-on-Write block references.
+        df.replace(np.inf, np.nan, inplace=True)
+        df.replace(-np.inf, np.nan, inplace=True)
         # Coerce numeric-like predictors (e.g. Age loaded as strings/categories) to numeric
         # so formula terms remain continuous instead of categorical dummies.
         for predictor in predictors:
