@@ -374,6 +374,111 @@ class ModelFitSidecarTests(unittest.TestCase):
         self.assertEqual(threaded["var_names"].tolist(), feature_order)
         self.assertEqual(threaded["cached_ols_nobs"].tolist(), [n_obs - 1] * 3)
 
+    def test_ols_summary_materializes_result_vectors_once(self):
+        wide_df = self._make_wide_frame()
+        wide_df["x_duplicate"] = 2.0 * wide_df["x"]
+        predictors = ["x", "x_duplicate", "group"]
+        model_name = "summary_once"
+        real_ols = MODEL_FIT_MODULE.smf.ols
+        expected_model = real_ols(
+            'Q("feature_a") ~ Q("x") + Q("x_duplicate") + Q("group")',
+            wide_df,
+        ).fit()
+        tracked_attributes = (
+            "conf_int",
+            "resid",
+            "llf",
+            "rsquared_adj",
+            "f_pvalue",
+            "params",
+            "bse",
+            "tvalues",
+            "pvalues",
+        )
+        access_counts = {attribute: 0 for attribute in tracked_attributes}
+        access_order = []
+
+        class ResultProxy:
+            def __init__(self, result):
+                self._result = result
+
+            def __getattr__(self, attribute):
+                if attribute in access_counts:
+                    access_counts[attribute] += 1
+                    access_order.append(attribute)
+                return getattr(self._result, attribute)
+
+        class FitProxy:
+            def __init__(self, model):
+                self._model = model
+
+            def fit(self, *args, **kwargs):
+                return ResultProxy(self._model.fit(*args, **kwargs))
+
+        def tracked_ols(*args, **kwargs):
+            return FitProxy(real_ols(*args, **kwargs))
+
+        with mock.patch.object(
+            MODEL_FIT_MODULE.smf,
+            "ols",
+            side_effect=tracked_ols,
+        ):
+            result = adtl.fit_smf_ols_models_and_summarize_wide(
+                wide_df,
+                feature_columns=["feature_a"],
+                predictors=predictors,
+                model_name=model_name,
+                include_fdr=False,
+                threads=1,
+            )
+
+        self.assertEqual(
+            access_counts,
+            {attribute: 1 for attribute in tracked_attributes},
+        )
+        self.assertEqual(access_order, list(tracked_attributes))
+
+        expected_ci = expected_model.conf_int()
+        expected_coefficient_columns = []
+        for parameter_name in expected_model.params.index:
+            output_name = parameter_name
+            if output_name.startswith('Q("') and output_name.endswith('")'):
+                output_name = output_name[3:-2]
+            expected_coefficient_columns.append(f"{model_name}_Coef_{output_name}")
+            np.testing.assert_equal(
+                result.at["feature_a", f"{model_name}_Coef_{output_name}"],
+                expected_model.params.loc[parameter_name],
+            )
+            np.testing.assert_equal(
+                result.at["feature_a", f"{model_name}_StdErr_{output_name}"],
+                expected_model.bse.loc[parameter_name],
+            )
+            np.testing.assert_equal(
+                result.at["feature_a", f"{model_name}_tStat_{output_name}"],
+                expected_model.tvalues.loc[parameter_name],
+            )
+            np.testing.assert_equal(
+                result.at["feature_a", f"{model_name}_P>|t|_{output_name}"],
+                expected_model.pvalues.loc[parameter_name],
+            )
+            np.testing.assert_equal(
+                result.at["feature_a", f"{model_name}_CI_low_{output_name}"],
+                expected_ci.loc[parameter_name, 0],
+            )
+            np.testing.assert_equal(
+                result.at["feature_a", f"{model_name}_CI_high_{output_name}"],
+                expected_ci.loc[parameter_name, 1],
+            )
+
+        self.assertEqual(
+            [
+                column
+                for column in result.columns
+                if column.startswith(f"{model_name}_Coef_")
+            ],
+            expected_coefficient_columns,
+        )
+
     def test_threaded_ols_boolean_responses_keep_formula_behavior(self):
         x = np.linspace(-1.0, 1.0, 24)
         wide_df = pd.DataFrame(

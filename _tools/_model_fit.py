@@ -360,10 +360,11 @@ def fit_smf_ols_models_and_summarize_wide(
         if converged is None:
             converged = True  # OLS solves in closed form, so treat as converged by default
         warning_messages = "; ".join(f"{w.category.__name__}: {w.message}" for w in caught_warnings)
-        ci = model.conf_int()
-        jb, jb_p, skew, kurtosis = sm.stats.stattools.jarque_bera(model.resid)
-        omni, omni_p = sm.stats.stattools.omni_normtest(model.resid)
-        dw = sm.stats.durbin_watson(model.resid)
+        confidence_intervals = model.conf_int().to_numpy(copy=False)
+        residuals = model.resid
+        jb, jb_p, skew, kurtosis = sm.stats.stattools.jarque_bera(residuals)
+        omni, omni_p = sm.stats.stattools.omni_normtest(residuals)
+        dw = sm.stats.durbin_watson(residuals)
         summary_data = {
             f'{model_name}_Log-Likelihood': model.llf,
             f'{model_name}_AIC': model.aic,
@@ -384,20 +385,31 @@ def fit_smf_ols_models_and_summarize_wide(
             f'{model_name}_Condition_Number': getattr(model, "condition_number", np.nan),
             f'{model_name}_R-squared': model.rsquared,
             f'{model_name}_Adj. R-squared': model.rsquared_adj,
-            f'{model_name}_F-statistic': model.fvalue if model.f_pvalue is not None else np.nan,
-            f'{model_name}_P(F-statistic)': model.f_pvalue if model.f_pvalue is not None else np.nan,
+        }
+        f_pvalue = model.f_pvalue
+        summary_data.update({
+            f'{model_name}_F-statistic': model.fvalue if f_pvalue is not None else np.nan,
+            f'{model_name}_P(F-statistic)': f_pvalue if f_pvalue is not None else np.nan,
             f'{model_name}_Converged': converged,
             f'{model_name}_Warnings': warning_messages if warning_messages else np.nan,
-        }
-        for param_name in model.params.index:
+        })
+        # Each access to these Statsmodels properties builds a pandas wrapper, so
+        # materialize every result vector once before iterating over coefficients.
+        parameters = model.params
+        parameter_names = parameters.index
+        parameter_values = parameters.to_numpy(copy=False)
+        standard_errors = model.bse.to_numpy(copy=False)
+        t_values = model.tvalues.to_numpy(copy=False)
+        p_values = model.pvalues.to_numpy(copy=False)
+        for parameter_index, param_name in enumerate(parameter_names):
             clean_param = param_name
             if clean_param.startswith('Q("') and clean_param.endswith('")'):
                 clean_param = clean_param[3:-2]
-            summary_data[f'{model_name}_Coef_{clean_param}'] = model.params[param_name]
-            summary_data[f'{model_name}_StdErr_{clean_param}'] = model.bse[param_name]
-            summary_data[f'{model_name}_tStat_{clean_param}'] = model.tvalues[param_name]
-            summary_data[f'{model_name}_P>|t|_{clean_param}'] = model.pvalues[param_name]
-            ci_low, ci_high = ci.loc[param_name]
+            summary_data[f'{model_name}_Coef_{clean_param}'] = parameter_values[parameter_index]
+            summary_data[f'{model_name}_StdErr_{clean_param}'] = standard_errors[parameter_index]
+            summary_data[f'{model_name}_tStat_{clean_param}'] = t_values[parameter_index]
+            summary_data[f'{model_name}_P>|t|_{clean_param}'] = p_values[parameter_index]
+            ci_low, ci_high = confidence_intervals[parameter_index]
             summary_data[f'{model_name}_CI_low_{clean_param}'] = ci_low
             summary_data[f'{model_name}_CI_high_{clean_param}'] = ci_high
         summary_rows.append(summary_data)
