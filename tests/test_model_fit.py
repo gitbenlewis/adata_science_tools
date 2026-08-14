@@ -222,9 +222,10 @@ class ModelFitSidecarTests(unittest.TestCase):
 
     def test_ols_threads_preserve_results_order_skips_and_fdr(self):
         wide_df = self._make_wide_frame()
+        wide_df["feature_c"] = 0.5 + 0.3 * wide_df["x"] + 0.01 * np.arange(len(wide_df))
         wide_df.loc[0, "feature_a"] = np.inf
         wide_df.loc[1, "feature_b"] = -np.inf
-        feature_order = ["feature_skip", "feature_b", "feature_a"]
+        feature_order = ["feature_skip", "feature_b", "feature_c", "feature_a"]
         kwargs = {
             "feature_columns": feature_order,
             "predictors": ["x"],
@@ -234,22 +235,281 @@ class ModelFitSidecarTests(unittest.TestCase):
         with pd.option_context("mode.copy_on_write", True):
             default = adtl.fit_smf_ols_models_and_summarize_wide(wide_df, **kwargs)
             serial = adtl.fit_smf_ols_models_and_summarize_wide(wide_df, threads=1, **kwargs)
-            parallel = adtl.fit_smf_ols_models_and_summarize_wide(wide_df, threads=2, **kwargs)
+            with (
+                mock.patch.object(
+                    MODEL_FIT_MODULE.smf,
+                    "ols",
+                    wraps=MODEL_FIT_MODULE.smf.ols,
+                ) as formula_ols,
+                mock.patch.object(
+                    MODEL_FIT_MODULE.sm,
+                    "OLS",
+                    wraps=MODEL_FIT_MODULE.sm.OLS,
+                ) as direct_ols,
+            ):
+                parallel = adtl.fit_smf_ols_models_and_summarize_wide(
+                    wide_df,
+                    threads=2,
+                    **kwargs,
+                )
 
         pd.testing.assert_frame_equal(default, serial)
         pd.testing.assert_frame_equal(serial, parallel, check_exact=False, rtol=1e-12, atol=1e-12)
+        self.assertEqual(formula_ols.call_count, 2)
+        self.assertEqual(direct_ols.call_count, 1)
         self.assertEqual(parallel.index.tolist(), feature_order)
         self.assertEqual(parallel["var_names"].tolist(), feature_order)
         self.assertFalse(bool(parallel.loc["feature_skip", "thread_ols_Converged"]))
         self.assertIn("No complete-case rows", parallel.loc["feature_skip", "thread_ols_Warnings"])
         self.assertEqual(parallel.loc["feature_a", "thread_ols_nobs"], 23)
         self.assertEqual(parallel.loc["feature_b", "thread_ols_nobs"], 23)
+        self.assertEqual(parallel.loc["feature_c", "thread_ols_nobs"], 24)
 
         pvalue_column = "thread_ols_P>|t|_x"
         fdr_column = f"{pvalue_column}_FDR"
         mask = parallel[pvalue_column].notna()
         expected_fdr = multipletests(parallel.loc[mask, pvalue_column], method="fdr_bh")[1]
         np.testing.assert_allclose(parallel.loc[mask, fdr_column], expected_fdr)
+
+    def test_threaded_ols_reuses_formula_design_matrix(self):
+        n_obs = 36
+        x = np.linspace(-1.5, 1.5, n_obs)
+        groups = pd.Categorical(
+            np.resize(["A", "B", "C"], n_obs),
+            categories=["A", "B", "C", "unused"],
+        )
+        group_effect = pd.Series(groups).map({"A": 0.0, "B": 0.3, "C": -0.2}).astype(float)
+        wide_df = pd.DataFrame(
+            {
+                "x value": pd.Series(x).map(str),
+                "x duplicate": 2.0 * x,
+                "group": groups,
+                "feature_a": 1.0 + 0.7 * x + group_effect + 0.03 * np.sin(np.arange(n_obs)),
+                "feature_b": -0.5 - 0.4 * x + group_effect + 0.02 * np.cos(np.arange(n_obs)),
+                "feature_c": 2.0 + 0.2 * x - group_effect + 0.01 * np.sin(2 * np.arange(n_obs)),
+            }
+        )
+        feature_order = ["feature_c", "feature_a", "feature_b"]
+        wide_df.loc[5, ["x value"] + feature_order] = np.nan
+        source = wide_df.copy(deep=True)
+        kwargs = {
+            "feature_columns": feature_order,
+            "predictors": ["x value", "x duplicate", "group"],
+            "model_name": "cached_ols",
+            "include_fdr": True,
+        }
+        real_formula_ols = MODEL_FIT_MODULE.smf.ols
+        real_direct_ols = MODEL_FIT_MODULE.sm.OLS
+        real_dmatrix = MODEL_FIT_MODULE.patsy.dmatrix
+
+        with (
+            mock.patch.object(
+                MODEL_FIT_MODULE.smf,
+                "ols",
+                wraps=real_formula_ols,
+            ) as serial_formula_ols,
+            mock.patch.object(
+                MODEL_FIT_MODULE.sm,
+                "OLS",
+                wraps=real_direct_ols,
+            ) as serial_direct_ols,
+            mock.patch.object(
+                MODEL_FIT_MODULE.patsy,
+                "dmatrix",
+                wraps=real_dmatrix,
+            ) as serial_dmatrix,
+        ):
+            serial = adtl.fit_smf_ols_models_and_summarize_wide(
+                wide_df,
+                threads=1,
+                **kwargs,
+            )
+
+        with (
+            pd.option_context("mode.copy_on_write", True),
+            mock.patch.object(
+                MODEL_FIT_MODULE.smf,
+                "ols",
+                wraps=real_formula_ols,
+            ) as threaded_formula_ols,
+            mock.patch.object(
+                MODEL_FIT_MODULE.sm,
+                "OLS",
+                wraps=real_direct_ols,
+            ) as threaded_direct_ols,
+            mock.patch.object(
+                MODEL_FIT_MODULE.patsy,
+                "dmatrix",
+                wraps=real_dmatrix,
+            ) as threaded_dmatrix,
+        ):
+            threaded = adtl.fit_smf_ols_models_and_summarize_wide(
+                wide_df,
+                threads=3,
+                **kwargs,
+            )
+
+        self.assertEqual(serial_formula_ols.call_count, 3)
+        serial_direct_ols.assert_not_called()
+        serial_dmatrix.assert_not_called()
+        threaded_formula_ols.assert_not_called()
+        self.assertEqual(threaded_direct_ols.call_count, 3)
+        self.assertEqual(threaded_dmatrix.call_count, 4)
+        self.assertEqual(
+            sum(
+                call.args[0] == 'Q("x value") + Q("x duplicate") + Q("group")'
+                for call in threaded_dmatrix.call_args_list
+            ),
+            1,
+        )
+        pd.testing.assert_frame_equal(
+            serial,
+            threaded,
+            check_exact=False,
+            rtol=1e-12,
+            atol=1e-12,
+        )
+        pd.testing.assert_frame_equal(wide_df, source)
+        self.assertEqual(threaded.index.tolist(), feature_order)
+        self.assertEqual(threaded["var_names"].tolist(), feature_order)
+        self.assertEqual(threaded["cached_ols_nobs"].tolist(), [n_obs - 1] * 3)
+
+    def test_threaded_ols_boolean_responses_keep_formula_behavior(self):
+        x = np.linspace(-1.0, 1.0, 24)
+        wide_df = pd.DataFrame(
+            {
+                "x": x,
+                "feature_a": np.resize([True, False], 24),
+                "feature_b": np.resize([False, True, True], 24),
+            }
+        )
+        kwargs = {
+            "feature_columns": ["feature_a", "feature_b"],
+            "predictors": ["x"],
+            "model_name": "boolean_ols",
+            "include_fdr": False,
+        }
+        serial = adtl.fit_smf_ols_models_and_summarize_wide(
+            wide_df,
+            threads=1,
+            **kwargs,
+        )
+        with (
+            mock.patch.object(
+                MODEL_FIT_MODULE.smf,
+                "ols",
+                wraps=MODEL_FIT_MODULE.smf.ols,
+            ) as formula_ols,
+            mock.patch.object(
+                MODEL_FIT_MODULE.sm,
+                "OLS",
+                wraps=MODEL_FIT_MODULE.sm.OLS,
+            ) as direct_ols,
+        ):
+            threaded = adtl.fit_smf_ols_models_and_summarize_wide(
+                wide_df,
+                threads=2,
+                **kwargs,
+            )
+
+        pd.testing.assert_frame_equal(serial, threaded)
+        self.assertEqual(formula_ols.call_count, 2)
+        direct_ols.assert_not_called()
+        self.assertTrue(
+            threaded["boolean_ols_Warnings"].str.startswith("ValueError:").all()
+        )
+
+    def test_threaded_ols_direct_failure_retries_formula(self):
+        wide_df = self._make_wide_frame()
+        kwargs = {
+            "feature_columns": ["feature_a", "feature_b"],
+            "predictors": ["x"],
+            "model_name": "direct_fallback",
+            "include_fdr": False,
+        }
+        serial = adtl.fit_smf_ols_models_and_summarize_wide(
+            wide_df,
+            threads=1,
+            **kwargs,
+        )
+
+        def failing_direct_ols(*args, **kwargs):
+            warnings.warn("discarded direct-path warning", UserWarning)
+            raise RuntimeError("forced direct-path failure")
+
+        with (
+            mock.patch.object(
+                MODEL_FIT_MODULE.smf,
+                "ols",
+                wraps=MODEL_FIT_MODULE.smf.ols,
+            ) as formula_ols,
+            mock.patch.object(
+                MODEL_FIT_MODULE.sm,
+                "OLS",
+                side_effect=failing_direct_ols,
+            ) as direct_ols,
+        ):
+            threaded = adtl.fit_smf_ols_models_and_summarize_wide(
+                wide_df,
+                threads=2,
+                **kwargs,
+            )
+
+        pd.testing.assert_frame_equal(serial, threaded)
+        self.assertEqual(formula_ols.call_count, 2)
+        self.assertEqual(direct_ols.call_count, 2)
+        self.assertTrue(threaded["direct_fallback_Warnings"].isna().all())
+
+    def test_threaded_ols_cache_allocation_failure_retries_formula(self):
+        wide_df = self._make_wide_frame()
+        kwargs = {
+            "feature_columns": ["feature_a", "feature_b"],
+            "predictors": ["x"],
+            "model_name": "cache_fallback",
+            "include_fdr": False,
+        }
+        serial = adtl.fit_smf_ols_models_and_summarize_wide(
+            wide_df,
+            threads=1,
+            **kwargs,
+        )
+        real_dmatrix = MODEL_FIT_MODULE.patsy.dmatrix
+
+        class FailingDesignFrame(pd.DataFrame):
+            def to_numpy(self, *args, **kwargs):
+                raise MemoryError("forced cache allocation failure")
+
+        def dmatrix_with_failing_array(*args, **kwargs):
+            return FailingDesignFrame(real_dmatrix(*args, **kwargs))
+
+        with (
+            mock.patch.object(
+                MODEL_FIT_MODULE.patsy,
+                "dmatrix",
+                side_effect=dmatrix_with_failing_array,
+            ) as dmatrix,
+            mock.patch.object(
+                MODEL_FIT_MODULE.smf,
+                "ols",
+                wraps=MODEL_FIT_MODULE.smf.ols,
+            ) as formula_ols,
+            mock.patch.object(
+                MODEL_FIT_MODULE.sm,
+                "OLS",
+                wraps=MODEL_FIT_MODULE.sm.OLS,
+            ) as direct_ols,
+        ):
+            threaded = adtl.fit_smf_ols_models_and_summarize_wide(
+                wide_df,
+                threads=2,
+                **kwargs,
+            )
+
+        pd.testing.assert_frame_equal(serial, threaded)
+        self.assertEqual(dmatrix.call_count, 1)
+        self.assertEqual(formula_ols.call_count, 2)
+        direct_ols.assert_not_called()
+        self.assertTrue(threaded["cache_fallback_Warnings"].isna().all())
 
     def test_mixedlm_threads_preserve_results_and_order(self):
         wide_df = self._make_wide_frame()
@@ -347,7 +607,13 @@ class ModelFitSidecarTests(unittest.TestCase):
             with self.subTest(function=fit_function.__name__):
                 tracking_lock = TrackingLock()
                 threading_proxy = mock.Mock(wraps=threading)
-                threading_proxy.Lock.return_value = tracking_lock
+
+                def make_lock():
+                    if threading_proxy.Lock.call_count == 1:
+                        return tracking_lock
+                    return threading.Lock()
+
+                threading_proxy.Lock.side_effect = make_lock
                 calls = {"selection": 0, "copy": 0}
                 replace_calls = []
                 test_case = self
@@ -395,16 +661,71 @@ class ModelFitSidecarTests(unittest.TestCase):
                         **extra_kwargs,
                     )
 
-                self.assertEqual(threading_proxy.Lock.call_count, 1)
+                expected_lock_count = (
+                    2
+                    if fit_function is adtl.fit_smf_ols_models_and_summarize_wide
+                    else 1
+                )
+                self.assertEqual(threading_proxy.Lock.call_count, expected_lock_count)
                 self.assertEqual(tracking_lock.enter_count, 2)
                 self.assertEqual(calls, {"selection": 2, "copy": 2})
                 self.assertEqual(len(replace_calls), 4)
 
-    def test_threaded_ols_warnings_stay_with_their_feature(self):
+    def test_rhs_warning_disables_threaded_ols_design_cache(self):
         wide_df = self._make_wide_frame()
         features = ["feature_a", "feature_b"]
-        barrier = threading.Barrier(2)
         real_ols = MODEL_FIT_MODULE.smf.ols
+        real_dmatrix = MODEL_FIT_MODULE.patsy.dmatrix
+
+        def dmatrix_with_warning(formula, *args, **kwargs):
+            if formula == 'Q("x")':
+                warnings.warn("discarded RHS cache warning", UserWarning)
+            return real_dmatrix(formula, *args, **kwargs)
+
+        def ols_with_warning(*args, **kwargs):
+            warnings.warn("preserved full formula warning", UserWarning)
+            return real_ols(*args, **kwargs)
+
+        with (
+            mock.patch.object(
+                MODEL_FIT_MODULE.patsy,
+                "dmatrix",
+                side_effect=dmatrix_with_warning,
+            ) as dmatrix,
+            mock.patch.object(
+                MODEL_FIT_MODULE.smf,
+                "ols",
+                side_effect=ols_with_warning,
+            ) as formula_ols,
+            mock.patch.object(
+                MODEL_FIT_MODULE.sm,
+                "OLS",
+                wraps=MODEL_FIT_MODULE.sm.OLS,
+            ) as direct_ols,
+        ):
+            results = adtl.fit_smf_ols_models_and_summarize_wide(
+                wide_df,
+                feature_columns=features,
+                predictors=["x"],
+                model_name="formula_warning",
+                include_fdr=False,
+                threads=2,
+            )
+
+        self.assertEqual(dmatrix.call_count, 1)
+        self.assertEqual(formula_ols.call_count, 2)
+        direct_ols.assert_not_called()
+        self.assertEqual(
+            results["formula_warning_Warnings"].tolist(),
+            ["UserWarning: preserved full formula warning"] * 2,
+        )
+
+    def test_threaded_cached_ols_warnings_stay_with_their_feature(self):
+        wide_df = self._make_wide_frame()
+        wide_df["feature_c"] = 0.5 + 0.3 * wide_df["x"] + 0.01 * np.arange(len(wide_df))
+        features = ["feature_a", "feature_b", "feature_c"]
+        barrier = threading.Barrier(3)
+        real_ols = MODEL_FIT_MODULE.sm.OLS
         previous_showwarning = warnings.showwarning
 
         class WarningFitProxy:
@@ -418,33 +739,32 @@ class ModelFitSidecarTests(unittest.TestCase):
                 barrier.wait(timeout=10)
                 return self.model.fit(*args, **kwargs)
 
-        def ols_with_warning(formula, data, *args, **kwargs):
-            feature = next(
-                feature
-                for feature in features
-                if formula.startswith(f'Q("{feature}") ~')
+        def ols_with_warning(endog, exog, *args, **kwargs):
+            feature = endog.name
+            return WarningFitProxy(
+                real_ols(endog, exog, *args, **kwargs),
+                feature,
             )
-            return WarningFitProxy(real_ols(formula, data, *args, **kwargs), feature)
 
-        with mock.patch.object(MODEL_FIT_MODULE.smf, "ols", side_effect=ols_with_warning):
+        with mock.patch.object(MODEL_FIT_MODULE.sm, "OLS", side_effect=ols_with_warning):
             results = adtl.fit_smf_ols_models_and_summarize_wide(
                 wide_df,
                 feature_columns=features,
                 predictors=["x"],
                 model_name="thread_warning",
                 include_fdr=False,
-                threads=2,
+                threads=3,
             )
 
         self.assertIs(warnings.showwarning, previous_showwarning)
-        self.assertEqual(
-            results.loc["feature_a", "thread_warning_Warnings"],
-            "UserWarning: forced threaded warning for feature_a",
-        )
-        self.assertEqual(
-            results.loc["feature_b", "thread_warning_Warnings"],
-            "UserWarning: forced threaded warning for feature_b",
-        )
+        warning_column = results["thread_warning_Warnings"]
+        warned_features = warning_column.dropna().index.tolist()
+        self.assertEqual(warned_features, features)
+        for feature in warned_features:
+            self.assertEqual(
+                warning_column.loc[feature],
+                f"UserWarning: forced threaded warning for {feature}",
+            )
 
     def test_mixedlm_threaded_exceptions_follow_feature_order(self):
         wide_df = self._make_wide_frame()

@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor as _ThreadPoolExecutor
 from contextlib import contextmanager as _contextmanager
 import pandas as pd
 import numpy as np
+import patsy
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
 from pathlib import Path
@@ -175,9 +176,18 @@ def fit_smf_ols_models_and_summarize_wide(
     import statsmodels.api as sm
     import statsmodels.formula.api as smf
 
+    threads = _validate_threads(threads)
     # pandas does not guarantee thread-safe copying from a shared DataFrame.
     # Keep only selection and the deep copy serial; preprocessing and fitting stay parallel.
     dataframe_copy_lock = _threading.Lock()
+    # Threaded fits with the same complete-case rows can reuse one formula-built
+    # predictor matrix. Each model still receives its own copy for thread safety.
+    design_matrix_lock = _threading.Lock() if threads > 1 else None
+    design_matrix_cache = {
+        "values": None,
+        "columns": None,
+        "disabled": False,
+    }
 
     def fit_feature(feature, warning_state):
         columns2keep = [feature] + predictors
@@ -205,11 +215,113 @@ def fit_smf_ols_models_and_summarize_wide(
                 f"No complete-case rows after dropping NaN/inf for columns {columns2keep}."
             )
             return feature, (None, [], model_summary_formula), skipped_reason
+        cache_eligible = (
+            design_matrix_lock is not None
+            and bool(predictors)
+            and isinstance(feature, str)
+            and feature.isprintable()
+            and '"' not in feature
+            and "\\" not in feature
+        )
+        if cache_eligible:
+            response = df[feature]
+            if (
+                isinstance(response, pd.Series)
+                and getattr(response.dtype, "kind", None) in {"f", "i", "u"}
+            ):
+                response_missing = response.isna()
+                if response_missing.any():
+                    missing_rows_have_complete_predictors = (
+                        df.loc[response_missing, predictors]
+                        .notna()
+                        .all(axis=1)
+                        .any()
+                    )
+                    cache_eligible = not missing_rows_have_complete_predictors
+            else:
+                cache_eligible = False
         df = df.loc[complete_case_mask]
         skipped_reason = None
         with _capture_model_fit_warnings(warning_state) as caught_warnings:
             try:
-                model = smf.ols(model_string, df).fit()
+                if not cache_eligible:
+                    model = smf.ols(model_string, df).fit()
+                else:
+                    cached_design = None
+                    fit_with_formula = False
+                    with design_matrix_lock:
+                        if design_matrix_cache["disabled"]:
+                            fit_with_formula = True
+                        elif design_matrix_cache["values"] is None:
+                            warning_count = len(caught_warnings)
+                            design_is_reusable = False
+                            try:
+                                design_df = patsy.dmatrix(
+                                    _make_model_formula_rhs(predictors),
+                                    df,
+                                    return_type="dataframe",
+                                )
+                                design_is_reusable = (
+                                    len(caught_warnings) == warning_count
+                                    and design_df.index.equals(df.index)
+                                )
+                                if design_is_reusable:
+                                    design_values = design_df.to_numpy(copy=False)
+                                    design_values.setflags(write=False)
+                            except Exception:
+                                design_is_reusable = False
+                            if not design_is_reusable:
+                                # Let each full formula recreate any warning or
+                                # row-selection behavior from the shared RHS.
+                                del caught_warnings[warning_count:]
+                                design_matrix_cache["disabled"] = True
+                                fit_with_formula = True
+                            else:
+                                design_matrix_cache["values"] = design_values
+                                design_matrix_cache["columns"] = tuple(
+                                    design_df.columns
+                                )
+                                cached_design = (
+                                    design_values,
+                                    design_matrix_cache["columns"],
+                                )
+                        else:
+                            cached_design = (
+                                design_matrix_cache["values"],
+                                design_matrix_cache["columns"],
+                            )
+
+                    if fit_with_formula:
+                        model = smf.ols(model_string, df).fit()
+                    elif cached_design is not None:
+                        design_values, design_columns = cached_design
+                        warning_count = len(caught_warnings)
+                        try:
+                            response_df = patsy.dmatrix(
+                                f'Q("{feature}") - 1',
+                                df,
+                                return_type="dataframe",
+                            )
+                            if (
+                                len(response_df.columns) != 1
+                                or not response_df.index.equals(df.index)
+                            ):
+                                raise ValueError(
+                                    "Cached OLS response design did not preserve rows."
+                                )
+                            response = response_df.iloc[:, 0]
+                            response.name = feature
+                            feature_design_df = pd.DataFrame(
+                                design_values.copy(),
+                                index=df.index,
+                                columns=design_columns,
+                            )
+                            model = sm.OLS(response, feature_design_df).fit()
+                        except Exception:
+                            # Preserve the established formula behavior for any
+                            # response that the direct path cannot fit identically.
+                            del caught_warnings[warning_count:]
+                            model = smf.ols(model_string, df).fit()
             except Exception as e:
                 model = None
                 skipped_reason = f"{type(e).__name__}: {e}"
