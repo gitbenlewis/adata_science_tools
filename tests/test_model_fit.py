@@ -316,6 +316,90 @@ class ModelFitSidecarTests(unittest.TestCase):
                 self.assertTrue(np.isposinf(wide_df.loc[0, "feature_a"]))
                 self.assertTrue(np.isneginf(wide_df.loc[1, "feature_b"]))
 
+    def test_threaded_fitters_lock_shared_frame_deep_copy(self):
+        class TrackingLock:
+            def __init__(self):
+                self._lock = threading.Lock()
+                self.owner = None
+                self.enter_count = 0
+
+            @property
+            def held_by_current_thread(self):
+                return self.owner == threading.get_ident()
+
+            def __enter__(self):
+                self._lock.acquire()
+                self.owner = threading.get_ident()
+                self.enter_count += 1
+                return self
+
+            def __exit__(self, *args):
+                self.owner = None
+                self._lock.release()
+
+        for fit_function, extra_kwargs in (
+            (adtl.fit_smf_ols_models_and_summarize_wide, {}),
+            (
+                adtl.fit_smf_mixedlm_models_and_summarize_wide,
+                {"group": "group", "reml": False},
+            ),
+        ):
+            with self.subTest(function=fit_function.__name__):
+                tracking_lock = TrackingLock()
+                threading_proxy = mock.Mock(wraps=threading)
+                threading_proxy.Lock.return_value = tracking_lock
+                calls = {"selection": 0, "copy": 0}
+                replace_calls = []
+                test_case = self
+
+                class PreparedFrame(pd.DataFrame):
+                    @property
+                    def _constructor(self):
+                        return pd.DataFrame
+
+                    def replace(self, *args, **kwargs):
+                        test_case.assertFalse(tracking_lock.held_by_current_thread)
+                        replace_calls.append(threading.get_ident())
+                        return super().replace(*args, **kwargs)
+
+                class SelectedFrame(pd.DataFrame):
+                    @property
+                    def _constructor(self):
+                        return pd.DataFrame
+
+                    def copy(self, deep=True):
+                        test_case.assertTrue(tracking_lock.held_by_current_thread)
+                        test_case.assertIs(deep, True)
+                        calls["copy"] += 1
+                        return PreparedFrame(super().copy(deep=deep))
+
+                class SharedFrame(pd.DataFrame):
+                    @property
+                    def _constructor(self):
+                        return pd.DataFrame
+
+                    def __getitem__(self, key):
+                        if isinstance(key, list):
+                            test_case.assertTrue(tracking_lock.held_by_current_thread)
+                            calls["selection"] += 1
+                            return SelectedFrame(super().__getitem__(key))
+                        return super().__getitem__(key)
+
+                with mock.patch.object(MODEL_FIT_MODULE, "_threading", threading_proxy):
+                    fit_function(
+                        SharedFrame(self._make_wide_frame()),
+                        feature_columns=["feature_a", "feature_b"],
+                        predictors=["x"],
+                        include_fdr=False,
+                        threads=2,
+                        **extra_kwargs,
+                    )
+
+                self.assertEqual(threading_proxy.Lock.call_count, 1)
+                self.assertEqual(tracking_lock.enter_count, 2)
+                self.assertEqual(calls, {"selection": 2, "copy": 2})
+                self.assertEqual(len(replace_calls), 4)
+
     def test_threaded_ols_warnings_stay_with_their_feature(self):
         wide_df = self._make_wide_frame()
         features = ["feature_a", "feature_b"]
