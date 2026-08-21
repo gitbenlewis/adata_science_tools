@@ -140,6 +140,7 @@ When `df` is provided, the AnnData-derived path is ignored. `column_key_x` and `
 - With both marginal flags disabled, `axes` is the single scatter `Axes`, preserving the original public contract.
 - With either marginal enabled, `axes` is a dictionary containing `"main"`, `"x_marginal"`, and `"y_marginal"`; a disabled marginal entry is `None`.
 - `fit`, `corr_value`, and `corr_pvalue` always describe the overall filtered observations, including when subgroup fits are drawn.
+- The returned figure remains open even when `show=False`; callers should close it with `plt.close(fig)` after inspection or saving.
 
 ### Correlation, filtering, and fit behavior
 

@@ -502,7 +502,9 @@ def corr_dotplot(
         ``log1p``/``expm1`` and accepts only finite values greater than -1.
         Correlation and fit calculations always use the untransformed values.
     show : bool
-        Call ``plt.show()`` before returning when ``True``.
+        Call ``plt.show()`` before returning when ``True``. The returned figure
+        remains open in either case; callers own its lifecycle and may close it
+        with ``plt.close(fig)``.
 
     Notes
     -----
@@ -1378,10 +1380,6 @@ def corr_dotplot(
 
     if show:
         plt.show()
-    else:
-        # Prevent notebook backends from auto-rendering and retaining figures
-        # when callers explicitly requested show=False.
-        plt.close(fig)
 
     if axes_x_marginal is None and axes_y_marginal is None:
         axes_result = axes

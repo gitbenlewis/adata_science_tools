@@ -347,7 +347,14 @@ def _build_expectation_table(
         for target_column, source_column in metadata_pairs.items():
             if source_column in summary_df.columns:
                 expectation_df[target_column] = summary_df[source_column]
-        expectation_df["fit_method"] = "ols"
+        for column in ("fit_formula", "fit_warning"):
+            if column in expectation_df.columns:
+                expectation_df[column] = expectation_df[column].astype(object)
+        expectation_df["fit_method"] = pd.Series(
+            "ols",
+            index=expectation_df.index,
+            dtype=object,
+        )
     return expectation_df
 
 
@@ -385,7 +392,14 @@ def _build_expectation_table_from_ols_summary(
         for target_column, source_column in metadata_pairs.items():
             if source_column in ols_summary_df.columns:
                 expectation_df[target_column] = ols_summary_df[source_column]
-        expectation_df["fit_method"] = "ols"
+        for column in ("fit_formula", "fit_warning"):
+            if column in expectation_df.columns:
+                expectation_df[column] = expectation_df[column].astype(object)
+        expectation_df["fit_method"] = pd.Series(
+            "ols",
+            index=expectation_df.index,
+            dtype=object,
+        )
     return expectation_df, design_terms
 
 

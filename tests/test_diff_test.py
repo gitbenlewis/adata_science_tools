@@ -319,9 +319,49 @@ class DiffTestRegressionTests(unittest.TestCase):
         self.assertTrue(np.isfinite(results.loc["feat_nonfinite", "ttest_ind_pvals_target_ref"]))
         self.assertTrue(np.isfinite(results.loc["feat_nonfinite", "ttest_ind_pvals_FDR_target_ref"]))
         self.assertTrue(np.isfinite(results.loc["feat_nonfinite", "shapiro_pvals: Treatment_drug"]))
-        self.assertTrue(pd.isna(results.loc["feat_nonfinite", "ks_pvals: Treatment_drug"]))
-        self.assertTrue(pd.isna(results.loc["feat_nonfinite", "shapiro_pvals: Treatment_vehicle"]))
-        self.assertTrue(pd.isna(results.loc["feat_nonfinite", "ks_pvals: Treatment_vehicle"]))
+        self.assertTrue(np.isfinite(results.loc["feat_nonfinite", "ks_pvals: Treatment_drug"]))
+        self.assertTrue(np.isfinite(results.loc["feat_nonfinite", "shapiro_pvals: Treatment_vehicle"]))
+        self.assertTrue(np.isfinite(results.loc["feat_nonfinite", "ks_pvals: Treatment_vehicle"]))
+
+    def test_nonfinite_paired_differences_are_sanitized_for_normality(self):
+        adata = self._make_nonfinite_adata()
+        adata.X[3, 0] = 6.0
+        results = self._call_diff_test(
+            adata,
+            suffix="nonfinite_paired",
+            groupby_key="Treatment",
+            groupby_key_target_values=["drug"],
+            groupby_key_ref_values=["vehicle"],
+            tests=["ttest_rel"],
+            pair_by_key="SubjectID",
+        )
+
+        shapiro_column = "shapiro_pvals: paired_diff (Treatment_drug-Treatment_vehicle)"
+        ks_column = "ks_pvals: paired_diff (Treatment_drug-Treatment_vehicle)"
+        self.assertTrue(np.isfinite(results.loc["feat_nonfinite", shapiro_column]))
+        self.assertTrue(np.isfinite(results.loc["feat_nonfinite", ks_column]))
+
+    def test_nonfinite_nested_differences_apply_finite_sample_size_rule(self):
+        adata = self._make_nested_adata()
+        adata.X[4, 0] = np.inf
+        results = self._call_diff_test(
+            adata,
+            suffix="nonfinite_nested",
+            groupby_key="Treatment",
+            groupby_key_target_values=["drug"],
+            groupby_key_ref_values=["vehicle"],
+            nested_groupby_key_target_values=[("drug", "predoseDrug")],
+            nested_groupby_key_ref_values=[("vehicle", "predoseVeh")],
+            tests=["ttest_rel_nested"],
+            pair_by_key="AnimalID",
+        )
+
+        comparison = "paired_NESTED_diffcontrol drug_vehicle"
+        self.assertEqual(
+            results.loc["feat_signal", f"shapiro_pvals: {comparison}"],
+            "n<3_or_n>5000",
+        )
+        self.assertTrue(pd.isna(results.loc["feat_signal", f"ks_pvals: {comparison}"]))
 
     def test_paired_alignment_uses_subject_id(self):
         results = self._call_diff_test(

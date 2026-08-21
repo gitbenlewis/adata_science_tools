@@ -151,7 +151,9 @@ def ref_vs_target_adata(
         adata_summary = {
             "shape": adata.shape,
             "X_type": type(adata.X).__name__,
-            "layers": list(adata.layers.keys()),
+            # AnnData may expose .X through layers with None as a sentinel.
+            # X_type already reports .X, so list only user-named layers here.
+            "layers": [key for key in adata.layers.keys() if key is not None],
             "obs_columns": list(adata.obs.columns),
             "var_columns": list(adata.var.columns),
         }

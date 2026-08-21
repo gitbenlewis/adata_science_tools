@@ -383,7 +383,7 @@ def fit_smf_ols_models_and_summarize_wide(
                             if direct_numeric_response:
                                 # Patsy only casts ordinary numeric responses to
                                 # float64 here, so avoid rebuilding that design.
-                                response = df[feature].astype(float, copy=False)
+                                response = df[feature].astype(float)
                             else:
                                 response_df = patsy.dmatrix(
                                     f'Q("{feature}") - 1',
@@ -503,6 +503,15 @@ def fit_smf_ols_models_and_summarize_wide(
         summary_rows.append(summary_data)
     # make the final results dataframe
     results = pd.DataFrame(summary_rows, index=feature_columns)
+    for column in (
+        f'{model_name}_Formula',
+        f'{model_name}_Cov_Type',
+        f'{model_name}_Warnings',
+    ):
+        if column in results.columns:
+            # pandas 3 infers its dedicated string dtype from textual rows;
+            # keep metadata stable when other rows contain only missing values.
+            results[column] = results[column].astype(object)
     if include_fdr:
         pval_cols = [c for c in results.columns if c.startswith(f'{model_name}_P>|t|_')]
         for col in pval_cols:
@@ -846,6 +855,13 @@ def fit_smf_mixedlm_models_and_summarize_wide(
 
     # make the final results dataframe
     results = pd.DataFrame(summary_rows, index=feature_columns)
+    for column in (
+        f'{model_name}_Formula',
+        f'{model_name}_Method',
+        f'{model_name}_Warnings',
+    ):
+        if column in results.columns:
+            results[column] = results[column].astype(object)
     if include_fdr:
         pval_cols = [c for c in results.columns if c.startswith(f'{model_name}_P>|z|_')]
         for col in pval_cols:

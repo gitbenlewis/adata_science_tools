@@ -23,6 +23,25 @@ import adata_science_tools as adtl
 
 
 class CorrDotplotRegressionTests(unittest.TestCase):
+    def test_corr_dotplot_show_false_returns_caller_owned_figure(self):
+        open_figures = set(plt.get_fignums())
+        fig = None
+        try:
+            fig, _, _, _, _ = adtl.corr_dotplot(
+                df=pd.DataFrame({"x": [1.0, 2.0, 3.0], "y": [2.0, 3.0, 5.0]}),
+                column_key_x="x",
+                column_key_y="y",
+                show=False,
+            )
+
+            self.assertIn(fig.number, plt.get_fignums())
+            fig.canvas.draw()
+            self.assertIsNotNone(fig.canvas.get_renderer())
+        finally:
+            if fig is not None:
+                plt.close(fig)
+        self.assertEqual(set(plt.get_fignums()), open_figures)
+
     def test_corr_dotplot_renames_colliding_obs_columns(self):
         obs = pd.DataFrame(
             {
@@ -485,7 +504,7 @@ class CorrDotplotRegressionTests(unittest.TestCase):
                     show=False,
                 )
 
-                self.assertFalse(plt.fignum_exists(fig.number))
+                self.assertTrue(plt.fignum_exists(fig.number))
                 if not show_x_hist and not show_y_hist:
                     self.assertIsInstance(axes, Axes)
                 else:

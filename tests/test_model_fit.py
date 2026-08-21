@@ -255,6 +255,12 @@ class ModelFitSidecarTests(unittest.TestCase):
 
         pd.testing.assert_frame_equal(default, serial)
         pd.testing.assert_frame_equal(serial, parallel, check_exact=False, rtol=1e-12, atol=1e-12)
+        for column in (
+            "thread_ols_Formula",
+            "thread_ols_Cov_Type",
+            "thread_ols_Warnings",
+        ):
+            self.assertEqual(parallel[column].dtype, np.dtype("object"))
         self.assertEqual(formula_ols.call_count, 2)
         self.assertEqual(direct_ols.call_count, 1)
         self.assertEqual(parallel.index.tolist(), feature_order)

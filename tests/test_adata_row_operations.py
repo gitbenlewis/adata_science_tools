@@ -335,7 +335,7 @@ class RefVsTargetAdataTests(unittest.TestCase):
 
         assert_allclose(result.X, expected_subtraction, atol=1e-8, rtol=1e-8)
         self.assertEqual(
-            set(result.layers.keys()),
+            {key for key in result.layers.keys() if key is not None},
             {"subtraction", "relative_change_pct", "relative_change_l2fc"},
         )
         assert_allclose(result.layers["subtraction"], expected_subtraction, atol=1e-8, rtol=1e-8)
@@ -368,7 +368,7 @@ class RefVsTargetAdataTests(unittest.TestCase):
 
         assert_allclose(result.X, expected_subtraction, atol=1e-8, rtol=1e-8)
         self.assertEqual(
-            set(result.layers.keys()),
+            {key for key in result.layers.keys() if key is not None},
             {"X__subtraction", "X__relative_change_pct", "alt__subtraction", "alt__relative_change_pct"},
         )
         assert_allclose(result.layers["X__subtraction"], expected_subtraction, atol=1e-8, rtol=1e-8)

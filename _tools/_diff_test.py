@@ -343,10 +343,26 @@ def diff_test(adata, layer=None, use_raw=False,
         log.info(f"diff_test args:\n{args_lines}")
 
     def _safe_shapiro(vec):
+        vec = np.asarray(vec, dtype=float)
+        vec = vec[np.isfinite(vec)]
         n = vec.shape[0]
         if n < 3 or n > 5000:
             return 'n<3_or_n>5000'
         return stats.shapiro(vec).pvalue
+
+    def _safe_ks_normality(vec):
+        vec = np.asarray(vec, dtype=float)
+        vec = vec[np.isfinite(vec)]
+        if vec.shape[0] < 3:
+            return np.nan
+        mean = vec.mean()
+        std = vec.std(ddof=1)
+        if not np.isfinite(std) or std == 0:
+            return np.nan
+        return stats.kstest(
+            vec,
+            lambda x: stats.norm.cdf(x, loc=mean, scale=std),
+        ).pvalue
 
     def _aligned_pairs(X, adata, idx_a, idx_b, pair_key, label_a, label_b):
         ids_a = adata.obs.loc[idx_a, pair_key]
@@ -701,25 +717,13 @@ def diff_test(adata, layer=None, use_raw=False,
         #shapiro_stat_group1, shapiro_pvals_group1 = stats.shapiro(data1,axis=0)
         #ks_stat_group1, ks_pvals_group1 = stats.kstest(data1, 'norm',axis=0)
         shapiro_pvals_group1 =[_safe_shapiro(data1[:, i]) for i in range(data1.shape[1])]
-        ks_pvals_group1 = [
-            stats.kstest(
-                data1[:, i],
-                lambda x, mean=data1[:, i].mean(), std=data1[:, i].std(ddof=1): stats.norm.cdf(x, loc=mean, scale=std)
-            ).pvalue
-            for i in range(data1.shape[1])
-        ]
+        ks_pvals_group1 = [_safe_ks_normality(data1[:, i]) for i in range(data1.shape[1])]
         # data2 shapiro test # ks test
         #shapiro_stat_group2, shapiro_pvals_group2 = stats.shapiro(data2,axis=0)
         #ks_stat_group2, ks_pvals_group2 = stats.kstest(data2, 'norm',axis=0)
         shapiro_pvals_group2 =[_safe_shapiro(data2[:, i]) for i in range(data2.shape[1])]
         #ks_pvals_group2 = [stats.kstest(data2[:, i], 'norm').pvalue for i in range(data2.shape[1])]
-        ks_pvals_group2 = [
-            stats.kstest(
-                data2[:, i],
-                lambda x, mean=data2[:, i].mean(), std=data2[:, i].std(ddof=1): stats.norm.cdf(x, loc=mean, scale=std)
-            ).pvalue
-            for i in range(data2.shape[1])
-        ]
+        ks_pvals_group2 = [_safe_ks_normality(data2[:, i]) for i in range(data2.shape[1])]
         skip_shapiro_group1 = shapiro_pvals_group1.count('n<3_or_n>5000')
         skip_shapiro_group2 = shapiro_pvals_group2.count('n<3_or_n>5000')
         log.info(
@@ -829,10 +833,7 @@ def diff_test(adata, layer=None, use_raw=False,
         #ks_stat_data1_rel_data2_rel_diff, ks_pvals_data1_rel_data2_rel_diff = stats.kstest(data1_rel_data2_rel_diff, 'norm',axis=0)
         shapiro_pvals_data1_rel_data2_rel_diff =[_safe_shapiro(data1_rel_data2_rel_diff[:, i]) for i in range(data1_rel_data2_rel_diff.shape[1])]
         ks_pvals_data1_rel_data2_rel_diff = [
-            stats.kstest(
-                data1_rel_data2_rel_diff[:, i],
-                lambda x, mean=data1_rel_data2_rel_diff[:, i].mean(), std=data1_rel_data2_rel_diff[:, i].std(ddof=1): stats.norm.cdf(x, loc=mean, scale=std)
-            ).pvalue
+            _safe_ks_normality(data1_rel_data2_rel_diff[:, i])
             for i in range(data1_rel_data2_rel_diff.shape[1])
         ]
         skip_shapiro_paired = shapiro_pvals_data1_rel_data2_rel_diff.count('n<3_or_n>5000')
@@ -998,10 +999,7 @@ def diff_test(adata, layer=None, use_raw=False,
         #ks_stat_nested_diff, ks_pvals_nested_diff = stats.kstest(nested_diff, 'norm',axis=0)
         shapiro_pvals_nested_diff =[_safe_shapiro(nested_diff[:, i]) for i in range(nested_diff.shape[1])]
         ks_pvals_nested_diff = [
-            stats.kstest(
-                nested_diff[:, i],
-                lambda x, mean=nested_diff[:, i].mean(), std=nested_diff[:, i].std(ddof=1): stats.norm.cdf(x, loc=mean, scale=std)
-            ).pvalue
+            _safe_ks_normality(nested_diff[:, i])
             for i in range(nested_diff.shape[1])
         ]
         skip_shapiro_nested = shapiro_pvals_nested_diff.count('n<3_or_n>5000')

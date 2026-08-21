@@ -182,6 +182,8 @@ class ExpectationCorrectionTests(unittest.TestCase):
             atol=1e-12,
         )
         self.assertEqual(self.expectation_df.attrs, threaded.attrs)
+        for column in ("fit_formula", "fit_warning", "fit_method"):
+            self.assertEqual(threaded[column].dtype, np.dtype("object"))
 
         with self.assertRaisesRegex(ValueError, "threads must be a positive integer"):
             adtl.calculate_expectations(
