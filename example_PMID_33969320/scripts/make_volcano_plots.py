@@ -159,18 +159,6 @@ if __name__ == "__main__":
             else:
                 LOGGER.error(f"No valid input path provided for {plot_key}. Skipping this plot.")
                 continue
-            #####
-            # print number of genes with pvalue < pvalue_threshold
-            pvalue_threshold=chained_params.get("pvalue_threshold", 0.2)
-            n_significant_genes=(var_filtered_df[chained_params["pvalue_col"]] < pvalue_threshold).sum()
-            LOGGER.info(f"Number of genes with {chained_params['pvalue_col']} < {pvalue_threshold}: {n_significant_genes}")
-            # print number of genes with abs(log2FoldChange) > log2FoldChange_threshold
-            log2fc_threshold=chained_params.get("log2FoldChange_threshold", 0.5)
-            n_fc_genes=(var_filtered_df[chained_params["l2fc_col"]].abs() > log2fc_threshold).sum()
-            LOGGER.info(f"Number of genes with abs({chained_params['l2fc_col']}) > {log2fc_threshold}: {n_fc_genes}")
-            # print number of genes with both pvalue and log2FoldChange thresholds
-            n_both_genes=((var_filtered_df[chained_params["pvalue_col"]] < pvalue_threshold) & (var_filtered_df[chained_params["l2fc_col"]].abs() > log2fc_threshold)).sum()
-            LOGGER.info(f"Number of genes with both {chained_params['pvalue_col']} < {pvalue_threshold} and abs({chained_params['l2fc_col']}) > {log2fc_threshold}: {n_both_genes}")
             # make volcano plot
             LOGGER.info(f"Making volcano plot for run_key: {plot_key}")
             # logg plot save path from chained_params["file_name"]
@@ -180,6 +168,21 @@ if __name__ == "__main__":
                 LOGGER.info(f"Before filtering, var_filtered_df shape: {var_filtered_df.shape}")
                 var_filtered_df = var_filtered_df[var_filtered_df[chained_params["comparison_column_key"]].isin(chained_params["comparisons_to_keep"])].copy()
                 LOGGER.info(f"After filtering, var_filtered_df shape: {var_filtered_df.shape}")
+            #####
+            # print number of genes with pvalue < pvalue_threshold
+            pvalue_threshold=chained_params.get("pvalue_threshold", 0.2)
+            n_significant_genes=(var_filtered_df[chained_params["pvalue_col"]] < pvalue_threshold).sum()
+            LOGGER.info(f"Number of genes with {chained_params['pvalue_col']} < {pvalue_threshold}: {n_significant_genes}")
+            # print number of genes with abs(log2FoldChange) >= log2FoldChange_threshold
+            log2fc_threshold=chained_params.get("log2FoldChange_threshold", 0.5)
+            n_fc_genes=(var_filtered_df[chained_params["l2fc_col"]].abs() >= log2fc_threshold).sum()
+            LOGGER.info(f"Number of genes with abs({chained_params['l2fc_col']}) >= {log2fc_threshold}: {n_fc_genes}")
+            # print number of genes with both pvalue and log2FoldChange thresholds
+            n_both_genes=((var_filtered_df[chained_params["pvalue_col"]] < pvalue_threshold) & (var_filtered_df[chained_params["l2fc_col"]].abs() >= log2fc_threshold)).sum()
+            LOGGER.info(f"Number of genes with both {chained_params['pvalue_col']} < {pvalue_threshold} and abs({chained_params['l2fc_col']}) >= {log2fc_threshold}: {n_both_genes}")
+            deg_count_types = chained_params.get("deg_count_types")
+            if deg_count_types is not None:
+                deg_count_types = tuple(deg_count_types)
             adtl.volcano_plot_generic(
                 var_filtered_df,
                 l2fc_col=chained_params.get("l2fc_col",VOLCANO_PLOT_DEFAULTS.get("l2fc_col","log2FoldChange")),
@@ -205,6 +208,13 @@ if __name__ == "__main__":
                 label_top_features_fontsize=chained_params.get("label_top_features_fontsize",VOLCANO_PLOT_DEFAULTS.get("label_top_features_fontsize", 16)),
                 label_features_char_limit=chained_params.get("label_features_char_limit",VOLCANO_PLOT_DEFAULTS.get("label_features_char_limit", None)),
                 dot_size_shrink_factor=chained_params.get("dot_size_shrink_factor",VOLCANO_PLOT_DEFAULTS.get("dot_size_shrink_factor", 10)),
+                deg_count_types=deg_count_types,
+                show_deg_counts_in_legend=chained_params.get("show_deg_counts_in_legend", True),
+                label_threshold_regions=chained_params.get("label_threshold_regions", False),
+                save_deg_counts_csv=(
+                    G.SAVE_OUTPUT_FIGURES
+                    and chained_params.get("save_deg_counts_csv", False)
+                ),
                 savefig=G.SAVE_OUTPUT_FIGURES,
                 file_name=chained_params["file_name"],
             )

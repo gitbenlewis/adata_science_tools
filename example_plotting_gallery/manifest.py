@@ -867,7 +867,13 @@ RENDERER_MANIFEST: tuple[RendererSpec, ...] = (
                 case_id="significance",
                 title="Differential-test volcano plot",
                 asset="volcano_plot_generic__significance.png",
-                features=("nested significance levels", "effect and p-value thresholds", "top-feature labels"),
+                features=(
+                    "nested significance levels",
+                    "effect and p-value thresholds",
+                    "selectable differential-feature counts",
+                    "six threshold-region labels",
+                    "top-feature labels",
+                ),
             ),
             GalleryCase(
                 case_id="ranked_columns",

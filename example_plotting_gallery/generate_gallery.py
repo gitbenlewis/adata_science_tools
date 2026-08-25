@@ -1750,6 +1750,10 @@ def _invoke_case(
                 feature_label_col="gene_names",
                 n_top_features=2,
                 dot_size_shrink_factor=4,
+                deg_count_types=("total", "up", "down"),
+                show_deg_counts_in_legend=True,
+                label_threshold_regions=True,
+                save_deg_counts_csv=False,
                 savefig=False,
             )
         if case.case_id == "ranked_columns":

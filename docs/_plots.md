@@ -49,6 +49,11 @@ def volcano_plot_generic(
         savefig: bool | None = False,
         file_name: str | None = 'volcano_plot.png',
         label_layout: Literal["inline", "ranked_columns"] = "inline",
+        *,
+        deg_count_types: tuple[Literal["total", "up", "down"], ...] | None = None,
+        show_deg_counts_in_legend: bool = True,
+        label_threshold_regions: bool = False,
+        save_deg_counts_csv: bool = False,
                      ):
 
 ```
@@ -82,6 +87,25 @@ ax = adtl.volcano_plot_generic(
 )
 ```
 
+To show all supported differential-feature counts, label the six threshold
+regions, and save the canonical count table beside the figure:
+
+```python
+ax = adtl.volcano_plot_generic(
+    results,
+    l2fc_col="effect",
+    pvalue_col="adjusted_pvalue",
+    log2FoldChange_threshold=0.1,
+    pvalue_threshold=0.05,
+    deg_count_types=("total", "up", "down"),
+    show_deg_counts_in_legend=True,
+    label_threshold_regions=True,
+    save_deg_counts_csv=True,
+    savefig=True,
+    file_name="results/volcano.png",
+)
+```
+
 <img src="assets/plotting_gallery/volcano_plot_generic__significance.png" alt="Differential-test volcano plot" width="720">
 
 *`significance` — Differential-test volcano plot. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
@@ -101,10 +125,20 @@ ax = adtl.volcano_plot_generic(
 - If `hue_column` is not provided, the plot colors points by an internal `Significance` category with levels `Not Significant`, `alpha=0.2`, `alpha=0.1`, and `alpha=0.05`.
 - Significance thresholds combine `pvalue_col` with `abs(l2fc_col) >= log2FoldChange_threshold`.
 - `pvalue_threshold` adds a horizontal reference line using the original p-value scale.
+- A non-empty `deg_count_types` tuple selects any combination of total, up, and down differential-feature counts. With `show_deg_counts_in_legend=True`, the selected counts are appended to the existing legend as `Total DEGs`, `Up DEGs`, and `Down DEGs`; setting it to `False` leaves the existing legend unchanged.
+- DEG counts use the requested `pvalue_threshold`, while the existing default point-color categories remain fixed at alpha 0.2, 0.1, and 0.05. Counts therefore need not match a color category when a different p-value threshold is requested.
+- Counts represent eligible `DataFrame` rows, include all eligible rows regardless of `hue_column` or feature-label visibility, and do not deduplicate repeated feature labels.
+- `label_threshold_regions=True` labels all six threshold regions in this order: upper-left, upper-center, upper-right, lower-left, lower-center, and lower-right. Upper means `pvalue_col < pvalue_threshold`; lower means `pvalue_col >= pvalue_threshold`. Left includes `l2fc_col <= -log2FoldChange_threshold`, right includes `l2fc_col >= log2FoldChange_threshold`, and center is strictly between those effect thresholds.
+- Enabling threshold-region labels anchors the legend outside the axes and applies a content-aware tight layout so the legend remains on the figure canvas without covering region text.
+- With `label_threshold_regions=True`, auto-resolved limits expand as needed to at least `1.25 * log2FoldChange_threshold` for `xlimit` and `1.25 * -log10(pvalue_threshold)` for `ylimit`. Explicit limits must meet the same minima; smaller values raise `ValueError`.
+- Counts and region labels use the prepared data before axis clipping. Missing p-values retain the existing behavior of being filled with `1`; rows whose prepared p-value is non-finite or outside `[0, 1]`, or whose effect is non-finite, are excluded. Total differential features are the upper-left plus upper-right rows; down and up are the upper-left and upper-right rows, respectively.
+- Requesting counts or a count CSV requires `0 < pvalue_threshold <= 1` and a positive `log2FoldChange_threshold`. Region labels require `0 < pvalue_threshold < 1` so both horizontal regions are visible.
+- `save_deg_counts_csv=True` requires `savefig=True` and a non-`None` `file_name`. The figure is saved first, followed by `Path(file_name).with_suffix(".csv")` with columns `record_type`, `region`, `pvalue_band`, `effect_band`, `count`, `pvalue_col`, `pvalue_threshold`, `l2fc_col`, and `l2fc_threshold`.
+- The CSV rows have a deterministic order: summaries `total_DEGs`, `up_DEGs`, and `down_DEGs`; regions `upper_left`, `upper_center`, `upper_right`, `lower_left`, `lower_center`, and `lower_right`; then the `excluded_invalid` diagnostic.
 - `label_top_features=True` with the default `label_layout="inline"` preserves direct labels at the selected points.
 - `label_layout="ranked_columns"` selects at most `n_top_features` rows by ascending `pvalue_col`, then the case-insensitive full feature label and source order. Non-positive effects use the left column, positive effects use the right column, and leader lines point to the plotted coordinates.
 - Ranked columns reuse `feature_label_col`, `label_top_features_fontsize`, `label_features_char_limit`, and the existing custom-hue label eligibility. They are intended for a modest label count, such as 5–15, rather than general collision solving.
-- `savefig=True` writes the figure with `plt.savefig(...)`.
+- `savefig=True` writes the figure with `plt.savefig(...)`; the optional count CSV does not change this behavior.
 - The return value is the Matplotlib or Seaborn axes object.
 
 ### Notes

@@ -187,6 +187,49 @@ class PlottingGalleryTests(unittest.TestCase):
         )
         self.assertEqual(renderer.call_args.kwargs["n_top_features"], 10)
 
+    def test_significance_volcano_gallery_requests_threshold_summaries(self):
+        spec = next(
+            spec for spec in RENDERER_MANIFEST
+            if spec.name == "volcano_plot_generic"
+        )
+        case = next(
+            case for case in spec.cases if case.case_id == "significance"
+        )
+        inputs = mock.Mock(pooled_diff_results=mock.sentinel.pooled_results)
+
+        with mock.patch.object(
+            gallery_module.adtl,
+            "volcano_plot_generic",
+            return_value=mock.sentinel.axis,
+        ) as renderer:
+            result = gallery_module._invoke_case(
+                spec,
+                case,
+                inputs,
+                Path("unused.png"),
+            )
+
+        self.assertIs(result, mock.sentinel.axis)
+        self.assertIs(renderer.call_args.args[0], mock.sentinel.pooled_results)
+        self.assertEqual(renderer.call_args.kwargs["pvalue_col"], "pvalue")
+        self.assertEqual(
+            renderer.call_args.kwargs["deg_count_types"],
+            ("total", "up", "down"),
+        )
+        self.assertIs(
+            renderer.call_args.kwargs["show_deg_counts_in_legend"],
+            True,
+        )
+        self.assertIs(
+            renderer.call_args.kwargs["label_threshold_regions"],
+            True,
+        )
+        self.assertIs(
+            renderer.call_args.kwargs["save_deg_counts_csv"],
+            False,
+        )
+        self.assertIs(renderer.call_args.kwargs["savefig"], False)
+
     def test_difference_gallery_has_varied_and_combined_slopes(self):
         spec = next(
             spec for spec in RENDERER_MANIFEST if spec.name == "paired_datapoints"
@@ -498,6 +541,25 @@ class PlottingGalleryTests(unittest.TestCase):
                 self.assertGreater(path.stat().st_size, 0)
                 self.assertEqual(path.read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
                 self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o644)
+
+    def test_significance_gallery_does_not_emit_csv_sidecar(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                generated = generate_gallery(
+                    temporary_directory,
+                    renderer_names=["volcano_plot_generic"],
+                    case_ids=["significance"],
+                )
+
+            self.assertEqual(
+                [path.name for path in generated],
+                ["volcano_plot_generic__significance.png"],
+            )
+            self.assertEqual(
+                {path.name for path in Path(temporary_directory).iterdir()},
+                {"volcano_plot_generic__significance.png"},
+            )
 
     def test_config_driven_cli_generates_selected_asset_and_log(self):
         with tempfile.TemporaryDirectory() as temporary_directory:

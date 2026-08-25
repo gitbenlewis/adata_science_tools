@@ -1,9 +1,12 @@
 ''' plotting functions for anndata data science tools '''
 # module level imports
+from numbers import Real as _Real
+from pathlib import Path as _Path
 from typing import Literal as _Literal
 
 import anndata
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D as _Line2D
 import numpy as np
 import pandas as pd
 
@@ -102,6 +105,116 @@ def _add_ranked_volcano_labels(
             )
 
 
+def _summarize_volcano_threshold_regions(
+        df: pd.DataFrame,
+        *,
+        l2fc_col: str,
+        pvalue_col: str,
+        l2fc_threshold: float,
+        pvalue_threshold: float,
+        ) -> pd.DataFrame:
+    """Return canonical DEG summaries, six plot regions, and invalid-row count."""
+
+    effects = pd.to_numeric(df[l2fc_col], errors="coerce").to_numpy(
+        dtype=float,
+        na_value=np.nan,
+    )
+    pvalues = pd.to_numeric(df[pvalue_col], errors="coerce").to_numpy(
+        dtype=float,
+        na_value=np.nan,
+    )
+    eligible = (
+        np.isfinite(effects)
+        & np.isfinite(pvalues)
+        & (pvalues >= 0)
+        & (pvalues <= 1)
+    )
+    pvalue_below = pvalues < pvalue_threshold
+    effect_down = effects <= -l2fc_threshold
+    effect_up = effects >= l2fc_threshold
+    effect_center = ~effect_down & ~effect_up
+
+    region_masks = (
+        ("upper_left", "below_threshold", "down", eligible & pvalue_below & effect_down),
+        ("upper_center", "below_threshold", "center", eligible & pvalue_below & effect_center),
+        ("upper_right", "below_threshold", "up", eligible & pvalue_below & effect_up),
+        ("lower_left", "at_or_above_threshold", "down", eligible & ~pvalue_below & effect_down),
+        ("lower_center", "at_or_above_threshold", "center", eligible & ~pvalue_below & effect_center),
+        ("lower_right", "at_or_above_threshold", "up", eligible & ~pvalue_below & effect_up),
+    )
+    region_counts = {
+        region: int(mask.sum())
+        for region, _, _, mask in region_masks
+    }
+    metadata = {
+        "pvalue_col": pvalue_col,
+        "pvalue_threshold": float(pvalue_threshold),
+        "l2fc_col": l2fc_col,
+        "l2fc_threshold": float(l2fc_threshold),
+    }
+    records = [
+        {
+            "record_type": "summary",
+            "region": "total_DEGs",
+            "pvalue_band": "below_threshold",
+            "effect_band": "outer",
+            "count": region_counts["upper_left"] + region_counts["upper_right"],
+            **metadata,
+        },
+        {
+            "record_type": "summary",
+            "region": "up_DEGs",
+            "pvalue_band": "below_threshold",
+            "effect_band": "up",
+            "count": region_counts["upper_right"],
+            **metadata,
+        },
+        {
+            "record_type": "summary",
+            "region": "down_DEGs",
+            "pvalue_band": "below_threshold",
+            "effect_band": "down",
+            "count": region_counts["upper_left"],
+            **metadata,
+        },
+    ]
+    records.extend(
+        {
+            "record_type": "region",
+            "region": region,
+            "pvalue_band": pvalue_band,
+            "effect_band": effect_band,
+            "count": region_counts[region],
+            **metadata,
+        }
+        for region, pvalue_band, effect_band, _ in region_masks
+    )
+    records.append(
+        {
+            "record_type": "diagnostic",
+            "region": "excluded_invalid",
+            "pvalue_band": "invalid",
+            "effect_band": "invalid",
+            "count": int((~eligible).sum()),
+            **metadata,
+        }
+    )
+    return pd.DataFrame.from_records(
+        records,
+        columns=[
+            "record_type",
+            "region",
+            "pvalue_band",
+            "effect_band",
+            "count",
+            "pvalue_col",
+            "pvalue_threshold",
+            "l2fc_col",
+            "l2fc_threshold",
+        ],
+    )
+
+
 
 # Todo add accept adata or df input
 # 2026.01.19 updated to change padj_col to pvalue_col
@@ -138,6 +251,13 @@ def volcano_plot_generic(
         savefig: bool | None = False,
         file_name: str | None = 'volcano_plot.png',
         label_layout: _Literal["inline", "ranked_columns"] = "inline",
+        *,
+        deg_count_types: tuple[
+            _Literal["total", "up", "down"], ...
+        ] | None = None,
+        show_deg_counts_in_legend: bool = True,
+        label_threshold_regions: bool = False,
+        save_deg_counts_csv: bool = False,
                      ):
 
     """
@@ -207,6 +327,24 @@ def volcano_plot_generic(
         Feature-label placement. The default "inline" preserves direct labels at
         plotted points; "ranked_columns" places at most ``n_top_features`` labels
         in deterministic side columns with leader lines.
+    deg_count_types : tuple of {"total", "up", "down"}, optional
+        Selected DEG count summaries to append to the legend, in tuple order.
+        These summaries use ``pvalue_threshold``; the existing point-color
+        categories remain fixed at 0.2, 0.1, and 0.05, so they may differ.
+    show_deg_counts_in_legend : bool, optional
+        Whether to append selected DEG count summaries to the legend.
+    label_threshold_regions : bool, optional
+        Label all six regions defined by the p-value and fold-change thresholds.
+        Requires ``0 < pvalue_threshold < 1`` so both p-value bands have
+        non-zero height.
+        Auto-resolved limits expand by 25% beyond positive threshold lines.
+        Explicit limits must meet the same minimum. The legend is anchored
+        outside the axes, and a content-aware tight layout reserves enough
+        figure space to avoid obscuring the region labels or clipping the
+        legend.
+    save_deg_counts_csv : bool, optional
+        Save the canonical count table beside the saved figure using a ``.csv``
+        suffix. Requires ``savefig=True``.
 
     Returns
     -------
@@ -233,6 +371,54 @@ def volcano_plot_generic(
         raise ValueError(
             "label_layout must be either 'inline' or 'ranked_columns'."
         )
+    if deg_count_types is not None:
+        if not isinstance(deg_count_types, tuple):
+            raise ValueError("deg_count_types must be a tuple or None.")
+        unsupported_count_types = [
+            value
+            for value in deg_count_types
+            if value not in ("total", "up", "down")
+        ]
+        if unsupported_count_types:
+            raise ValueError(
+                "deg_count_types supports only 'total', 'up', and 'down'."
+            )
+        if len(set(deg_count_types)) != len(deg_count_types):
+            raise ValueError("deg_count_types must not contain duplicates.")
+
+    threshold_count_features_active = bool(deg_count_types) or bool(
+        label_threshold_regions
+    ) or bool(save_deg_counts_csv)
+    if threshold_count_features_active:
+        if (
+            pvalue_threshold is None
+            or isinstance(pvalue_threshold, (bool, np.bool_))
+            or not isinstance(pvalue_threshold, _Real)
+            or not np.isfinite(pvalue_threshold)
+            or not 0 < pvalue_threshold <= 1
+        ):
+            raise ValueError(
+                "Active DEG count features require 0 < pvalue_threshold <= 1."
+            )
+        if (
+            log2FoldChange_threshold is None
+            or isinstance(log2FoldChange_threshold, (bool, np.bool_))
+            or not isinstance(log2FoldChange_threshold, _Real)
+            or not np.isfinite(log2FoldChange_threshold)
+            or log2FoldChange_threshold <= 0
+        ):
+            raise ValueError(
+                "Active DEG count features require a positive "
+                "log2FoldChange_threshold."
+            )
+    if label_threshold_regions and pvalue_threshold >= 1:
+        raise ValueError(
+            "label_threshold_regions=True requires pvalue_threshold < 1."
+        )
+    if save_deg_counts_csv and not savefig:
+        raise ValueError("save_deg_counts_csv=True requires savefig=True.")
+    if save_deg_counts_csv and file_name is None:
+        raise ValueError("save_deg_counts_csv=True requires file_name.")
 
     # -------------------------
     # Define custom color palettes
@@ -281,6 +467,16 @@ def volcano_plot_generic(
     # Fill missing pvalue values with 1 (max nonsignificance)
     df[pvalue_col] = df[pvalue_col].fillna(1)
 
+    deg_count_table = None
+    if threshold_count_features_active:
+        deg_count_table = _summarize_volcano_threshold_regions(
+            df,
+            l2fc_col=l2fc_col,
+            pvalue_col=pvalue_col,
+            l2fc_threshold=log2FoldChange_threshold,
+            pvalue_threshold=pvalue_threshold,
+        )
+
     # Add -log10(pvalue) column for y-axis
     df['-log10(pvalue)'] = -np.log10(df[pvalue_col].replace(0, np.nextafter(0, 1)))
 
@@ -308,17 +504,41 @@ def volcano_plot_generic(
     # -------------------------
     # Axis limit calculations
     # -------------------------
+    xlimit_was_auto_resolved = not xlimit
+    ylimit_was_auto_resolved = not ylimit
+
     # Y-axis limit: 99th percentile of -log10(pvalue) among significant hits
-    if not ylimit:
+    if ylimit_was_auto_resolved:
         ylimit = df[(df[pvalue_col] < 0.05) & (df[l2fc_col].abs() > log2FoldChange_threshold)]['-log10(pvalue)'].quantile(0.99)
         if np.isnan(ylimit):
             ylimit = df['-log10(pvalue)'].quantile(0.99)
 
     # X-axis limit: 99th percentile of absolute log2FC among significant hits
-    if not xlimit:
+    if xlimit_was_auto_resolved:
         xlimit = df[(df[pvalue_col] < 0.05) & (df[l2fc_col].abs() > log2FoldChange_threshold)][l2fc_col].abs().quantile(0.99)
         if np.isnan(xlimit):
             xlimit = df[l2fc_col].abs().quantile(0.99)
+
+    if label_threshold_regions:
+        minimum_xlimit = float(log2FoldChange_threshold) * 1.25
+        minimum_ylimit = float(nlog10_pvalue_threshold) * 1.25
+        if xlimit_was_auto_resolved:
+            if xlimit < minimum_xlimit:
+                xlimit = minimum_xlimit
+        elif xlimit < minimum_xlimit:
+            raise ValueError(
+                "label_threshold_regions=True requires "
+                "xlimit >= 1.25 * log2FoldChange_threshold."
+            )
+
+        if ylimit_was_auto_resolved:
+            if ylimit < minimum_ylimit:
+                ylimit = minimum_ylimit
+        elif ylimit < minimum_ylimit:
+            raise ValueError(
+                "label_threshold_regions=True requires "
+                "ylimit >= 1.25 * -log10(pvalue_threshold)."
+            )
 
     # -------------------------
     # Marker column: distinguish in-range vs out-of-range points
@@ -345,9 +565,39 @@ def volcano_plot_generic(
     # -------------------------
     rel_size = df.shape[0] / dot_size_shrink_factor
 
+    deg_legend_handles = []
+    deg_legend_labels = []
+    if deg_count_table is not None and deg_count_types and show_deg_counts_in_legend:
+        summary_counts = deg_count_table.loc[
+            deg_count_table["record_type"] == "summary"
+        ].set_index("region")["count"]
+        count_rows = {
+            "total": ("total_DEGs", "Total DEGs"),
+            "up": ("up_DEGs", "Up DEGs"),
+            "down": ("down_DEGs", "Down DEGs"),
+        }
+        for count_type in deg_count_types:
+            row_name, display_label = count_rows[count_type]
+            deg_legend_handles.append(
+                _Line2D([], [], color="none", linestyle="none", marker=None)
+            )
+            deg_legend_labels.append(
+                f"{display_label}: {int(summary_counts.loc[row_name])}"
+            )
+
     # -------------------------
     # Plotting logic: two modes (with vs. without hue_column)
     # -------------------------
+    resolved_legend_bbox_to_anchor = legend_bbox_to_anchor
+    legend_loc = 1
+    if label_threshold_regions:
+        resolved_legend_bbox_to_anchor = (
+            legend_bbox_to_anchor
+            if legend_bbox_to_anchor is not None
+            else (1.02, 1)
+        )
+        legend_loc = "upper left"
+
     if hue_column is None:
         # Case 1: hue = Significance
         fig, ax = plt.subplots(figsize=figsize)
@@ -360,7 +610,7 @@ def volcano_plot_generic(
         # Add significance threshold lines
         if pvalue_threshold is not None:
             p.axhline(y=nlog10_pvalue_threshold, color='red', linestyle='--', label=f'pvalue<{pvalue_threshold} ')
-        p.axvline(x=log2FoldChange_threshold, color='gray', linestyle='--', label=f'log2fc>|{log2FoldChange_threshold}| ')
+        p.axvline(x=log2FoldChange_threshold, color='gray', linestyle='--', label=f'|log2fc|>={log2FoldChange_threshold} ')
         p.axvline(x=-log2FoldChange_threshold, color='gray', linestyle='--')
 
         # Axis labels + legend
@@ -368,7 +618,23 @@ def volcano_plot_generic(
         p.set_ylabel(set_ylabel, fontsize=axis_label_and_tick_fontsize)
         if axis_label_and_tick_fontsize is not None:
             p.tick_params(axis="both", labelsize=axis_label_and_tick_fontsize)
-        p.legend(bbox_to_anchor=legend_bbox_to_anchor, loc=1, borderaxespad=0.05, fontsize=legend_fontsize)
+        if deg_legend_handles:
+            handles, labels = p.get_legend_handles_labels()
+            p.legend(
+                handles + deg_legend_handles,
+                labels + deg_legend_labels,
+                bbox_to_anchor=resolved_legend_bbox_to_anchor,
+                loc=legend_loc,
+                borderaxespad=0.05,
+                fontsize=legend_fontsize,
+            )
+        else:
+            p.legend(
+                bbox_to_anchor=resolved_legend_bbox_to_anchor,
+                loc=legend_loc,
+                borderaxespad=0.05,
+                fontsize=legend_fontsize,
+            )
 
     elif hue_column is not None:
         # Case 2: custom hue column
@@ -389,7 +655,7 @@ def volcano_plot_generic(
         # Add threshold lines
         if pvalue_threshold is not None:
             p.axhline(y=nlog10_pvalue_threshold, color='red', linestyle='--', label=f'pvalue<{pvalue_threshold} ')
-        p.axvline(x=log2FoldChange_threshold, color='gray', linestyle='--', label=f'log2fc>|{log2FoldChange_threshold}|')
+        p.axvline(x=log2FoldChange_threshold, color='gray', linestyle='--', label=f'|log2fc|>={log2FoldChange_threshold}')
         p.axvline(x=-log2FoldChange_threshold, color='gray', linestyle='--')
 
         # Axis labels + legend cleanup
@@ -399,7 +665,39 @@ def volcano_plot_generic(
             p.tick_params(axis="both", labelsize=axis_label_and_tick_fontsize)
         handles = p.get_legend_handles_labels()[0][2:]  # Skip legends from gray layer
         labels = p.get_legend_handles_labels()[1][2:]
-        p.legend(handles, labels, bbox_to_anchor=legend_bbox_to_anchor, loc=1, borderaxespad=0.05, fontsize=legend_fontsize)
+        p.legend(
+            handles + deg_legend_handles,
+            labels + deg_legend_labels,
+            bbox_to_anchor=resolved_legend_bbox_to_anchor,
+            loc=legend_loc,
+            borderaxespad=0.05,
+            fontsize=legend_fontsize,
+        )
+
+    if label_threshold_regions:
+        region_counts = deg_count_table.loc[
+            deg_count_table["record_type"] == "region"
+        ].set_index("region")["count"]
+        x_lower, x_upper = p.get_xlim()
+        y_lower, y_upper = p.get_ylim()
+        region_positions = (
+            ("upper_left", (x_lower - log2FoldChange_threshold) / 2, (nlog10_pvalue_threshold + y_upper) / 2),
+            ("upper_center", 0.0, (nlog10_pvalue_threshold + y_upper) / 2),
+            ("upper_right", (log2FoldChange_threshold + x_upper) / 2, (nlog10_pvalue_threshold + y_upper) / 2),
+            ("lower_left", (x_lower - log2FoldChange_threshold) / 2, (y_lower + nlog10_pvalue_threshold) / 2),
+            ("lower_center", 0.0, (y_lower + nlog10_pvalue_threshold) / 2),
+            ("lower_right", (log2FoldChange_threshold + x_upper) / 2, (y_lower + nlog10_pvalue_threshold) / 2),
+        )
+        for region, x_position, y_position in region_positions:
+            p.text(
+                x_position,
+                y_position,
+                f"{region}\nn={int(region_counts.loc[region])}",
+                horizontalalignment="center",
+                verticalalignment="center",
+                color="black",
+                gid=f"volcano_threshold_region_{region}",
+            )
 
     # -------------------------
     # Optional: label top features
@@ -461,12 +759,19 @@ def volcano_plot_generic(
                    _truncate_label(df.sort_values(by=l2fc_col, ascending=False)[feature_label_col].to_list()[line]),
                    **label_kwargs)
 
+    if label_threshold_regions:
+        fig.tight_layout()
+
     # -------------------------
     # Save figure if requested
     # -------------------------
     if savefig:
         plt.savefig(file_name, dpi=300, bbox_inches="tight")
         print(f"Saved plot to {file_name}")
+        if save_deg_counts_csv:
+            csv_file_name = _Path(file_name).with_suffix(".csv")
+            deg_count_table.to_csv(csv_file_name, index=False)
+            print(f"Saved DEG counts to {csv_file_name}")
 
     return p
 

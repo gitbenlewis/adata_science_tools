@@ -360,6 +360,10 @@ volcano_plot_params:
     label_features_char_limit: 40
     pvalue_threshold: 0.05
     log2FoldChange_threshold: 0.5
+    deg_count_types: null
+    show_deg_counts_in_legend: true
+    label_threshold_regions: false
+    save_deg_counts_csv: false
     table_sep: ','
     feature_label_col: gene_name
   volcano_plot_runs:
