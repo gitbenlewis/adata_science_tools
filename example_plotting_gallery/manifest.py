@@ -848,6 +848,16 @@ RENDERER_MANIFEST: tuple[RendererSpec, ...] = (
                 features=("nested significance levels", "effect and p-value thresholds", "top-feature labels"),
             ),
             GalleryCase(
+                case_id="ranked_columns",
+                title="Ranked volcano labels in side columns",
+                asset="volcano_plot_generic__ranked_columns.png",
+                features=(
+                    "p-value-ranked labels",
+                    "signed side columns",
+                    "leader lines to plotted points",
+                ),
+            ),
+            GalleryCase(
                 case_id="feature_class",
                 title="Volcano plot with feature-class highlighting",
                 asset="volcano_plot_generic__feature_class.png",

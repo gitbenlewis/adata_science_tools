@@ -63,7 +63,7 @@ class PlottingGalleryTests(unittest.TestCase):
         self.assertEqual(len(RENDERER_MANIFEST), 45)
         self.assertEqual(
             sum(len(spec.cases) for spec in RENDERER_MANIFEST),
-            58,
+            59,
         )
         for spec in RENDERER_MANIFEST:
             renderer = getattr(adtl.pl, spec.name)
@@ -155,6 +155,37 @@ class PlottingGalleryTests(unittest.TestCase):
                     [panel["legend_bins"] for panel in effect_panels],
                     [4] * panel_count,
                 )
+
+    def test_ranked_volcano_gallery_requests_column_layout(self):
+        spec = next(
+            spec for spec in RENDERER_MANIFEST
+            if spec.name == "volcano_plot_generic"
+        )
+        case = next(
+            case for case in spec.cases if case.case_id == "ranked_columns"
+        )
+        inputs = mock.Mock(pooled_diff_results=mock.sentinel.pooled_results)
+
+        with mock.patch.object(
+            gallery_module.adtl,
+            "volcano_plot_generic",
+            return_value=mock.sentinel.axis,
+        ) as renderer:
+            result = gallery_module._invoke_case(
+                spec,
+                case,
+                inputs,
+                Path("unused.png"),
+            )
+
+        self.assertIs(result, mock.sentinel.axis)
+        self.assertIs(renderer.call_args.args[0], mock.sentinel.pooled_results)
+        self.assertEqual(renderer.call_args.kwargs["pvalue_col"], "padj")
+        self.assertEqual(
+            renderer.call_args.kwargs["label_layout"],
+            "ranked_columns",
+        )
+        self.assertEqual(renderer.call_args.kwargs["n_top_features"], 10)
 
     def test_committed_assets_exactly_match_manifest_cases(self):
         declared_assets = {

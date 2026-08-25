@@ -1646,6 +1646,32 @@ def _invoke_case(
                 dot_size_shrink_factor=4,
                 savefig=False,
             )
+        if case.case_id == "ranked_columns":
+            return renderer(
+                pooled,
+                l2fc_col="effect",
+                pvalue_col="padj",
+                set_xlabel="log2(case/control)",
+                set_ylabel="-log10(FDR-adjusted p-value)",
+                title_text="Ranked differential-test labels",
+                comparison_label="Case versus control across simulations",
+                log2FoldChange_threshold=0.1,
+                pvalue_threshold=0.05,
+                xlimit=0.55,
+                figsize=(9, 6),
+                legend_bbox_to_anchor=(1.24, 1),
+                title_fontsize=14,
+                axis_label_and_tick_fontsize=10,
+                legend_fontsize=9,
+                label_top_features=True,
+                label_top_features_fontsize=7,
+                label_features_char_limit=24,
+                feature_label_col="gene_names",
+                n_top_features=10,
+                dot_size_shrink_factor=4,
+                label_layout="ranked_columns",
+                savefig=False,
+            )
         if case.case_id == "feature_class":
             return renderer(
                 pooled,

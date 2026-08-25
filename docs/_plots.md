@@ -48,6 +48,7 @@ def volcano_plot_generic(
         dot_size_shrink_factor: int | None = 300,
         savefig: bool | None = False,
         file_name: str | None = 'volcano_plot.png',
+        label_layout: Literal["inline", "ranked_columns"] = "inline",
                      ):
 
 ```
@@ -66,9 +67,28 @@ ax = adtl.volcano_plot_generic(
 )
 ```
 
+To place a modest number of ranked labels in side columns instead of directly
+beside their points:
+
+```python
+ax = adtl.volcano_plot_generic(
+    results,
+    l2fc_col="effect",
+    pvalue_col="adjusted_pvalue",
+    feature_label_col="feature",
+    label_top_features=True,
+    n_top_features=10,
+    label_layout="ranked_columns",
+)
+```
+
 <img src="assets/plotting_gallery/volcano_plot_generic__significance.png" alt="Differential-test volcano plot" width="720">
 
 *`significance` — Differential-test volcano plot. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+
+<img src="assets/plotting_gallery/volcano_plot_generic__ranked_columns.png" alt="Ranked volcano labels in side columns" width="720">
+
+*`ranked_columns` — Ranked volcano labels in side columns. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
 
 <img src="assets/plotting_gallery/volcano_plot_generic__feature_class.png" alt="Volcano plot with feature-class highlighting" width="720">
 
@@ -81,7 +101,9 @@ ax = adtl.volcano_plot_generic(
 - If `hue_column` is not provided, the plot colors points by an internal `Significance` category with levels `Not Significant`, `alpha=0.2`, `alpha=0.1`, and `alpha=0.05`.
 - Significance thresholds combine `pvalue_col` with `abs(l2fc_col) >= log2FoldChange_threshold`.
 - `pvalue_threshold` adds a horizontal reference line using the original p-value scale.
-- `label_top_features=True` labels extreme or significant rows using `feature_label_col`, truncated by `label_features_char_limit`.
+- `label_top_features=True` with the default `label_layout="inline"` preserves direct labels at the selected points.
+- `label_layout="ranked_columns"` selects at most `n_top_features` rows by ascending `pvalue_col`, then the case-insensitive full feature label and source order. Non-positive effects use the left column, positive effects use the right column, and leader lines point to the plotted coordinates.
+- Ranked columns reuse `feature_label_col`, `label_top_features_fontsize`, `label_features_char_limit`, and the existing custom-hue label eligibility. They are intended for a modest label count, such as 5–15, rather than general collision solving.
 - `savefig=True` writes the figure with `plt.savefig(...)`.
 - The return value is the Matplotlib or Seaborn axes object.
 

@@ -1,5 +1,7 @@
 ''' plotting functions for anndata data science tools '''
 # module level imports
+from typing import Literal as _Literal
+
 import anndata
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,6 +10,96 @@ import pandas as pd
 from . import palettes
 
 #######  START  ############. Volcano plots ###################.###################.###################.###################.
+
+
+def _add_ranked_volcano_labels(
+        ax: plt.Axes,
+        df: pd.DataFrame,
+        *,
+        l2fc_col: str,
+        pvalue_col: str,
+        feature_label_col: str,
+        n_top_features: int,
+        label_top_features_fontsize: int | None,
+        label_features_char_limit: int | None,
+        ) -> None:
+    """Add deterministic side-column labels for already plotted volcano rows."""
+
+    display_labels = df[feature_label_col].map(
+        lambda value: "" if value is None else str(value)
+    )
+    ranking_frame = pd.DataFrame(
+        {
+            "effect": df[l2fc_col].to_numpy(copy=False),
+            "pvalue": df[pvalue_col].to_numpy(copy=False),
+            "plot_y": df["-log10(pvalue)"].to_numpy(copy=False),
+            "display_label": display_labels.to_numpy(copy=False),
+            "normalized_label": display_labels.str.casefold().to_numpy(copy=False),
+            "source_order": np.arange(df.shape[0]),
+        }
+    )
+    ranked = (
+        ranking_frame
+        .loc[
+            lambda frame: np.isfinite(frame["effect"])
+            & np.isfinite(frame["plot_y"])
+        ]
+        .sort_values(
+            by=[
+                "pvalue",
+                "normalized_label",
+                "source_order",
+            ],
+            kind="stable",
+        )
+        .head(max(n_top_features, 0))
+    )
+
+    def _truncate_label(label: str) -> str:
+        if label_features_char_limit is None:
+            return label
+        if label_features_char_limit <= 0:
+            return ""
+        if len(label) <= label_features_char_limit:
+            return label
+        if label_features_char_limit <= 3:
+            return label[:label_features_char_limit]
+        return f"{label[:label_features_char_limit - 3]}..."
+
+    positive_effect = ranked["effect"] > 0
+    label_columns = (
+        (ranked.loc[~positive_effect], 0.02, "left"),
+        (ranked.loc[positive_effect], 0.98, "right"),
+    )
+    for column_rows, label_x, horizontal_alignment in label_columns:
+        label_y_positions = np.linspace(
+            0.9,
+            0.1,
+            column_rows.shape[0] + 2,
+        )[1:-1]
+        for (_, row), label_y in zip(column_rows.iterrows(), label_y_positions):
+            annotation_kwargs = {
+                "horizontalalignment": horizontal_alignment,
+                "verticalalignment": "center",
+                "color": "black",
+                "arrowprops": {
+                    "arrowstyle": "-",
+                    "color": "0.5",
+                    "linewidth": 0.75,
+                    "alpha": 0.75,
+                },
+                "annotation_clip": False,
+            }
+            if label_top_features_fontsize is not None:
+                annotation_kwargs["size"] = label_top_features_fontsize
+            ax.annotate(
+                _truncate_label(row["display_label"]),
+                xy=(row["effect"], row["plot_y"]),
+                xycoords="data",
+                xytext=(label_x, label_y),
+                textcoords="axes fraction",
+                **annotation_kwargs,
+            )
 
 
 
@@ -45,6 +137,7 @@ def volcano_plot_generic(
         dot_size_shrink_factor: int | None = 300,
         savefig: bool | None = False,
         file_name: str | None = 'volcano_plot.png',
+        label_layout: _Literal["inline", "ranked_columns"] = "inline",
                      ):
 
     """
@@ -110,6 +203,10 @@ def volcano_plot_generic(
         Save figure to file if True (default False).
     file_name : str, optional
         Output filename for saved plot.
+    label_layout : {"inline", "ranked_columns"}, optional
+        Feature-label placement. The default "inline" preserves direct labels at
+        plotted points; "ranked_columns" places at most ``n_top_features`` labels
+        in deterministic side columns with leader lines.
 
     Returns
     -------
@@ -131,6 +228,11 @@ def volcano_plot_generic(
     import numpy as np
     import pandas as pd
     import matplotlib.pyplot as plt
+
+    if label_layout not in {"inline", "ranked_columns"}:
+        raise ValueError(
+            "label_layout must be either 'inline' or 'ranked_columns'."
+        )
 
     # -------------------------
     # Define custom color palettes
@@ -302,7 +404,22 @@ def volcano_plot_generic(
     # -------------------------
     # Optional: label top features
     # -------------------------
-    if label_top_features:
+    if label_top_features and label_layout == "ranked_columns":
+        label_df = df
+        if ((hue_column is not None) and (only_label_hue_dots == True)):
+            label_df = label_df[label_df[hue_column].notna()]
+        _add_ranked_volcano_labels(
+            p,
+            label_df,
+            l2fc_col=l2fc_col,
+            pvalue_col=pvalue_col,
+            feature_label_col=feature_label_col,
+            n_top_features=n_top_features,
+            label_top_features_fontsize=label_top_features_fontsize,
+            label_features_char_limit=label_features_char_limit,
+        )
+
+    elif label_top_features:
         def _truncate_label(value: object) -> str:
             label = "" if value is None else str(value)
             if label_features_char_limit is None:

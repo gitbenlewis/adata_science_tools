@@ -4,7 +4,7 @@ This gallery is a repository-owned visual catalog for the plotting functions
 exported by `adata_science_tools._plotting`. The coverage contract and asset
 filenames come from
 [`example_plotting_gallery/manifest.py`](../example_plotting_gallery/manifest.py):
-45 renderers and 58 cases, split across maintained, compatibility, and
+45 renderers and 59 cases, split across maintained, compatibility, and
 deprecated APIs.
 
 The examples are for rendering and API coverage. They are not benchmark
@@ -111,7 +111,7 @@ if coverage changes.
 | `timeseries_paired_datapoints`<br><small>`_plotting._plots`</small> | <a href="assets/plotting_gallery/timeseries_paired_datapoints__faceted_time_series.png"><img src="assets/plotting_gallery/timeseries_paired_datapoints__faceted_time_series.png" alt="Paired time-series datapoints" width="260"></a><br>`faceted_time_series` — Paired time-series datapoints |
 | `venn_plot_2list`<br><small>`_plotting._venn_plots`</small> | <a href="assets/plotting_gallery/venn_plot_2list__two_set_overlap.png"><img src="assets/plotting_gallery/venn_plot_2list__two_set_overlap.png" alt="Two feature-set overlap" width="260"></a><br>`two_set_overlap` — Two feature-set overlap |
 | `venn_plot_3list`<br><small>`_plotting._venn_plots`</small> | <a href="assets/plotting_gallery/venn_plot_3list__three_set_overlap.png"><img src="assets/plotting_gallery/venn_plot_3list__three_set_overlap.png" alt="Three feature-set overlap" width="260"></a><br>`three_set_overlap` — Three feature-set overlap |
-| `volcano_plot_generic`<br><small>`_plotting._plots`</small> | <a href="assets/plotting_gallery/volcano_plot_generic__significance.png"><img src="assets/plotting_gallery/volcano_plot_generic__significance.png" alt="Differential-test volcano plot" width="260"></a><br>`significance` — Differential-test volcano plot<br><br><a href="assets/plotting_gallery/volcano_plot_generic__feature_class.png"><img src="assets/plotting_gallery/volcano_plot_generic__feature_class.png" alt="Volcano plot with feature-class highlighting" width="260"></a><br>`feature_class` — Volcano plot with feature-class highlighting |
+| `volcano_plot_generic`<br><small>`_plotting._plots`</small> | <a href="assets/plotting_gallery/volcano_plot_generic__significance.png"><img src="assets/plotting_gallery/volcano_plot_generic__significance.png" alt="Differential-test volcano plot" width="260"></a><br>`significance` — Differential-test volcano plot<br><br><a href="assets/plotting_gallery/volcano_plot_generic__ranked_columns.png"><img src="assets/plotting_gallery/volcano_plot_generic__ranked_columns.png" alt="Ranked volcano labels in side columns" width="260"></a><br>`ranked_columns` — Ranked volcano labels in side columns<br><br><a href="assets/plotting_gallery/volcano_plot_generic__feature_class.png"><img src="assets/plotting_gallery/volcano_plot_generic__feature_class.png" alt="Volcano plot with feature-class highlighting" width="260"></a><br>`feature_class` — Volcano plot with feature-class highlighting |
 
 ### Compatibility renderers (6)
 
