@@ -546,6 +546,17 @@ RENDERER_MANIFEST: tuple[RendererSpec, ...] = (
                 ),
             ),
             GalleryCase(
+                case_id="difference_axis",
+                title="Varied paired slopes and signed differences",
+                asset="paired_datapoints__difference_axis.png",
+                features=(
+                    "varied slope magnitudes",
+                    "combined positive, negative, and flat panel",
+                    "raw signed paired differences",
+                    "zero-centered symmetric secondary y axes",
+                ),
+            ),
+            GalleryCase(
                 case_id="precomputed_pair_values",
                 title="Paired values from preserved source matrices",
                 asset="paired_datapoints__precomputed_pair_values.png",

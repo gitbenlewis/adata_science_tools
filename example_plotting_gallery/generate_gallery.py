@@ -1278,6 +1278,96 @@ def _invoke_case(
             show=False,
         )
 
+    if case_key == ("paired_datapoints", "difference_axis"):
+        paired = inputs.paired
+        post_mask = paired.obs["condition"].astype(str).eq("post").to_numpy()
+        subject_ids = pd.Index(pd.unique(paired.obs["subject_id"].astype(str)))
+        # Replace the fixed simulation effects with deterministic subject-specific changes.
+        subject_changes = pd.DataFrame(
+            {
+                "positive_slopes": np.linspace(0.75, 2.75, len(subject_ids)),
+                "negative_slopes": -np.linspace(0.75, 2.5, len(subject_ids)),
+                "approximately_flat": np.resize(
+                    np.asarray([-0.2, -0.1, 0.0, 0.1, 0.2]),
+                    len(subject_ids),
+                ),
+            },
+            index=subject_ids,
+        )
+        row_changes = subject_changes.loc[
+            paired.obs["subject_id"].astype(str)
+        ].to_numpy()
+        varied_values = np.asarray(paired.layers["linear_mean"], dtype=float).copy()
+        varied_values[post_mask] += (
+            row_changes[post_mask]
+            - paired.var["true_paired_effect"].to_numpy(dtype=float)
+        )
+        # Duplicate the direction variables so stack mode can show them separately and together.
+        individual_variables = list(subject_changes.columns)
+        combined_variables = [
+            f"all_{variable}" for variable in individual_variables
+        ]
+        gallery_df = pd.DataFrame(
+            np.concatenate([varied_values, varied_values], axis=1),
+            index=paired.obs_names,
+            columns=individual_variables + combined_variables,
+        ).join(paired.obs[["condition", "subject_id", "cohort"]])
+        gallery_var_df = pd.DataFrame(
+            {
+                "gallery_panel": [
+                    "Positive slopes",
+                    "Negative slopes",
+                    "Approximately flat",
+                    "All directions",
+                    "All directions",
+                    "All directions",
+                ],
+            },
+            index=individual_variables + combined_variables,
+        )
+        return renderer(
+            df=gallery_df,
+            var_df=gallery_var_df,
+            var_names=[
+                "Positive slopes",
+                "Negative slopes",
+                "Approximately flat",
+                "All directions",
+            ],
+            var_groupby_key="gallery_panel",
+            collapse_mode="stack",
+            groupby_key="condition",
+            groupby_key_ref_value="pre",
+            groupby_key_target_value="post",
+            pair_by_key="subject_id",
+            subset_obs_key="cohort",
+            subset_order=["cohort_a", "cohort_b"],
+            subset_palette=["#4477AA", "#CC6677"],
+            show_paired_difference=True,
+            paired_difference_label="post - pre",
+            paired_difference_ylabel="Paired difference",
+            paired_difference_ylims=(-3.0, 3.0),
+            line_color_by_slope=True,
+            slope_color_threshold=0.05,
+            line_alpha=0.5,
+            line_width=1.1,
+            jitter_amount=0.08,
+            random_seed=2026,
+            point_size=26,
+            point_alpha=0.7,
+            boxplot=False,
+            legend=True,
+            legend_scope="figure",
+            legend_loc="center left",
+            legend_bbox_to_anchor=(1.01, 0.5),
+            title="Varied paired slopes and signed differences",
+            xlabel="Condition and derived change",
+            ylabel="Simulated abundance",
+            ncols=4,
+            figsize=(16, 4.2),
+            show=False,
+        )
+
     if case_key == ("paired_datapoints", "precomputed_pair_values"):
         return renderer(
             adata=inputs.paired_source_summary,

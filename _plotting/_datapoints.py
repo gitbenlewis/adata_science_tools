@@ -1507,6 +1507,10 @@ def paired_datapoints(
     negative_slope_color: Any = "red",
     positive_slope_color: Any = "green",
     flat_slope_color: Any = "gray",
+    show_paired_difference: bool = False,
+    paired_difference_label: str | None = None,
+    paired_difference_ylabel: str | None = None,
+    paired_difference_ylims: Sequence[float] | None = None,
     line_width: float = 0.9,
     line_style: str = "--",
     jitter_amount: float = 0.2,
@@ -1611,6 +1615,30 @@ def paired_datapoints(
             raise ValueError("'ylims' lower bound must be less than upper bound.")
     else:
         ylims_tuple = None
+    if paired_difference_ylims is not None:
+        paired_difference_ylims_tuple = tuple(paired_difference_ylims)
+        if (
+            len(paired_difference_ylims_tuple) != 2
+            or not all(
+                isinstance(value, _Real)
+                and not isinstance(value, (bool, np.bool_))
+                and np.isfinite(value)
+                for value in paired_difference_ylims_tuple
+            )
+            or paired_difference_ylims_tuple[0] >= paired_difference_ylims_tuple[1]
+            or not np.isclose(
+                paired_difference_ylims_tuple[0],
+                -paired_difference_ylims_tuple[1],
+                rtol=1e-12,
+                atol=0.0,
+            )
+        ):
+            raise ValueError(
+                "'paired_difference_ylims' must contain two finite increasing "
+                "values symmetric around zero."
+            )
+    else:
+        paired_difference_ylims_tuple = None
 
     source_obsm_pair: tuple[str, str] | None = None
     if adata is not None:
@@ -1995,6 +2023,16 @@ def paired_datapoints(
     records: list[dict[str, Any]] = []
     ref_label = str(groupby_key_ref_value)
     target_label = str(groupby_key_target_value)
+    resolved_difference_label = (
+        f"{target_label} - {ref_label}"
+        if paired_difference_label is None
+        else str(paired_difference_label)
+    )
+    resolved_difference_ylabel = (
+        "Paired difference"
+        if paired_difference_ylabel is None
+        else str(paired_difference_ylabel)
+    )
     active_subset_key = subset_obs_key or subset_var_key
     active_subset_metadata_df = filtered_obs_df if subset_obs_key is not None else var_metadata_df
     var_subset_values_by_name = var_metadata_df[subset_var_key] if subset_var_key is not None else None
@@ -2226,6 +2264,33 @@ def paired_datapoints(
         plot_df[active_subset_key] = plot_df["subset_value"]
     if nas2zeros:
         plot_df["value"] = plot_df["value"].fillna(0)
+    if show_paired_difference:
+        # Ref and target records are emitted in pairs, so their filtered arrays
+        # stay aligned without relying on delimiter-joined line IDs as keys.
+        ref_values = plot_df.loc[
+            plot_df["side"] == "ref", "value"
+        ].to_numpy(dtype=float)
+        difference_df = plot_df.loc[plot_df["side"] == "target"].copy()
+        target_values = difference_df["value"].to_numpy(dtype=float)
+        with np.errstate(invalid="ignore", over="ignore"):
+            difference_values = target_values - ref_values
+        invalid_difference = (
+            ~np.isfinite(ref_values)
+            | ~np.isfinite(target_values)
+            | ~np.isfinite(difference_values)
+        )
+        if invalid_difference.any():
+            log.warning(
+                "Paired differences were nonfinite for %d line(s); setting "
+                "their derived values to NaN.",
+                int(invalid_difference.sum()),
+            )
+            difference_values[invalid_difference] = np.nan
+        difference_df["x_label"] = resolved_difference_label
+        difference_df["x_order"] = 3
+        difference_df["value"] = difference_values
+        difference_df["side"] = "difference"
+        plot_df = pd.concat([plot_df, difference_df], ignore_index=True)
     if dropna:
         plot_df = plot_df.dropna(subset=["value"])
     if dropzeros:
@@ -2241,6 +2306,9 @@ def paired_datapoints(
     fig, axes_array = plt.subplots(plot_nrows, plot_ncols, figsize=figsize, squeeze=False, sharey=sharey)
     axes_flat = axes_array.ravel()
     axes_by_panel: dict[str, plt.Axes] = {}
+    shared_difference_ax: plt.Axes | None = None
+    difference_axes: list[plt.Axes] = []
+    finite_difference_axes: list[plt.Axes] = []
     rng = np.random.default_rng(random_seed)
     plot_df = plot_df.copy()
     plot_df["_jittered_x"] = plot_df["x_order"] + rng.uniform(
@@ -2277,6 +2345,9 @@ def paired_datapoints(
                 subset_value: subset_colors[idx % len(subset_colors)]
                 for idx, subset_value in enumerate(subset_hue_order)
             }
+        elif show_paired_difference and subset_hue_order:
+            subset_colors = sns.color_palette(n_colors=len(subset_hue_order))
+            subset_palette_map = dict(zip(subset_hue_order, subset_colors))
 
     if palette is None:
         default_point_color = "black"
@@ -2301,10 +2372,31 @@ def paired_datapoints(
         if panel_df.empty:
             ax.text(0.5, 0.5, "No plottable values", ha="center", va="center", transform=ax.transAxes)
             continue
+        endpoint_panel_df = panel_df.loc[
+            panel_df["side"].isin(["ref", "target"])
+        ]
+        difference_panel_df = panel_df.loc[
+            panel_df["side"] == "difference"
+        ]
+        difference_ax: plt.Axes | None = None
+        if show_paired_difference:
+            difference_ax = ax.twinx()
+            difference_ax.set_label(f"{panel_name}__paired_difference")
+            difference_axes.append(difference_ax)
+            if np.isfinite(
+                difference_panel_df["value"].to_numpy(dtype=float)
+            ).any():
+                finite_difference_axes.append(difference_ax)
+            if sharey and shared_difference_ax is not None:
+                difference_ax.sharey(shared_difference_ax)
+            elif sharey:
+                shared_difference_ax = difference_ax
 
         if boxplot:
             box_values = [
-                panel_df.loc[panel_df["x_order"] == x_order, "value"].dropna().to_numpy()
+                endpoint_panel_df.loc[
+                    endpoint_panel_df["x_order"] == x_order, "value"
+                ].dropna().to_numpy()
                 for x_order in (1, 2)
             ]
             if any(len(values) for values in box_values):
@@ -2322,7 +2414,7 @@ def paired_datapoints(
                     cap.set_visible(False)
 
         if connect_lines:
-            for _, line_df in panel_df.groupby("line_id", sort=False):
+            for _, line_df in endpoint_panel_df.groupby("line_id", sort=False):
                 if set(line_df["x_order"]) >= {1, 2}:
                     line_df = line_df.sort_values("x_order")
                     resolved_line_color = line_color
@@ -2362,40 +2454,54 @@ def paired_datapoints(
                         zorder=1,
                     )
 
-        if active_subset_key is None:
-            ax.scatter(
-                panel_df["_jittered_x"],
-                panel_df["value"],
-                color=default_point_color,
-                s=point_size,
-                alpha=point_alpha,
-                zorder=2,
-            )
-        else:
-            for subset_value in subset_hue_order:
-                subset_df = panel_df.loc[panel_df[active_subset_key] == subset_value]
-                if subset_df.empty:
-                    continue
-                color = subset_palette_map.get(subset_value) if subset_palette_map is not None else None
-                ax.scatter(
-                    subset_df["_jittered_x"],
-                    subset_df["value"],
-                    color=color,
-                    s=point_size,
-                    alpha=point_alpha,
-                    label=str(subset_value),
-                    zorder=2,
-                )
-            missing_subset_df = panel_df.loc[panel_df[active_subset_key].isna()]
-            if not missing_subset_df.empty:
-                ax.scatter(
-                    missing_subset_df["_jittered_x"],
-                    missing_subset_df["value"],
-                    color="black",
+        scatter_targets = [(ax, endpoint_panel_df, True)]
+        if difference_ax is not None:
+            scatter_targets.append((difference_ax, difference_panel_df, False))
+        for scatter_ax, scatter_df, add_legend_labels in scatter_targets:
+            if scatter_df.empty:
+                continue
+            if active_subset_key is None:
+                scatter_ax.scatter(
+                    scatter_df["_jittered_x"],
+                    scatter_df["value"],
+                    color=default_point_color,
                     s=point_size,
                     alpha=point_alpha,
                     zorder=2,
                 )
+            else:
+                for subset_value in subset_hue_order:
+                    subset_df = scatter_df.loc[
+                        scatter_df[active_subset_key] == subset_value
+                    ]
+                    if subset_df.empty:
+                        continue
+                    color = (
+                        subset_palette_map.get(subset_value)
+                        if subset_palette_map is not None
+                        else None
+                    )
+                    scatter_ax.scatter(
+                        subset_df["_jittered_x"],
+                        subset_df["value"],
+                        color=color,
+                        s=point_size,
+                        alpha=point_alpha,
+                        label=str(subset_value) if add_legend_labels else None,
+                        zorder=2,
+                    )
+                missing_subset_df = scatter_df.loc[
+                    scatter_df[active_subset_key].isna()
+                ]
+                if not missing_subset_df.empty:
+                    scatter_ax.scatter(
+                        missing_subset_df["_jittered_x"],
+                        missing_subset_df["value"],
+                        color="black",
+                        s=point_size,
+                        alpha=point_alpha,
+                        zorder=2,
+                    )
 
         if subplot_title_var_col is not None and panel_name in var_metadata_df.index:
             panel_title = str(var_metadata_df.loc[panel_name, subplot_title_var_col])
@@ -2405,14 +2511,29 @@ def paired_datapoints(
         if subplot_title_y is not None:
             subplot_title_kwargs["y"] = subplot_title_y
         ax.set_title(panel_title, **subplot_title_kwargs)
-        ax.set_xticks([1, 2])
-        ax.set_xticklabels([ref_label, target_label], rotation=45, ha="right")
+        if show_paired_difference:
+            ax.set_xticks([1, 2, 3])
+            ax.set_xticklabels(
+                [ref_label, target_label, resolved_difference_label],
+                rotation=45,
+                ha="right",
+            )
+        else:
+            ax.set_xticks([1, 2])
+            ax.set_xticklabels([ref_label, target_label], rotation=45, ha="right")
         ax.set_xlabel(groupby_key if xlabel is None else xlabel, fontsize=axis_label_fontsize)
         ax.set_ylabel(ylabel or "value", fontsize=axis_label_fontsize)
         if tick_label_fontsize is not None:
             ax.tick_params(axis="both", labelsize=tick_label_fontsize)
+            if difference_ax is not None:
+                difference_ax.tick_params(axis="y", labelsize=tick_label_fontsize)
         if ylims_tuple is not None:
             ax.set_ylim(ylims_tuple)
+        if difference_ax is not None:
+            difference_ax.set_ylabel(
+                resolved_difference_ylabel,
+                fontsize=axis_label_fontsize,
+            )
         if legend and legend_scope == "axis" and active_subset_key is not None and subset_hue_order:
             legend_kwargs: dict[str, Any] = {"title": active_subset_key, "fontsize": legend_fontsize}
             if legend_loc is not None:
@@ -2420,6 +2541,19 @@ def paired_datapoints(
             if legend_bbox_to_anchor is not None:
                 legend_kwargs["bbox_to_anchor"] = legend_bbox_to_anchor
             ax.legend(**legend_kwargs)
+
+    if difference_axes:
+        if paired_difference_ylims_tuple is None:
+            autoscaled_difference_axes = finite_difference_axes or difference_axes[:1]
+            difference_limit = max(
+                max(abs(bound) for bound in difference_ax.get_ylim())
+                for difference_ax in autoscaled_difference_axes
+            )
+            resolved_difference_ylims = (-difference_limit, difference_limit)
+        else:
+            resolved_difference_ylims = paired_difference_ylims_tuple
+        for difference_ax in difference_axes:
+            difference_ax.set_ylim(resolved_difference_ylims)
 
     for ax in axes_flat[len(plot_panel_names):]:
         ax.set_visible(False)

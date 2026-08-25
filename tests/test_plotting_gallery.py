@@ -63,7 +63,7 @@ class PlottingGalleryTests(unittest.TestCase):
         self.assertEqual(len(RENDERER_MANIFEST), 45)
         self.assertEqual(
             sum(len(spec.cases) for spec in RENDERER_MANIFEST),
-            59,
+            60,
         )
         for spec in RENDERER_MANIFEST:
             renderer = getattr(adtl.pl, spec.name)
@@ -186,6 +186,82 @@ class PlottingGalleryTests(unittest.TestCase):
             "ranked_columns",
         )
         self.assertEqual(renderer.call_args.kwargs["n_top_features"], 10)
+
+    def test_difference_gallery_has_varied_and_combined_slopes(self):
+        spec = next(
+            spec for spec in RENDERER_MANIFEST if spec.name == "paired_datapoints"
+        )
+        case = next(
+            case for case in spec.cases if case.case_id == "difference_axis"
+        )
+
+        with mock.patch.object(
+            gallery_module.adtl,
+            "paired_datapoints",
+            return_value=plt.figure(),
+        ) as renderer:
+            gallery_module._invoke_case(
+                spec,
+                case,
+                gallery_module.GalleryInputs(),
+                Path("unused.png"),
+            )
+
+        kwargs = renderer.call_args.kwargs
+        gallery_df = kwargs["df"]
+        gallery_var_df = kwargs["var_df"]
+        individual_variables = [
+            "positive_slopes",
+            "negative_slopes",
+            "approximately_flat",
+        ]
+        pre = gallery_df.loc[
+            gallery_df["condition"].astype(str) == "pre"
+        ].set_index("subject_id")
+        post = gallery_df.loc[
+            gallery_df["condition"].astype(str) == "post"
+        ].set_index("subject_id")
+        changes = post[individual_variables] - pre[individual_variables]
+        average_magnitude = (
+            post[individual_variables].abs() + pre[individual_variables].abs()
+        ) / 2
+        relative_changes = changes / average_magnitude
+
+        self.assertGreater(changes["positive_slopes"].nunique(), 2)
+        self.assertGreater(changes["negative_slopes"].nunique(), 2)
+        self.assertTrue((relative_changes["positive_slopes"] > 0.05).all())
+        self.assertTrue((relative_changes["negative_slopes"] < -0.05).all())
+        self.assertTrue((relative_changes["approximately_flat"].abs() < 0.05).all())
+        self.assertLess(changes["approximately_flat"].min(), 0)
+        self.assertGreater(changes["approximately_flat"].max(), 0)
+        self.assertTrue((changes["approximately_flat"] == 0).any())
+        for variable in individual_variables:
+            pd.testing.assert_series_equal(
+                gallery_df[variable],
+                gallery_df[f"all_{variable}"],
+                check_names=False,
+            )
+        self.assertEqual(
+            gallery_var_df["gallery_panel"].tolist(),
+            [
+                "Positive slopes",
+                "Negative slopes",
+                "Approximately flat",
+                "All directions",
+                "All directions",
+                "All directions",
+            ],
+        )
+        self.assertEqual(
+            kwargs["var_names"],
+            list(pd.unique(gallery_var_df["gallery_panel"])),
+        )
+        self.assertEqual(kwargs["collapse_mode"], "stack")
+        self.assertEqual(kwargs["ncols"], 4)
+        self.assertTrue(kwargs["show_paired_difference"])
+        self.assertEqual(kwargs["paired_difference_label"], "post - pre")
+        self.assertEqual(kwargs["paired_difference_ylabel"], "Paired difference")
+        self.assertEqual(kwargs["paired_difference_ylims"], (-3.0, 3.0))
 
     def test_committed_assets_exactly_match_manifest_cases(self):
         declared_assets = {
@@ -358,6 +434,7 @@ class PlottingGalleryTests(unittest.TestCase):
                     "datapoints_effect_panels_column__vertical_interval.png",
                     "geneset_enrichemnt_ol_ven_M_n_N_x__replacement_smoke.png",
                     "geneset_enrichment_venn__universe_filtered.png",
+                    "paired_datapoints__difference_axis.png",
                     "paired_datapoints__paired_groups.png",
                     "paired_datapoints__precomputed_pair_values.png",
                     "paired_datapoints__slope_colored_lines.png",
@@ -431,16 +508,23 @@ class PlottingGalleryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_directory:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                first = generate_gallery(
-                    Path(temporary_directory) / "first",
-                    renderer_names=["barh_column"],
-                )[0]
-                second = generate_gallery(
-                    Path(temporary_directory) / "second",
-                    renderer_names=["barh_column"],
-                )[0]
+                for renderer_name, case_id in (
+                    ("barh_column", "grouped_expression"),
+                    ("paired_datapoints", "difference_axis"),
+                ):
+                    with self.subTest(renderer=renderer_name, case=case_id):
+                        first = generate_gallery(
+                            Path(temporary_directory) / renderer_name / "first",
+                            renderer_names=[renderer_name],
+                            case_ids=[case_id],
+                        )[0]
+                        second = generate_gallery(
+                            Path(temporary_directory) / renderer_name / "second",
+                            renderer_names=[renderer_name],
+                            case_ids=[case_id],
+                        )[0]
 
-            self.assertEqual(first.read_bytes(), second.read_bytes())
+                        self.assertEqual(first.read_bytes(), second.read_bytes())
 
     def test_failed_generation_preserves_previous_asset_atomically(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
