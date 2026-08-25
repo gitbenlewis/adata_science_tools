@@ -63,6 +63,11 @@ def paired_datapoints(
     connect_lines: bool = True,
     line_alpha: float = 0.55,
     line_color: Any = "0.55",
+    line_color_by_slope: bool = False,
+    slope_color_threshold: float = 0.05,
+    negative_slope_color: Any = "red",
+    positive_slope_color: Any = "green",
+    flat_slope_color: Any = "gray",
     line_width: float = 0.9,
     line_style: str = "--",
     jitter_amount: float = 0.2,
@@ -251,6 +256,48 @@ fig, axes, plot_df = adtl.paired_datapoints(
 4. Incomplete ref-only or target-only pairs are dropped and logged as warnings.
 
 5. If no complete pairs remain, the function raises `ValueError`.
+
+## Slope-colored connecting lines
+
+Set `line_color_by_slope=True` to color each complete connecting line with
+finite endpoints from its symmetric average-magnitude normalized change:
+`(target - reference) / ((abs(reference) + abs(target)) / 2)`. The absolute
+magnitudes make the calculation safe for negative or opposite-sign endpoints,
+and swapping the endpoints negates the change without altering its magnitude.
+The calculation uses the displayed y values, not the jittered x positions.
+
+Exact zero and values with
+`abs(normalized_change) < slope_color_threshold` use `flat_slope_color`; values
+exactly equal to the positive or negative threshold remain directional. The
+default threshold `0.05` therefore means 5%, so a change from `100` to `99` is
+approximately `-1.005%` and gray. A pair with both endpoints equal to zero is
+flat. A pair with exactly one zero endpoint has a normalized change of `2` or
+`-2`, so it is directional at the default threshold; thresholds greater than
+`2` classify every finite symmetric change as flat. The default directional
+colors are green for positive changes and red for negative changes, while
+approximately flat lines are gray.
+
+When slope coloring is disabled, `line_color` remains the uniform connector
+color. When it is enabled, the three slope colors take precedence for finite
+endpoints; a connector with a nonfinite endpoint retains `line_color`. Grouped
+`collapse_mode="aggregate"` lines are classified from their displayed reduced
+values; `collapse_mode="stack"` and `collapse_mode="all"` classify each pair and
+source-variable line independently. Slope coloring does not add a legend.
+
+```python
+fig, axes, plot_df = adtl.paired_datapoints(
+    adata=adata,
+    var_names=["IL6"],
+    pair_by_key="Subject_ID",
+    line_color_by_slope=True,
+    slope_color_threshold=0.05,
+    show=False,
+)
+```
+
+<img src="assets/plotting_gallery/paired_datapoints__slope_colored_lines.png" alt="Paired lines colored by relative change" width="720">
+
+*`slope_colored_lines` — Deterministic positive, negative, and approximately-flat paired changes. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
 
 ## Bounds
 

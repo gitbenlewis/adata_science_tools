@@ -1252,6 +1252,32 @@ def _invoke_case(
             show=False,
         )
 
+    if case_key == ("paired_datapoints", "slope_colored_lines"):
+        return renderer(
+            adata=inputs.paired,
+            var_names=["paired_increase", "paired_decrease", "paired_null"],
+            layer="linear_mean",
+            groupby_key="condition",
+            groupby_key_ref_value="pre",
+            groupby_key_target_value="post",
+            pair_by_key="subject_id",
+            line_color_by_slope=True,
+            slope_color_threshold=0.05,
+            line_alpha=0.75,
+            line_width=1.4,
+            jitter_amount=0.08,
+            random_seed=2026,
+            point_size=36,
+            boxplot=False,
+            title="Paired changes colored by direction",
+            xlabel="Condition",
+            ylabel="Simulated abundance",
+            subplot_title_var_col="feature_label",
+            ncols=3,
+            figsize=(10.5, 3.8),
+            show=False,
+        )
+
     if case_key == ("paired_datapoints", "precomputed_pair_values"):
         return renderer(
             adata=inputs.paired_source_summary,

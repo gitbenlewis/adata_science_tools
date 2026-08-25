@@ -1,6 +1,7 @@
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import anndata as ad
 import matplotlib
@@ -9,6 +10,7 @@ import pandas as pd
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.colors import to_rgba
 
 
 REPO_PARENT = Path(__file__).resolve().parents[2]
@@ -497,6 +499,188 @@ class PairedDatapointsTests(unittest.TestCase):
                 plt.close(fig_aggregate)
             if fig_stack is not None:
                 plt.close(fig_stack)
+
+    def test_line_colors_by_slope_use_average_relative_change_and_default_threshold(self):
+        cases = [
+            ("S01", 100.0, 99.0, "gray"),  # approximately -1%
+            ("S02", 100.0, 105.0, "gray"),  # approximately +4.88%
+            ("S03", 39.0, 41.0, "green"),  # exactly +5%
+            ("S04", 39.0, 41.01, "green"),  # just above +5%
+            ("S05", 41.0, 39.01, "gray"),  # just inside -5%
+            ("S06", 41.0, 39.0, "red"),  # exactly -5%
+            ("S07", 41.0, 38.99, "red"),  # just below -5%
+            ("S08", -41.0, -39.0, "green"),  # negative values, positive direction
+            ("S09", -39.0, -41.0, "red"),  # negative values, negative direction
+            ("S10", -1.0, 1.0, "green"),  # crosses zero upward
+            ("S11", 1.0, -1.0, "red"),  # crosses zero downward
+            ("S12", 0.0, 0.0, "gray"),
+            ("S13", 0.0, 1.0, "green"),
+            ("S14", 0.0, -1.0, "red"),
+            ("S15", 1.0, 0.0, "red"),
+            ("S16", -1.0, 0.0, "green"),
+            ("S17", 0.0, np.nextafter(0.0, 1.0), "green"),
+        ]
+        slope_df = pd.DataFrame(
+            {
+                "Pre_or_Post_obs_col": ["Pre", "Post"] * len(cases),
+                "Subject_ID": np.repeat([case[0] for case in cases], 2),
+                "feature": np.asarray([(case[1], case[2]) for case in cases]).ravel(),
+            }
+        )
+
+        fig, axes, _ = adtl.paired_datapoints(
+            df=slope_df,
+            var_names=["feature"],
+            pair_by_key="Subject_ID",
+            line_color_by_slope=True,
+            boxplot=False,
+            show=False,
+        )
+        self.addCleanup(plt.close, fig)
+
+        self.assertEqual(
+            [to_rgba(line.get_color()) for line in axes["feature"].lines],
+            [to_rgba(case[3]) for case in cases],
+        )
+
+        extreme_df = pd.DataFrame(
+            {
+                "Pre_or_Post_obs_col": ["Pre", "Post"],
+                "Subject_ID": ["S18", "S18"],
+                "feature": [1e308, 1.1e308],
+            }
+        )
+        # Matplotlib's tick locator cannot lay out values near float64's limit.
+        with mock.patch.object(plt, "tight_layout"):
+            extreme_fig, extreme_axes, _ = adtl.paired_datapoints(
+                df=extreme_df,
+                var_names=["feature"],
+                pair_by_key="Subject_ID",
+                line_color_by_slope=True,
+                boxplot=False,
+                show=False,
+            )
+        self.addCleanup(plt.close, extreme_fig)
+        self.assertEqual(
+            [to_rgba(line.get_color()) for line in extreme_axes["feature"].lines],
+            [to_rgba("green")],
+        )
+
+    def test_custom_slope_colors_use_values_after_bounds(self):
+        slope_df = pd.DataFrame(
+            {
+                "Pre_or_Post_obs_col": ["Pre", "Post"] * 3,
+                "Subject_ID": ["S1", "S1", "S2", "S2", "S3", "S3"],
+                "feature": [1.0, 110.0, 100.0, 130.0, 100.0, 70.0],
+            }
+        )
+
+        fig, axes, plot_df = adtl.paired_datapoints(
+            df=slope_df,
+            var_names=["feature"],
+            pair_by_key="Subject_ID",
+            ref_min_value=100.0,
+            line_color_by_slope=True,
+            slope_color_threshold=0.2,
+            negative_slope_color="#112233",
+            positive_slope_color="#445566",
+            flat_slope_color="#778899",
+            boxplot=False,
+            show=False,
+        )
+        self.addCleanup(plt.close, fig)
+
+        self.assertEqual(
+            plot_df.loc[(plot_df["pair_id"] == "S1") & (plot_df["side"] == "ref"), "value"].tolist(),
+            [100.0],
+        )
+        self.assertCountEqual(
+            [to_rgba(line.get_color()) for line in axes["feature"].lines],
+            [to_rgba("#778899"), to_rgba("#445566"), to_rgba("#112233")],
+        )
+
+    def test_uniform_line_color_remains_default_and_connect_lines_false_draws_no_lines(self):
+        fig_uniform, axes_uniform, _ = adtl.paired_datapoints(
+            adata=self.make_adata(),
+            var_names=["A_v1"],
+            pair_by_key="Subject_ID",
+            line_color="purple",
+            boxplot=False,
+            show=False,
+        )
+        self.addCleanup(plt.close, fig_uniform)
+        self.assertEqual(len(axes_uniform["A_v1"].lines), 3)
+        self.assertTrue(
+            all(to_rgba(line.get_color()) == to_rgba("purple") for line in axes_uniform["A_v1"].lines)
+        )
+
+        fig_disconnected, axes_disconnected, _ = adtl.paired_datapoints(
+            adata=self.make_adata(),
+            var_names=["A_v1"],
+            pair_by_key="Subject_ID",
+            connect_lines=False,
+            line_color_by_slope=True,
+            boxplot=False,
+            show=False,
+        )
+        self.addCleanup(plt.close, fig_disconnected)
+        self.assertEqual(len(axes_disconnected["A_v1"].lines), 0)
+
+    def test_slope_color_threshold_must_be_finite_and_non_negative(self):
+        for threshold in (-0.01, np.nan, np.inf, -np.inf, True, "0.05"):
+            with self.subTest(threshold=threshold):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "'slope_color_threshold' must be a finite non-negative number.",
+                ):
+                    adtl.paired_datapoints(
+                        adata=self.make_adata(),
+                        var_names=["A_v1"],
+                        pair_by_key="Subject_ID",
+                        slope_color_threshold=threshold,
+                        show=False,
+                    )
+
+    def test_slope_colors_compose_with_stack_and_aggregate(self):
+        grouped_df = pd.DataFrame(
+            {
+                "Pre_or_Post_obs_col": ["Pre", "Post"],
+                "Subject_ID": ["S1", "S1"],
+                "A_v1": [0.0, 1.0],
+                "A_v2": [1.0, 0.0],
+            }
+        )
+        var_df = pd.DataFrame({"Gene": ["GENE_A", "GENE_A"]}, index=["A_v1", "A_v2"])
+
+        plot_kwargs = {
+            "df": grouped_df,
+            "var_df": var_df,
+            "var_names": ["GENE_A"],
+            "var_groupby_key": "Gene",
+            "pair_by_key": "Subject_ID",
+            "line_color_by_slope": True,
+            "boxplot": False,
+            "show": False,
+        }
+
+        fig_stack, stack_axes, _ = adtl.paired_datapoints(collapse_mode="stack", **plot_kwargs)
+        self.addCleanup(plt.close, fig_stack)
+        self.assertCountEqual(
+            [to_rgba(line.get_color()) for line in stack_axes["GENE_A"].lines],
+            [to_rgba("green"), to_rgba("red")],
+        )
+
+        fig_aggregate, aggregate_axes, _ = adtl.paired_datapoints(
+            collapse_mode="aggregate",
+            collapse_func="mean",
+            slope_color_threshold=0,
+            **plot_kwargs,
+        )
+        self.addCleanup(plt.close, fig_aggregate)
+        self.assertEqual(
+            [to_rgba(line.get_color()) for line in aggregate_axes["GENE_A"].lines],
+            [to_rgba("gray")],
+        )
 
     def test_subplot_by_obs_key_splits_single_variable_panels(self):
         fig = None

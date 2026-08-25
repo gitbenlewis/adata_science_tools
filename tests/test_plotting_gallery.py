@@ -63,7 +63,7 @@ class PlottingGalleryTests(unittest.TestCase):
         self.assertEqual(len(RENDERER_MANIFEST), 45)
         self.assertEqual(
             sum(len(spec.cases) for spec in RENDERER_MANIFEST),
-            57,
+            58,
         )
         for spec in RENDERER_MANIFEST:
             renderer = getattr(adtl.pl, spec.name)
@@ -306,6 +306,7 @@ class PlottingGalleryTests(unittest.TestCase):
                     "datapoints_effect_panels_column",
                     "geneset_enrichemnt_ol_ven_M_n_N_x",
                     "geneset_enrichment_venn",
+                    "paired_datapoints",
                     "plot_heatmap",
                     "spearman_cor_dotplot_2",
                     "vbar_l2fc_dotplot_column",
@@ -326,6 +327,9 @@ class PlottingGalleryTests(unittest.TestCase):
                     "datapoints_effect_panels_column__vertical_interval.png",
                     "geneset_enrichemnt_ol_ven_M_n_N_x__replacement_smoke.png",
                     "geneset_enrichment_venn__universe_filtered.png",
+                    "paired_datapoints__paired_groups.png",
+                    "paired_datapoints__precomputed_pair_values.png",
+                    "paired_datapoints__slope_colored_lines.png",
                     "plot_heatmap__clustered.png",
                     "plot_heatmap__fixed_order.png",
                     "spearman_cor_dotplot_2__dual_hue.png",

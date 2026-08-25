@@ -1502,6 +1502,11 @@ def paired_datapoints(
     connect_lines: bool = True,
     line_alpha: float = 0.55,
     line_color: Any = "0.55",
+    line_color_by_slope: bool = False,
+    slope_color_threshold: float = 0.05,
+    negative_slope_color: Any = "red",
+    positive_slope_color: Any = "green",
+    flat_slope_color: Any = "gray",
     line_width: float = 0.9,
     line_style: str = "--",
     jitter_amount: float = 0.2,
@@ -1589,6 +1594,13 @@ def paired_datapoints(
         raise ValueError("'ncols' must be at least 1.")
     if legend_scope not in {"axis", "figure"}:
         raise ValueError("'legend_scope' must be one of 'axis' or 'figure'.")
+    if (
+        isinstance(slope_color_threshold, (bool, np.bool_))
+        or not isinstance(slope_color_threshold, _Real)
+        or not np.isfinite(slope_color_threshold)
+        or slope_color_threshold < 0
+    ):
+        raise ValueError("'slope_color_threshold' must be a finite non-negative number.")
     if subset_obs_key is not None and subset_var_key is not None:
         raise ValueError("Provide only one of 'subset_obs_key' or 'subset_var_key'.")
     if ylims is not None:
@@ -2313,10 +2325,37 @@ def paired_datapoints(
             for _, line_df in panel_df.groupby("line_id", sort=False):
                 if set(line_df["x_order"]) >= {1, 2}:
                     line_df = line_df.sort_values("x_order")
+                    resolved_line_color = line_color
+                    if line_color_by_slope:
+                        line_values = line_df["value"].to_numpy(dtype=float)
+                        if np.isfinite(line_values).all():
+                            # Normalize the logical ref-to-target change symmetrically;
+                            # horizontal jitter must not affect the color category.
+                            baseline = line_values[0]
+                            target = line_values[-1]
+                            # Scale first so finite extremes do not overflow or underflow.
+                            scale = max(abs(baseline), abs(target))
+                            if scale == 0:
+                                normalized_slope = 0.0
+                            else:
+                                scaled_baseline = baseline / scale
+                                scaled_target = target / scale
+                                average_scaled_magnitude = (
+                                    abs(scaled_baseline) + abs(scaled_target)
+                                ) / 2
+                                normalized_slope = (
+                                    scaled_target - scaled_baseline
+                                ) / average_scaled_magnitude
+                            if normalized_slope == 0 or abs(normalized_slope) < slope_color_threshold:
+                                resolved_line_color = flat_slope_color
+                            elif normalized_slope < 0:
+                                resolved_line_color = negative_slope_color
+                            else:
+                                resolved_line_color = positive_slope_color
                     ax.plot(
                         line_df["_jittered_x"],
                         line_df["value"],
-                        color=line_color,
+                        color=resolved_line_color,
                         linestyle=line_style,
                         linewidth=line_width,
                         alpha=line_alpha,

@@ -536,6 +536,16 @@ RENDERER_MANIFEST: tuple[RendererSpec, ...] = (
                 features=("subject pairing", "subset colors", "feature-group aggregation"),
             ),
             GalleryCase(
+                case_id="slope_colored_lines",
+                title="Paired lines colored by relative change",
+                asset="paired_datapoints__slope_colored_lines.png",
+                features=(
+                    "symmetric average-relative change",
+                    "positive, negative, and approximately-flat line colors",
+                    "5% flat threshold",
+                ),
+            ),
+            GalleryCase(
                 case_id="precomputed_pair_values",
                 title="Paired values from preserved source matrices",
                 asset="paired_datapoints__precomputed_pair_values.png",
