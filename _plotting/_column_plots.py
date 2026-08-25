@@ -19,6 +19,31 @@ from matplotlib.ticker import StrMethodFormatter
 
 _DISTRIBUTION_KINDS = {"bar", "box", "violin"}
 
+_EFFECT_PANEL_KEYS = {
+    "title",
+    "effect_mode",
+    "effect_column",
+    "pvalue_column",
+    "ci_low_column",
+    "ci_high_column",
+    "effect_marker_size",
+    "effect_color",
+    "pvalue_cutoff",
+    "effect_reference_value",
+    "effect_axis_label",
+    "share_effect_x",
+    "effect_xlim",
+    "pvalue_sizes",
+    "pvalue_label",
+    "legend",
+    "legend_bins",
+    "legend_bbox_to_anchor",
+    "annotate",
+    "annotate_xy",
+    "annotate_labels",
+    "annotate_fontsize",
+}
+
 
 def _resolve_point_encodings(
         data: pd.DataFrame,
@@ -475,7 +500,7 @@ def _pvalue_legend_handles(
     return handles
 
 
-def datapoints_dotplot_column(
+def datapoints_effect_panels_column(
         adata: anndata.AnnData | None = None,
         *,
         layer: str | None = None,
@@ -485,9 +510,16 @@ def datapoints_dotplot_column(
         feature_list: list[str] | None = None,
         orientation: str = "horizontal",
         effect_mode: str = "pvalue",
+        effect_panels: list[dict] | None = None,
         comparison_col: str = "Treatment",
         comparison_order: list[str] | None = None,
         feature_label_vars_col: str | None = None,
+        feature_label_char_limit: int | None = None,
+        feature_labels_as_ylabels: bool = False,
+        feature_label_x: float = -0.02,
+        feature_label_fontsize: float | None = None,
+        remove_group_tick_labels: bool = False,
+        comparison_axis_label: str | None = None,
         distribution_kind: str = "bar",
         include_stripplot: bool = True,
         distribution_palette: dict | None = None,
@@ -501,21 +533,41 @@ def datapoints_dotplot_column(
         pvalue_column: str = "pvalue",
         ci_low_column: str = "ci_low",
         ci_high_column: str = "ci_high",
+        effect_marker_size: float = 5,
+        effect_color: str = "black",
         pvalue_cutoff: float = 0.1,
+        share_pvalue_scale: bool = False,
         effect_reference_value: float | None = 0,
         share_distribution_axis: bool = False,
         distribution_axis_limits: tuple[float, float] | None = None,
         share_effect_x: bool = False,
         effect_xlim: tuple[float, float] | None = None,
         figsize: tuple[float, float] | None = None,
-        width_ratios: tuple[float, float] = (3.0, 1.0),
+        width_ratios: tuple[float, ...] | list[float] = (3.0, 1.0),
         fig_title: str | None = None,
+        fig_title_y: float = 0.995,
+        fig_title_fontsize: float | None = None,
+        distribution_title: str | None = None,
+        column_title_y: float | None = None,
+        column_title_fontsize: float | None = None,
         distribution_axis_label: str = "Expression",
         effect_axis_label: str = "log2FoldChange",
+        tick_label_fontsize: float | None = None,
+        legend_fontsize: float | None = None,
+        numeric_tick_format: str | None = None,
+        axis_labels_outer_only: bool = False,
+        row_hspace: float | None = None,
+        col_wspace: float | None = None,
         legend: bool = True,
+        distribution_legend: bool | None = None,
+        distribution_legend_loc: str = "upper center",
+        distribution_legend_bbox_to_anchor: tuple[float, float] | None = None,
+        distribution_legend_frameon: bool = False,
         tight_layout_rect: tuple[float, float, float, float] | None = None,
+        use_tight_layout: bool = True,
+        footer: str | None = None,
         savefig: bool = False,
-        file_name: str = "datapoints_dotplot_column.png",
+        file_name: str = "datapoints_effect_panels_column.png",
 ):
     """Plot grouped observations beside supplied feature-level effects.
 
@@ -527,12 +579,22 @@ def datapoints_dotplot_column(
     ``orientation`` changes only the grouped distribution panel. The effect is
     always plotted on the x-axis. ``effect_mode='pvalue'`` encodes the supplied
     p-value as dot size/color, while ``effect_mode='interval'`` draws the
-    supplied confidence interval.
+    supplied confidence interval. To draw multiple supplied effect columns,
+    pass an ordered, non-empty ``effect_panels`` list. Each panel mapping must
+    define ``effect_mode``, ``effect_column``, and the mode-specific p-value or
+    confidence-interval columns. Optional panel settings inherit the matching
+    scalar controls. ``share_pvalue_scale=True`` requires matching cutoffs and
+    marker-size ranges. Configure its single legend on one ``legend=True``
+    panel, or use identical legend settings on every enabled p-value panel.
+    Optional label, title, spacing, legend, and footer controls allow the same
+    renderer to reproduce the compatibility column-plot layouts without
+    changing the supplied expression values or feature-level statistics.
 
     Returns
     -------
     tuple[matplotlib.figure.Figure, numpy.ndarray]
-        Figure and an ``(n_features, 2)`` axes array.
+        Figure and an ``(n_features, 1 + n_effect_panels)`` axes array. When
+        ``effect_panels`` is omitted, the shape remains ``(n_features, 2)``.
     """
     if not feature_list:
         raise ValueError("feature_list must be provided and non-empty.")
@@ -541,8 +603,187 @@ def datapoints_dotplot_column(
         raise ValueError("feature_list must contain unique feature identifiers.")
     if orientation not in {"horizontal", "vertical"}:
         raise ValueError("orientation must be 'horizontal' or 'vertical'.")
-    if effect_mode not in {"pvalue", "interval"}:
-        raise ValueError("effect_mode must be 'pvalue' or 'interval'.")
+    using_effect_panels = effect_panels is not None
+    if not using_effect_panels:
+        if effect_mode not in {"pvalue", "interval"}:
+            raise ValueError("effect_mode must be 'pvalue' or 'interval'.")
+        effect_specs = [{
+            "title": None,
+            "effect_mode": effect_mode,
+            "effect_column": effect_column,
+            "pvalue_column": pvalue_column,
+            "ci_low_column": ci_low_column,
+            "ci_high_column": ci_high_column,
+            "effect_marker_size": effect_marker_size,
+            "effect_color": effect_color,
+            "pvalue_cutoff": pvalue_cutoff,
+            "effect_reference_value": effect_reference_value,
+            "effect_axis_label": effect_axis_label,
+            "share_effect_x": share_effect_x,
+            "effect_xlim": effect_xlim,
+            "pvalue_sizes": (20.0, 2000.0),
+            "pvalue_label": f"-log10({pvalue_column})",
+            "legend": legend,
+            "legend_bins": 4,
+            "legend_bbox_to_anchor": (0.5, 0.005),
+            "annotate": False,
+            "annotate_xy": (0.8, 1.2),
+            "annotate_labels": (
+                ("effect: ", "pvalue: ")
+                if effect_mode == "pvalue" else ("effect: ", "CI: ")
+            ),
+            "annotate_fontsize": None,
+        }]
+    else:
+        if not isinstance(effect_panels, list) or not effect_panels:
+            raise ValueError("effect_panels must be a non-empty list of dictionaries.")
+        effect_specs = []
+        for panel_index, panel in enumerate(effect_panels):
+            if not isinstance(panel, dict):
+                raise ValueError(
+                    f"effect_panels[{panel_index}] must be a dictionary."
+                )
+            unknown_keys = sorted(set(panel) - _EFFECT_PANEL_KEYS)
+            if unknown_keys:
+                raise ValueError(
+                    f"effect_panels[{panel_index}] contains unknown keys: "
+                    f"{unknown_keys}"
+                )
+            missing_keys = [
+                key for key in ("effect_mode", "effect_column")
+                if key not in panel
+            ]
+            panel_mode = panel.get("effect_mode")
+            if panel_mode not in {"pvalue", "interval"}:
+                raise ValueError(
+                    f"effect_panels[{panel_index}]['effect_mode'] must be "
+                    "'pvalue' or 'interval'."
+                )
+            if panel_mode == "pvalue":
+                if "pvalue_column" not in panel:
+                    missing_keys.append("pvalue_column")
+            elif panel_mode == "interval":
+                missing_keys.extend([
+                    key for key in ("ci_low_column", "ci_high_column")
+                    if key not in panel
+                ])
+            if missing_keys:
+                raise ValueError(
+                    f"effect_panels[{panel_index}] is missing required keys: "
+                    f"{missing_keys}"
+                )
+
+            panel_sizes = panel.get("pvalue_sizes")
+            if panel_sizes is None:
+                panel_sizes = (20.0, 2000.0)
+            if (
+                    not isinstance(panel_sizes, (tuple, list))
+                    or len(panel_sizes) != 2
+            ):
+                raise ValueError(
+                    f"effect_panels[{panel_index}]['pvalue_sizes'] must contain "
+                    "exactly two marker areas."
+                )
+            panel_sizes = tuple(float(value) for value in panel_sizes)
+            if (
+                    not np.isfinite(panel_sizes).all()
+                    or panel_sizes[0] <= 0
+                    or panel_sizes[0] > panel_sizes[1]
+            ):
+                raise ValueError(
+                    f"effect_panels[{panel_index}]['pvalue_sizes'] must be "
+                    "finite, positive, and increasing."
+                )
+            panel_pvalue_column = panel.get("pvalue_column")
+            panel_legend_bins = panel.get("legend_bins", 4)
+            if panel_legend_bins is None:
+                panel_legend_bins = 3
+            panel_legend_anchor = panel.get("legend_bbox_to_anchor")
+            if (
+                    panel_legend_anchor is not None
+                    and (
+                        not isinstance(panel_legend_anchor, (tuple, list))
+                        or len(panel_legend_anchor) != 2
+                    )
+            ):
+                raise ValueError(
+                    f"effect_panels[{panel_index}]"
+                    "['legend_bbox_to_anchor'] must contain exactly two values."
+                )
+            if panel_legend_anchor is not None:
+                panel_legend_anchor = tuple(panel_legend_anchor)
+            panel_annotate_xy = panel.get("annotate_xy")
+            if panel_annotate_xy is None:
+                panel_annotate_xy = (0.8, 1.2)
+            if (
+                    not isinstance(panel_annotate_xy, (tuple, list))
+                    or len(panel_annotate_xy) != 2
+            ):
+                raise ValueError(
+                    f"effect_panels[{panel_index}]['annotate_xy'] must contain "
+                    "exactly two values."
+                )
+            default_annotate_labels = (
+                ("effect: ", "pvalue: ")
+                if panel_mode == "pvalue" else ("effect: ", "CI: ")
+            )
+            panel_annotate_labels = panel.get("annotate_labels")
+            if panel_annotate_labels is None:
+                panel_annotate_labels = default_annotate_labels
+            if (
+                    not isinstance(panel_annotate_labels, (tuple, list))
+                    or len(panel_annotate_labels) != 2
+            ):
+                raise ValueError(
+                    f"effect_panels[{panel_index}]['annotate_labels'] must "
+                    "contain exactly two values."
+                )
+            effect_specs.append({
+                "title": panel.get("title"),
+                "effect_mode": panel_mode,
+                "effect_column": panel["effect_column"],
+                "pvalue_column": panel_pvalue_column,
+                "ci_low_column": panel.get("ci_low_column"),
+                "ci_high_column": panel.get("ci_high_column"),
+                "effect_marker_size": panel.get(
+                    "effect_marker_size", effect_marker_size
+                ),
+                "effect_color": panel.get("effect_color", effect_color),
+                "pvalue_cutoff": panel.get("pvalue_cutoff", pvalue_cutoff),
+                "effect_reference_value": panel.get(
+                    "effect_reference_value", effect_reference_value
+                ),
+                "effect_axis_label": panel.get(
+                    "effect_axis_label", effect_axis_label
+                ),
+                "share_effect_x": panel.get("share_effect_x", share_effect_x),
+                "effect_xlim": panel.get("effect_xlim", effect_xlim),
+                "pvalue_sizes": panel_sizes,
+                "pvalue_label": panel.get(
+                    "pvalue_label", f"-log10({panel_pvalue_column})"
+                ),
+                "legend": panel.get("legend", legend),
+                "legend_bins": panel_legend_bins,
+                "legend_bbox_to_anchor": panel_legend_anchor,
+                "annotate": panel.get("annotate", False),
+                "annotate_xy": panel_annotate_xy,
+                "annotate_labels": panel_annotate_labels,
+                "annotate_fontsize": panel.get("annotate_fontsize"),
+            })
+
+    n_effect_panels = len(effect_specs)
+    resolved_width_ratios = tuple(width_ratios)
+    if len(resolved_width_ratios) == 2:
+        resolved_width_ratios = (
+            resolved_width_ratios[0],
+            *([resolved_width_ratios[1]] * n_effect_panels),
+        )
+    elif len(resolved_width_ratios) != n_effect_panels + 1:
+        raise ValueError(
+            "width_ratios must contain two values or exactly one value for the "
+            "distribution column and each effect panel."
+        )
+
     active_point_color_column = point_color_column if include_stripplot else None
     active_point_shape_column = point_shape_column if include_stripplot else None
     required_obs_columns = list(dict.fromkeys(
@@ -554,15 +795,17 @@ def datapoints_dotplot_column(
         )
         if column is not None
     ))
+    required_var_columns = [feature_label_vars_col]
+    for effect_spec in effect_specs:
+        required_var_columns.append(effect_spec["effect_column"])
+        if effect_spec["effect_mode"] == "pvalue":
+            required_var_columns.append(effect_spec["pvalue_column"])
+        else:
+            required_var_columns.extend([
+                effect_spec["ci_low_column"], effect_spec["ci_high_column"]
+            ])
     required_var_columns = list(dict.fromkeys(
-        column
-        for column in (
-            feature_label_vars_col,
-            effect_column,
-            pvalue_column if effect_mode == "pvalue" else ci_low_column,
-            None if effect_mode == "pvalue" else ci_high_column,
-        )
-        if column is not None
+        column for column in required_var_columns if column is not None
     ))
 
     if x_df is None:
@@ -652,46 +895,113 @@ def datapoints_dotplot_column(
         point_markers,
     )
 
-    if effect_mode == "interval":
-        required_columns = [effect_column, ci_low_column, ci_high_column]
-        for column in required_columns:
-            if column not in selected_var.columns:
-                raise ValueError(f"Column '{column}' not found in var_df.")
-        effect_data = selected_var.loc[
-            feature_list, required_columns
-        ].apply(pd.to_numeric, errors="coerce")
-        if not np.isfinite(effect_data.to_numpy(dtype=float)).all():
-            raise ValueError(
-                "Effect estimates and confidence intervals must be finite numeric values."
+    pvalue_spec_indexes = [
+        panel_index for panel_index, effect_spec in enumerate(effect_specs)
+        if effect_spec["effect_mode"] == "pvalue"
+    ]
+    if share_pvalue_scale and len(pvalue_spec_indexes) > 1:
+        first_spec = effect_specs[pvalue_spec_indexes[0]]
+        for panel_index in pvalue_spec_indexes[1:]:
+            effect_spec = effect_specs[panel_index]
+            if effect_spec["pvalue_cutoff"] != first_spec["pvalue_cutoff"]:
+                raise ValueError(
+                    "share_pvalue_scale=True requires matching pvalue_cutoff "
+                    "values across p-value panels."
+                )
+            if effect_spec["pvalue_sizes"] != first_spec["pvalue_sizes"]:
+                raise ValueError(
+                    "share_pvalue_scale=True requires matching pvalue_sizes "
+                    "values across p-value panels."
+                )
+        visible_pvalue_indexes = [
+            panel_index for panel_index in pvalue_spec_indexes
+            if effect_specs[panel_index]["legend"]
+        ]
+        if len(visible_pvalue_indexes) > 1:
+            first_legend_spec = effect_specs[visible_pvalue_indexes[0]]
+            shared_legend_keys = (
+                "pvalue_label", "legend_bins", "legend_bbox_to_anchor"
             )
-        invalid_intervals = (
-            (effect_data[ci_low_column] > effect_data[effect_column])
-            | (effect_data[effect_column] > effect_data[ci_high_column])
-        )
-        if invalid_intervals.any():
-            raise ValueError(
-                "Each confidence interval must satisfy ci_low <= effect <= ci_high."
+            if any(
+                    effect_specs[panel_index][key] != first_legend_spec[key]
+                    for panel_index in visible_pvalue_indexes[1:]
+                    for key in shared_legend_keys
+            ):
+                raise ValueError(
+                    "share_pvalue_scale=True requires matching pvalue_label, "
+                    "legend_bins, and legend_bbox_to_anchor values across "
+                    "legend-enabled p-value panels; set legend=False on all "
+                    "but the panel that should configure the shared legend."
+                )
+
+    effect_details = []
+    for effect_spec in effect_specs:
+        spec_effect_column = effect_spec["effect_column"]
+        if effect_spec["effect_mode"] == "interval":
+            spec_ci_low_column = effect_spec["ci_low_column"]
+            spec_ci_high_column = effect_spec["ci_high_column"]
+            required_columns = [
+                spec_effect_column, spec_ci_low_column, spec_ci_high_column
+            ]
+            effect_data = selected_var.loc[
+                feature_list, required_columns
+            ].apply(pd.to_numeric, errors="coerce")
+            if not np.isfinite(effect_data.to_numpy(dtype=float)).all():
+                raise ValueError(
+                    "Effect estimates and confidence intervals must be finite "
+                    "numeric values."
+                )
+            invalid_intervals = (
+                (effect_data[spec_ci_low_column] > effect_data[spec_effect_column])
+                | (
+                    effect_data[spec_effect_column]
+                    > effect_data[spec_ci_high_column]
+                )
             )
-        effect_bound_columns = [ci_low_column, ci_high_column]
-        pvalue_details = None
-    else:
-        if pvalue_column not in selected_var.columns:
-            raise ValueError(f"Column '{pvalue_column}' not found in var_df.")
-        effect_data, threshold, size_max, cmap, norm = _prepare_pvalue_effects(
-            var_df=selected_var,
-            feature_list=feature_list,
-            effect_column=effect_column,
-            pvalue_column=pvalue_column,
-            pvalue_cutoff=pvalue_cutoff,
+            if invalid_intervals.any():
+                raise ValueError(
+                    "Each confidence interval must satisfy "
+                    "ci_low <= effect <= ci_high."
+                )
+            effect_details.append({
+                "data": effect_data,
+                "bound_columns": [spec_ci_low_column, spec_ci_high_column],
+                "pvalue_details": None,
+            })
+        else:
+            effect_data, threshold, size_max, cmap, norm = _prepare_pvalue_effects(
+                var_df=selected_var,
+                feature_list=feature_list,
+                effect_column=spec_effect_column,
+                pvalue_column=effect_spec["pvalue_column"],
+                pvalue_cutoff=effect_spec["pvalue_cutoff"],
+            )
+            effect_details.append({
+                "data": effect_data,
+                "bound_columns": [spec_effect_column],
+                "pvalue_details": (threshold, size_max, cmap, norm),
+            })
+
+    if share_pvalue_scale and pvalue_spec_indexes:
+        first_index = pvalue_spec_indexes[0]
+        threshold, _, cmap, _ = effect_details[first_index]["pvalue_details"]
+        shared_size_max = max(
+            effect_details[panel_index]["pvalue_details"][1]
+            for panel_index in pvalue_spec_indexes
         )
-        effect_bound_columns = [effect_column]
-        pvalue_details = (threshold, size_max, cmap, norm)
+        shared_norm = plt.Normalize(
+            vmin=threshold, vmax=max(shared_size_max, threshold), clip=True
+        )
+        for panel_index in pvalue_spec_indexes:
+            effect_details[panel_index]["pvalue_details"] = (
+                threshold, shared_size_max, cmap, shared_norm
+            )
 
     if figsize is None:
         figsize = (12, max(3, 2.75 * len(feature_list)))
     fig, axes = plt.subplots(
-        len(feature_list), 2, figsize=figsize, squeeze=False,
-        gridspec_kw={"width_ratios": width_ratios},
+        len(feature_list), 1 + n_effect_panels, figsize=figsize, squeeze=False,
+        gridspec_kw={"width_ratios": resolved_width_ratios},
     )
     if share_distribution_axis:
         for distribution_ax in axes[1:, 0]:
@@ -699,22 +1009,50 @@ def datapoints_dotplot_column(
                 distribution_ax.sharex(axes[0, 0])
             else:
                 distribution_ax.sharey(axes[0, 0])
-    if share_effect_x:
-        for effect_ax in axes[1:, 1]:
-            effect_ax.sharex(axes[0, 1])
+    for panel_index, effect_spec in enumerate(effect_specs):
+        if effect_spec["share_effect_x"]:
+            for effect_ax in axes[1:, panel_index + 1]:
+                effect_ax.sharex(axes[0, panel_index + 1])
     if fig_title is not None:
-        fig.suptitle(fig_title, y=0.995)
+        fig.suptitle(fig_title, y=fig_title_y, fontsize=fig_title_fontsize)
 
-    resolved_effect_xlim = effect_xlim
-    if share_effect_x and resolved_effect_xlim is None:
-        limit = float(effect_data[effect_bound_columns].abs().to_numpy().max())
-        if effect_reference_value is not None:
-            limit = max(limit, abs(float(effect_reference_value)))
-        limit = max(limit, 1e-6)
-        resolved_effect_xlim = (-1.05 * limit, 1.05 * limit)
+    legend_font_kwargs = {}
+    if legend_fontsize is not None:
+        legend_font_kwargs = {
+            "fontsize": legend_fontsize,
+            "title_fontsize": legend_fontsize,
+        }
+    resolved_comparison_axis_label = (
+        comparison_col
+        if comparison_axis_label is None else comparison_axis_label
+    )
+
+    for effect_spec, panel_details in zip(effect_specs, effect_details):
+        resolved_panel_xlim = effect_spec["effect_xlim"]
+        if (
+                resolved_panel_xlim is None
+                and (
+                    effect_spec["share_effect_x"]
+                    or (
+                        orientation == "horizontal"
+                        and effect_spec["effect_mode"] == "pvalue"
+                    )
+                )
+        ):
+            effect_data = panel_details["data"]
+            effect_bound_columns = panel_details["bound_columns"]
+            limit = float(
+                effect_data[effect_bound_columns].abs().to_numpy().max()
+            )
+            reference_value = effect_spec["effect_reference_value"]
+            if reference_value is not None:
+                limit = max(limit, abs(float(reference_value)))
+            limit = max(limit, 1e-6)
+            resolved_panel_xlim = (-1.05 * limit, 1.05 * limit)
+        panel_details["resolved_xlim"] = resolved_panel_xlim
 
     for row_index, feature in enumerate(feature_list):
-        distribution_ax, effect_ax = axes[row_index]
+        distribution_ax = axes[row_index, 0]
         _plot_group_distribution(
             data=plotted_data,
             value_column=feature_value_columns[feature],
@@ -738,55 +1076,173 @@ def datapoints_dotplot_column(
             label_value = selected_var.loc[feature, feature_label_vars_col]
             if pd.notna(label_value):
                 feature_label = label_value
-        distribution_ax.set_title(str(feature_label), loc="left", fontweight="bold")
+        feature_label = str(feature_label)
+        if feature_label_char_limit is not None:
+            feature_label = feature_label[:int(feature_label_char_limit)]
+        if feature_labels_as_ylabels and orientation == "horizontal":
+            distribution_ax.set_ylabel(
+                feature_label,
+                rotation=0,
+                fontsize=feature_label_fontsize,
+                ha="right",
+                va="center",
+            )
+            distribution_ax.yaxis.set_label_coords(feature_label_x, 0.5)
+        else:
+            distribution_ax.set_title(
+                feature_label,
+                loc="left",
+                fontweight="bold",
+                fontsize=feature_label_fontsize,
+            )
+        show_numeric_axis_label = (
+            not axis_labels_outer_only or row_index == len(feature_list) - 1
+        )
         if orientation == "horizontal":
-            distribution_ax.set_xlabel(distribution_axis_label)
-            distribution_ax.set_ylabel(comparison_col)
+            distribution_ax.set_xlabel(
+                distribution_axis_label if show_numeric_axis_label else "",
+                fontsize=legend_fontsize,
+            )
+            if not feature_labels_as_ylabels:
+                distribution_ax.set_ylabel(
+                    resolved_comparison_axis_label,
+                    fontsize=legend_fontsize,
+                )
             if distribution_axis_limits is not None:
                 distribution_ax.set_xlim(distribution_axis_limits)
         else:
-            distribution_ax.set_xlabel(comparison_col)
-            distribution_ax.set_ylabel(distribution_axis_label)
+            distribution_ax.set_xlabel(
+                resolved_comparison_axis_label,
+                fontsize=legend_fontsize,
+            )
+            distribution_ax.set_ylabel(
+                distribution_axis_label if show_numeric_axis_label else "",
+                fontsize=legend_fontsize,
+            )
             if distribution_axis_limits is not None:
                 distribution_ax.set_ylim(distribution_axis_limits)
+        if remove_group_tick_labels:
+            if orientation == "horizontal":
+                distribution_ax.tick_params(axis="y", labelleft=False)
+            else:
+                distribution_ax.tick_params(axis="x", labelbottom=False)
+        if tick_label_fontsize is not None:
+            distribution_ax.tick_params(axis="both", labelsize=tick_label_fontsize)
+        if numeric_tick_format is not None:
+            distribution_axis = (
+                distribution_ax.xaxis
+                if orientation == "horizontal" else distribution_ax.yaxis
+            )
+            distribution_axis.set_major_formatter(
+                StrMethodFormatter(numeric_tick_format)
+            )
+        if (
+                share_distribution_axis
+                and orientation == "horizontal"
+                and row_index < len(feature_list) - 1
+        ):
+            distribution_ax.tick_params(axis="x", labelbottom=False)
 
-        if effect_mode == "interval":
-            _plot_ci_effect(
-                ax=effect_ax,
-                row=effect_data.loc[feature],
-                effect_column=effect_column,
-                ci_low_column=ci_low_column,
-                ci_high_column=ci_high_column,
-                marker_size=5,
-                color="black",
-                reference_value=effect_reference_value,
+        for panel_index, (effect_spec, panel_details) in enumerate(zip(
+                effect_specs, effect_details
+        )):
+            effect_ax = axes[row_index, panel_index + 1]
+            effect_data = panel_details["data"]
+            spec_effect_column = effect_spec["effect_column"]
+            if effect_spec["effect_mode"] == "interval":
+                _plot_ci_effect(
+                    ax=effect_ax,
+                    row=effect_data.loc[feature],
+                    effect_column=spec_effect_column,
+                    ci_low_column=effect_spec["ci_low_column"],
+                    ci_high_column=effect_spec["ci_high_column"],
+                    marker_size=effect_spec["effect_marker_size"],
+                    color=effect_spec["effect_color"],
+                    reference_value=effect_spec["effect_reference_value"],
+                )
+            else:
+                threshold, size_max, cmap, norm = panel_details["pvalue_details"]
+                _plot_pvalue_effect(
+                    ax=effect_ax,
+                    row=effect_data.loc[feature],
+                    effect_column=spec_effect_column,
+                    threshold=threshold,
+                    size_max=size_max,
+                    cmap=cmap,
+                    norm=norm,
+                    reference_value=effect_spec["effect_reference_value"],
+                    sizes=effect_spec["pvalue_sizes"],
+                )
+
+            if effect_spec["annotate"]:
+                annotate_labels = effect_spec["annotate_labels"]
+                effect_value = float(effect_data.loc[feature, spec_effect_column])
+                if effect_spec["effect_mode"] == "pvalue":
+                    second_value = float(
+                        effect_data.loc[feature, effect_spec["pvalue_column"]]
+                    )
+                    annotation_text = (
+                        f"{annotate_labels[0]}{effect_value:.2g} | "
+                        f"{annotate_labels[1]}{second_value:.2g}"
+                    )
+                else:
+                    ci_low_value = float(effect_data.loc[
+                        feature, effect_spec["ci_low_column"]
+                    ])
+                    ci_high_value = float(effect_data.loc[
+                        feature, effect_spec["ci_high_column"]
+                    ])
+                    annotation_text = (
+                        f"{annotate_labels[0]}{effect_value:.2g} | "
+                        f"{annotate_labels[1]}"
+                        f"[{ci_low_value:.2g}, {ci_high_value:.2g}]"
+                    )
+                effect_ax.text(
+                    *effect_spec["annotate_xy"],
+                    annotation_text,
+                    transform=effect_ax.transAxes,
+                    ha="right",
+                    va="center",
+                    fontsize=effect_spec["annotate_fontsize"],
+                    color="black",
+                )
+
+            row_effect_xlim = panel_details["resolved_xlim"]
+            if row_effect_xlim is None:
+                effect_bound_columns = panel_details["bound_columns"]
+                limit = float(
+                    effect_data.loc[
+                        [feature], effect_bound_columns
+                    ].abs().to_numpy().max()
+                )
+                reference_value = effect_spec["effect_reference_value"]
+                if reference_value is not None:
+                    limit = max(limit, abs(float(reference_value)))
+                limit = max(limit, 1e-6)
+                row_effect_xlim = (-1.05 * limit, 1.05 * limit)
+            effect_ax.set_xlim(row_effect_xlim)
+            effect_ax.set_xlabel(
+                effect_spec["effect_axis_label"]
+                if show_numeric_axis_label else "",
+                fontsize=legend_fontsize,
             )
-        else:
-            threshold, size_max, cmap, norm = pvalue_details
-            _plot_pvalue_effect(
-                ax=effect_ax,
-                row=effect_data.loc[feature],
-                effect_column=effect_column,
-                threshold=threshold,
-                size_max=size_max,
-                cmap=cmap,
-                norm=norm,
-                reference_value=effect_reference_value,
-            )
-        row_effect_xlim = resolved_effect_xlim
-        if row_effect_xlim is None:
-            limit = float(
-                effect_data.loc[[feature], effect_bound_columns].abs().to_numpy().max()
-            )
-            if effect_reference_value is not None:
-                limit = max(limit, abs(float(effect_reference_value)))
-            limit = max(limit, 1e-6)
-            row_effect_xlim = (-1.05 * limit, 1.05 * limit)
-        effect_ax.set_xlim(row_effect_xlim)
-        effect_ax.set_xlabel(effect_axis_label)
+            if tick_label_fontsize is not None:
+                effect_ax.tick_params(axis="x", labelsize=tick_label_fontsize)
+            if (
+                    effect_spec["share_effect_x"]
+                    and row_index < len(feature_list) - 1
+            ):
+                effect_ax.tick_params(axis="x", labelbottom=False)
+            if numeric_tick_format is not None:
+                effect_ax.xaxis.set_major_formatter(
+                    StrMethodFormatter(numeric_tick_format)
+                )
 
     distribution_handles = []
-    if legend:
+    show_distribution_legend = (
+        legend if distribution_legend is None else distribution_legend
+    )
+    if show_distribution_legend:
         show_group_handles = len({
             _to_rgba(distribution_color_map[group]) for group in comparison_order
         }) > 1
@@ -809,43 +1265,197 @@ def datapoints_dotplot_column(
                 point_size,
             ))
         if distribution_handles:
+            distribution_legend_anchor = (0.5, 0.97)
+            if distribution_legend_bbox_to_anchor is not None:
+                ratio_total = float(sum(resolved_width_ratios))
+                distribution_legend_anchor = (
+                    distribution_legend_bbox_to_anchor[0]
+                    * resolved_width_ratios[0] / ratio_total,
+                    distribution_legend_bbox_to_anchor[1],
+                )
             fig.legend(
                 handles=distribution_handles,
-                loc="upper center",
+                loc=distribution_legend_loc,
                 ncol=min(len(distribution_handles), 8),
-                bbox_to_anchor=(0.5, 0.97),
+                bbox_to_anchor=distribution_legend_anchor,
                 title=_distribution_legend_title(
                     comparison_col,
                     active_point_color_column,
                     active_point_shape_column,
                     include_group=show_group_handles,
                 ),
-                frameon=False,
+                frameon=distribution_legend_frameon,
+                **legend_font_kwargs,
             )
-    if legend and effect_mode == "pvalue":
-        threshold, size_max, cmap, norm = pvalue_details
-        pvalue_handles = _pvalue_legend_handles(
-            threshold=threshold, size_max=size_max, cmap=cmap, norm=norm
-        )
-        fig.legend(
-            handles=pvalue_handles,
-            loc="lower center",
-            ncol=min(len(pvalue_handles), 6),
-            bbox_to_anchor=(0.5, 0.005),
-            title=f"-log10({pvalue_column})",
-            frameon=True,
-        )
 
-    if tight_layout_rect is None:
-        top = 0.91 if distribution_handles or fig_title is not None else 0.98
-        bottom = 0.12 if legend and effect_mode == "pvalue" else 0.04
-        tight_layout_rect = (0, bottom, 1, top)
-    fig.tight_layout(rect=tight_layout_rect)
-    if effect_mode == "pvalue" and effect_xlim is None:
+    effect_legend_drawn = False
+    if not using_effect_panels:
+        effect_spec = effect_specs[0]
+        if legend and effect_spec["effect_mode"] == "pvalue":
+            threshold, size_max, cmap, norm = effect_details[0]["pvalue_details"]
+            pvalue_handles = _pvalue_legend_handles(
+                threshold=threshold, size_max=size_max, cmap=cmap, norm=norm
+            )
+            fig.legend(
+                handles=pvalue_handles,
+                loc="lower center",
+                ncol=min(len(pvalue_handles), 6),
+                bbox_to_anchor=(0.5, 0.005),
+                title=f"-log10({pvalue_column})",
+                frameon=True,
+                **legend_font_kwargs,
+            )
+            effect_legend_drawn = True
+    elif share_pvalue_scale:
+        visible_pvalue_indexes = [
+            panel_index for panel_index in pvalue_spec_indexes
+            if effect_specs[panel_index]["legend"]
+        ]
+        if visible_pvalue_indexes:
+            legend_panel_index = visible_pvalue_indexes[0]
+            effect_spec = effect_specs[legend_panel_index]
+            threshold, size_max, cmap, norm = effect_details[
+                legend_panel_index
+            ]["pvalue_details"]
+            pvalue_handles = _pvalue_legend_handles(
+                threshold=threshold,
+                size_max=size_max,
+                cmap=cmap,
+                norm=norm,
+                bins=effect_spec["legend_bins"],
+                sizes=effect_spec["pvalue_sizes"],
+            )
+            legend_anchor = effect_spec["legend_bbox_to_anchor"]
+            if legend_anchor is not None:
+                ratio_total = float(sum(resolved_width_ratios))
+                width_index = legend_panel_index + 1
+                legend_anchor = (
+                    (
+                        sum(resolved_width_ratios[:width_index])
+                        + legend_anchor[0] * resolved_width_ratios[width_index]
+                    ) / ratio_total,
+                    legend_anchor[1],
+                )
+            fig.legend(
+                handles=pvalue_handles,
+                loc="lower center",
+                ncol=min(len(pvalue_handles), 6),
+                bbox_to_anchor=legend_anchor or (0.5, 0.005),
+                title=effect_spec["pvalue_label"],
+                frameon=True,
+                **legend_font_kwargs,
+            )
+            effect_legend_drawn = True
+    else:
+        ratio_total = float(sum(resolved_width_ratios))
+        for panel_index in pvalue_spec_indexes:
+            effect_spec = effect_specs[panel_index]
+            if not effect_spec["legend"]:
+                continue
+            threshold, size_max, cmap, norm = effect_details[
+                panel_index
+            ]["pvalue_details"]
+            pvalue_handles = _pvalue_legend_handles(
+                threshold=threshold,
+                size_max=size_max,
+                cmap=cmap,
+                norm=norm,
+                bins=effect_spec["legend_bins"],
+                sizes=effect_spec["pvalue_sizes"],
+            )
+            effect_width_index = panel_index + 1
+            effect_center = (
+                sum(resolved_width_ratios[:effect_width_index])
+                + resolved_width_ratios[effect_width_index] / 2.0
+            ) / ratio_total
+            legend_anchor = effect_spec["legend_bbox_to_anchor"]
+            if legend_anchor is not None:
+                legend_anchor = (
+                    (
+                        sum(resolved_width_ratios[:effect_width_index])
+                        + legend_anchor[0]
+                        * resolved_width_ratios[effect_width_index]
+                    ) / ratio_total,
+                    legend_anchor[1],
+                )
+            fig.legend(
+                handles=pvalue_handles,
+                loc="lower center",
+                ncol=min(len(pvalue_handles), 6),
+                bbox_to_anchor=legend_anchor or (effect_center, 0.005),
+                title=effect_spec["pvalue_label"],
+                frameon=True,
+                **legend_font_kwargs,
+            )
+            effect_legend_drawn = True
+
+    if footer is not None:
+        fig.text(0.5, 0.005, footer, ha="center", va="bottom", fontsize=8)
+    if use_tight_layout:
+        if tight_layout_rect is None:
+            top = 0.91 if distribution_handles or fig_title is not None else 0.98
+            bottom = 0.12 if effect_legend_drawn else 0.04
+            tight_layout_rect = (0, bottom, 1, top)
+        fig.tight_layout(rect=tight_layout_rect)
+    if row_hspace is not None or col_wspace is not None:
+        fig.subplots_adjust(hspace=row_hspace, wspace=col_wspace)
+    pvalue_panels_to_pad = [
+        panel_index for panel_index in pvalue_spec_indexes
+        if effect_specs[panel_index]["effect_xlim"] is None
+    ]
+    if pvalue_panels_to_pad:
         # Final axes widths are needed to convert marker points to data padding.
         fig.canvas.draw()
-        for effect_ax in axes[:, 1]:
-            _pad_pvalue_effect_axis(effect_ax)
+        for panel_index in pvalue_panels_to_pad:
+            for effect_ax in axes[:, panel_index + 1]:
+                _pad_pvalue_effect_axis(effect_ax)
+            if (
+                    orientation == "horizontal"
+                    and effect_specs[panel_index]["effect_mode"] == "pvalue"
+            ):
+                common_limit = max(
+                    abs(bound)
+                    for effect_ax in axes[:, panel_index + 1]
+                    for bound in effect_ax.get_xlim()
+                )
+                for effect_ax in axes[:, panel_index + 1]:
+                    effect_ax.set_xlim(-common_limit, common_limit)
+
+    column_headers = [distribution_title] + [
+        effect_spec["title"] for effect_spec in effect_specs
+    ]
+    if any(title is not None for title in column_headers):
+        fig.canvas.draw()
+        header_y = column_title_y
+        if header_y is None:
+            renderer = fig.canvas.get_renderer()
+            occupied_top = max(
+                [ax.get_position().y1 for ax in axes[0]]
+                + [
+                    artist.get_window_extent(renderer=renderer).transformed(
+                        fig.transFigure.inverted()
+                    ).y1
+                    for ax in axes[0]
+                    for artist in [ax.title, *ax.texts]
+                    if artist.get_visible() and artist.get_text()
+                ]
+            )
+            header_y = occupied_top + 0.01
+        for column_index, title in enumerate(column_headers):
+            if title is None:
+                continue
+            column_position = axes[0, column_index].get_position()
+            fig.text(
+                (column_position.x0 + column_position.x1) / 2,
+                header_y,
+                str(title),
+                ha="center",
+                va="bottom",
+                **(
+                    {"fontsize": column_title_fontsize}
+                    if column_title_fontsize is not None else {}
+                ),
+            )
     if savefig:
         fig.savefig(file_name, dpi=300, bbox_inches="tight")
         print(f"Saved plot to {file_name}")

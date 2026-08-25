@@ -73,7 +73,7 @@ RENDERER_MANIFEST: tuple[RendererSpec, ...] = (
     RendererSpec(
         name="barh_4X_dotplot_column",
         module="_plotting._column_plots",
-        status="maintained",
+        status="compatibility",
         provenance=(
             "make_independent_group_adata plus run_independent_diff_test and "
             "fit_smf_ols_models_and_summarize_adata; library-derived "
@@ -89,8 +89,12 @@ RENDERER_MANIFEST: tuple[RendererSpec, ...] = (
                     "four effect/p-value encodings",
                     "shared dotplot color scale",
                 ),
+                canonical_asset=(
+                    "datapoints_effect_panels_column__horizontal_four_effects.png"
+                ),
             ),
         ),
+        replacement="datapoints_effect_panels_column",
     ),
     RendererSpec(
         name="barh_column",
@@ -109,7 +113,7 @@ RENDERER_MANIFEST: tuple[RendererSpec, ...] = (
     RendererSpec(
         name="barh_dotplot_dotplot_column",
         module="_plotting._column_plots",
-        status="maintained",
+        status="compatibility",
         provenance="make_independent_group_adata plus run_independent_diff_test; library-derived differential results",
         cases=(
             GalleryCase(
@@ -117,13 +121,17 @@ RENDERER_MANIFEST: tuple[RendererSpec, ...] = (
                 title="Expression with two differential summaries",
                 asset="barh_dotplot_dotplot_column__three_panel.png",
                 features=("grouped expression bars", "two effect/p-value columns", "feature-aligned rows"),
+                canonical_asset=(
+                    "datapoints_effect_panels_column__horizontal_two_effects.png"
+                ),
             ),
         ),
+        replacement="datapoints_effect_panels_column",
     ),
     RendererSpec(
         name="barh_dotplot_dotplot_dotplot_column",
         module="_plotting._column_plots",
-        status="maintained",
+        status="compatibility",
         provenance=(
             "make_independent_group_adata plus run_independent_diff_test and "
             "fit_smf_ols_models_and_summarize_adata; library-derived "
@@ -135,13 +143,17 @@ RENDERER_MANIFEST: tuple[RendererSpec, ...] = (
                 title="Expression with three differential summaries",
                 asset="barh_dotplot_dotplot_dotplot_column__four_panel.png",
                 features=("grouped expression bars", "three effect/p-value columns", "feature-aligned rows"),
+                canonical_asset=(
+                    "datapoints_effect_panels_column__horizontal_three_effects.png"
+                ),
             ),
         ),
+        replacement="datapoints_effect_panels_column",
     ),
     RendererSpec(
         name="barh_l2fc_dotplot_column",
         module="_plotting._column_plots",
-        status="maintained",
+        status="compatibility",
         provenance="make_independent_group_adata plus run_independent_diff_test; library-derived differential results",
         cases=(
             GalleryCase(
@@ -149,23 +161,30 @@ RENDERER_MANIFEST: tuple[RendererSpec, ...] = (
                 title="Expression and differential effect",
                 asset="barh_l2fc_dotplot_column__two_panel.png",
                 features=("grouped expression bars", "effect direction", "p-value size and threshold ring"),
+                canonical_asset=(
+                    "datapoints_effect_panels_column__horizontal_one_effect.png"
+                ),
             ),
         ),
+        replacement="datapoints_effect_panels_column",
     ),
     RendererSpec(
-        name="datapoints_dotplot_column",
+        name="datapoints_effect_panels_column",
         module="_plotting._column_plots",
         status="maintained",
         provenance=(
             "make_independent_group_adata plus run_independent_diff_test for "
-            "the p-value case; synthetic_expression.csv plus "
+            "the exploratory and one- through four-effect cases, with "
+            "fit_smf_ols_models_and_summarize_adata supplying adjusted OLS "
+            "panels in the three- and four-effect cases; "
+            "synthetic_expression.csv plus "
             "synthetic_effects.csv for the supplied-interval case"
         ),
         cases=(
             GalleryCase(
                 case_id="horizontal_pvalue",
                 title="Horizontal distributions with p-value effects",
-                asset="datapoints_dotplot_column__horizontal_pvalue.png",
+                asset="datapoints_effect_panels_column__horizontal_pvalue.png",
                 features=(
                     "horizontal grouped distributions",
                     "effect direction",
@@ -173,9 +192,55 @@ RENDERER_MANIFEST: tuple[RendererSpec, ...] = (
                 ),
             ),
             GalleryCase(
+                case_id="horizontal_one_effect",
+                title="Horizontal distributions with one effect summary",
+                asset=(
+                    "datapoints_effect_panels_column__horizontal_one_effect.png"
+                ),
+                features=(
+                    "barh_l2fc_dotplot_column replacement",
+                    "grouped expression bars",
+                    "one effect/p-value panel",
+                ),
+            ),
+            GalleryCase(
+                case_id="horizontal_two_effects",
+                title="Horizontal distributions with two effect summaries",
+                asset=(
+                    "datapoints_effect_panels_column__horizontal_two_effects.png"
+                ),
+                features=(
+                    "barh_dotplot_dotplot_column replacement",
+                    "two ordered effect/p-value panels",
+                    "independent p-value scales",
+                ),
+            ),
+            GalleryCase(
+                case_id="horizontal_three_effects",
+                title="Horizontal distributions with three effect summaries",
+                asset=(
+                    "datapoints_effect_panels_column__horizontal_three_effects.png"
+                ),
+                features=(
+                    "barh_dotplot_dotplot_dotplot_column replacement",
+                    "three ordered effect/p-value panels",
+                    "unadjusted and adjusted summaries",
+                ),
+            ),
+            GalleryCase(
+                case_id="horizontal_four_effects",
+                title="Horizontal distributions with four effect summaries",
+                asset="datapoints_effect_panels_column__horizontal_four_effects.png",
+                features=(
+                    "one shared distribution column",
+                    "four ordered p-value effect panels",
+                    "shared p-value color and size scale",
+                ),
+            ),
+            GalleryCase(
                 case_id="vertical_interval",
                 title="Vertical distributions with supplied intervals",
-                asset="datapoints_dotplot_column__vertical_interval.png",
+                asset="datapoints_effect_panels_column__vertical_interval.png",
                 features=(
                     "vertical boxplots with observation overlays",
                     "subtype color and cohort shape",
@@ -187,7 +252,7 @@ RENDERER_MANIFEST: tuple[RendererSpec, ...] = (
     RendererSpec(
         name="vbar_l2fc_dotplot_column",
         module="_plotting._column_plots",
-        status="maintained",
+        status="compatibility",
         provenance=(
             "synthetic_expression.csv plus synthetic_effects.csv; all values, "
             "identifiers, groups, and supplied intervals are synthetic"
@@ -202,8 +267,12 @@ RENDERER_MANIFEST: tuple[RendererSpec, ...] = (
                     "subtype color and cohort shape",
                     "supplied effect confidence intervals",
                 ),
+                canonical_asset=(
+                    "datapoints_effect_panels_column__vertical_interval.png"
+                ),
             ),
         ),
+        replacement="datapoints_effect_panels_column",
     ),
     RendererSpec(
         name="category_composition",
@@ -808,7 +877,7 @@ EXPECTED_RENDERER_NAMES = frozenset(
         "corr_dotplot",
         "corr_dotplot_dev",
         "datapoints",
-        "datapoints_dotplot_column",
+        "datapoints_effect_panels_column",
         "forest",
         "geneset_enrichemnt_ol_ven_M_n_N_x",
         "geneset_enrichment_venn",

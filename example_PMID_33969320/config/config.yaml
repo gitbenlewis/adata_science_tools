@@ -260,96 +260,91 @@ GSEApy_params:
 
 diff_datapoint_plots_params:
   repo_results_dir: example_PMID_33969320/results/figures/diff_datapoint_plots/
-  defaults_params:
-  barh_l2fc_dotplot_column_calls_defaults:
+  datapoints_effect_panels_column_calls_defaults:
+    adata_h5ad_path: example_PMID_33969320/results/datasets/example_dataset_PMID_33969320/input/olink_PMID_33969320.input.ann.h5ad
+    layer:
+    orientation: horizontal
+    distribution_kind: bar
+    include_stripplot: true
     figsize:
       - 15
       - 25
     feature_label_vars_col: gene_name
     feature_label_char_limit: 30
-    barh_figure_plot_title: OLINK norm units
-    barh_subplot_xlabel: OLINK norm units
-    dotplot_figure_plot_title: log2FoldChange(OLINK norm units)
-    layer:
-  barh_dotplot_dotplot_column_calls_defaults:
-    figsize:
-      - 25
-      - 25
-    feature_label_vars_col: gene_name
-    feature_label_char_limit: 30
-    barh_figure_plot_title: OLINK norm units
-    barh_subplot_xlabel: OLINK norm units
-    dotplot_figure_plot_title: log2FoldChange(OLINK norm units)
-    layer:
-  barh_dotplot_dotplot_dotplot_column_calls_defaults:
-    figsize:
-      - 25
-      - 25
-    feature_label_vars_col: gene_name
-    feature_label_char_limit: 30
-    barh_figure_plot_title: OLINK norm units
-    barh_subplot_xlabel: OLINK norm units
-    dotplot_figure_plot_title: log2FoldChange(OLINK norm units)
-    layer:
-  barh_4X_dotplot_column_calls_defaults:
-    figsize:
-      - 25
-      - 35
-    col_wspace: -0.15
-    row_hspace: 0.9
-    feature_label_vars_col: gene_name
-    feature_label_char_limit: 30
-    barh_figure_plot_title: OLINK norm units
-    barh_subplot_xlabel: OLINK norm units
-    dotplot_figure_plot_title: log2FoldChange(OLINK norm units)
-    layer:
-  barh_4X_dotplot_column_calls:
-  barh_dotplot_dotplot_dotplot_column_calls:
-  barh_dotplot_dotplot_column_calls:
-  barh_l2fc_dotplot_column_calls:
+    feature_labels_as_ylabels: true
+    feature_label_x: -0.02
+    feature_label_fontsize: 24
+    remove_group_tick_labels: true
+    comparison_axis_label: ""
+    fig_title: "OLINK proteomics PMID_33969320 Top 15 Differential T-test Features\n\nby D0 - COVID over NOT | dotplot= l2fc, indep t-test pvalues"
+    fig_title_y: 0.96
+    fig_title_fontsize: 30
+    distribution_title: OLINK norm units
+    distribution_axis_label: OLINK norm units
+    column_title_y: 0.89
+    column_title_fontsize: 24
+    tick_label_fontsize: 16
+    legend_fontsize: 24
+    numeric_tick_format: "{x:g}"
+    axis_labels_outer_only: true
+    row_hspace: 0.4
+    col_wspace: 0.07
+    width_ratios:
+      - 1.5
+      - 1.5
+    tight_layout_rect:
+      - 0
+      - 0.03
+      - 1
+      - 1
+    use_tight_layout: false
+    comparison_col: COVID
+    comparison_col_order: ['0', '1']
+    hue_palette_color_list: ["#999933", "#117733"]
+    share_distribution_axis: false
+    distribution_legend: true
+    distribution_legend_loc: lower center
+    distribution_legend_bbox_to_anchor: [0.5, 0.01]
+    distribution_legend_frameon: true
+    savefig: true
+    ascending: true
+    top_n_features: 15
+    effect_panel_defaults:
+      title: "l2fc: COVID (Positive/negative)"
+      effect_mode: pvalue
+      effect_column: l2fc_COVID_over_NOT_D0
+      effect_axis_label: log2fc COVID over NOT D0
+      pvalue_cutoff: 0.1
+      effect_reference_value: 0
+      share_effect_x: true
+      pvalue_sizes: [20, 2000]
+      legend: true
+      legend_bins: 3
+      legend_bbox_to_anchor: [0.5, 0.01]
+      annotate: true
+      annotate_xy: [0.8, 1.2]
+      annotate_fontsize: 16
+  datapoints_effect_panels_column_calls:
     COVID_over_NOT_D0:
       run: true
-      adata_h5ad_path:  example_PMID_33969320/results/datasets/example_dataset_PMID_33969320/input/olink_PMID_33969320.input.ann.h5ad
       file_name: example_PMID_33969320/results/figures/diff_datapoint_plots/COVID_over_NOT_D0_barh_l2fc_dotplot.png
       sortby_col: ttest_ind_pvals_COVID_over_NOT_D0
-      ascending: true
-      top_n_features: 15
-      fig_title: "OLINK proteomics PMID_33969320 Top 15 Differential T-test Features
-      
-        by D0 - COVID over NOT | dotplot= l2fc, indep t-test pvalues"
-      comparison_col: COVID
-      comparison_col_order: ['0', '1']
-      hue_palette_color_list: [ "#999933","#117733"]
-      dotplot_figure_plot_title: "l2fc: COVID (Positive/negative)"
-      dotplot_pval_vars_col_label: ttest_ind_pvals_COVID_over_NOT_D0
-      dotplot_l2fc_vars_col_label: l2fc_COVID_over_NOT_D0
-      dotplot_subplot_xlabel: log2fc COVID over NOT D0
-      pval_label: "RAW paired pvalue:"
-      dotplot_annotate_labels:
-       - 'l2fc: '
-       - 'RAW pvalue: '
-       #
+      effect_panels:
+        - pvalue_column: ttest_ind_pvals_COVID_over_NOT_D0
+          pvalue_label: "-log10(RAW independent t-test p-value)"
+          annotate_labels:
+            - 'l2fc: '
+            - 'RAW pvalue: '
     COVID_over_NOT_D0_FDR:
       run: true
-      adata_h5ad_path:  example_PMID_33969320/results/datasets/example_dataset_PMID_33969320/input/olink_PMID_33969320.input.ann.h5ad
       file_name: example_PMID_33969320/results/figures/diff_datapoint_plots/COVID_over_NOT_D0_barh_l2fc_dotplot_FDR.png
       sortby_col: ttest_ind_pvals_FDR_COVID_over_NOT_D0
-      ascending: true
-      top_n_features: 15
-      fig_title: "OLINK proteomics PMID_33969320 Top 15 Differential T-test Features
-      
-        by D0 - COVID over NOT | dotplot= l2fc, indep t-test pvalues"
-      comparison_col: COVID
-      comparison_col_order: ['0', '1']
-      hue_palette_color_list: [ "#999933","#117733"]
-      dotplot_figure_plot_title: "l2fc: COVID (Positive/negative)"
-      dotplot_pval_vars_col_label: ttest_ind_pvals_FDR_COVID_over_NOT_D0
-      dotplot_l2fc_vars_col_label: l2fc_COVID_over_NOT_D0
-      dotplot_subplot_xlabel: log2fc COVID over NOT D0
-      pval_label: "FDR paired pvalue:"
-      dotplot_annotate_labels:
-       - 'l2fc: '
-       - 'FDR pvalue: '
+      effect_panels:
+        - pvalue_column: ttest_ind_pvals_FDR_COVID_over_NOT_D0
+          pvalue_label: "-log10(FDR-adjusted independent t-test p-value)"
+          annotate_labels:
+            - 'l2fc: '
+            - 'FDR pvalue: '
 
 volcano_plot_params:
   repo_results_dir: example_PMID_33969320/results/figures/volcano_plots/

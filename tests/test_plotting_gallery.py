@@ -63,7 +63,7 @@ class PlottingGalleryTests(unittest.TestCase):
         self.assertEqual(len(RENDERER_MANIFEST), 45)
         self.assertEqual(
             sum(len(spec.cases) for spec in RENDERER_MANIFEST),
-            53,
+            57,
         )
         for spec in RENDERER_MANIFEST:
             renderer = getattr(adtl.pl, spec.name)
@@ -71,6 +71,90 @@ class PlottingGalleryTests(unittest.TestCase):
                 renderer.__module__,
                 f"adata_science_tools.{spec.module}",
             )
+
+    def test_superseded_column_renderers_link_to_unified_examples(self):
+        replacement_assets = {
+            "barh_l2fc_dotplot_column": (
+                "datapoints_effect_panels_column__horizontal_one_effect.png"
+            ),
+            "barh_dotplot_dotplot_column": (
+                "datapoints_effect_panels_column__horizontal_two_effects.png"
+            ),
+            "barh_dotplot_dotplot_dotplot_column": (
+                "datapoints_effect_panels_column__horizontal_three_effects.png"
+            ),
+            "barh_4X_dotplot_column": (
+                "datapoints_effect_panels_column__horizontal_four_effects.png"
+            ),
+            "vbar_l2fc_dotplot_column": (
+                "datapoints_effect_panels_column__vertical_interval.png"
+            ),
+        }
+        specs = {spec.name: spec for spec in RENDERER_MANIFEST}
+
+        for renderer_name, replacement_asset in replacement_assets.items():
+            spec = specs[renderer_name]
+            with self.subTest(renderer=renderer_name):
+                self.assertEqual(spec.status, "compatibility")
+                self.assertEqual(
+                    spec.replacement,
+                    "datapoints_effect_panels_column",
+                )
+                self.assertEqual(
+                    [case.canonical_asset for case in spec.cases],
+                    [replacement_asset],
+                )
+
+        unified_case_ids = {
+            case.case_id
+            for case in specs["datapoints_effect_panels_column"].cases
+        }
+        self.assertEqual(
+            unified_case_ids,
+            {
+                "horizontal_pvalue",
+                "horizontal_one_effect",
+                "horizontal_two_effects",
+                "horizontal_three_effects",
+                "horizontal_four_effects",
+                "vertical_interval",
+            },
+        )
+
+    def test_unified_horizontal_replacements_preserve_four_legend_bins(self):
+        spec = next(
+            spec
+            for spec in RENDERER_MANIFEST
+            if spec.name == "datapoints_effect_panels_column"
+        )
+        replacement_cases = {
+            "horizontal_one_effect": 1,
+            "horizontal_two_effects": 2,
+            "horizontal_three_effects": 3,
+            "horizontal_four_effects": 4,
+        }
+        inputs = mock.Mock(column_adata=mock.sentinel.column_adata)
+
+        for case_id, panel_count in replacement_cases.items():
+            case = next(case for case in spec.cases if case.case_id == case_id)
+            with self.subTest(case=case_id), mock.patch.object(
+                gallery_module.adtl,
+                "datapoints_effect_panels_column",
+                return_value=plt.figure(),
+            ) as renderer:
+                gallery_module._invoke_case(
+                    spec,
+                    case,
+                    inputs,
+                    Path("unused.png"),
+                )
+
+                effect_panels = renderer.call_args.kwargs["effect_panels"]
+                self.assertEqual(len(effect_panels), panel_count)
+                self.assertEqual(
+                    [panel["legend_bins"] for panel in effect_panels],
+                    [4] * panel_count,
+                )
 
     def test_committed_assets_exactly_match_manifest_cases(self):
         declared_assets = {
@@ -219,7 +303,7 @@ class PlottingGalleryTests(unittest.TestCase):
                 temporary_directory,
                 renderer_names=[
                     "category_composition",
-                    "datapoints_dotplot_column",
+                    "datapoints_effect_panels_column",
                     "geneset_enrichemnt_ol_ven_M_n_N_x",
                     "geneset_enrichment_venn",
                     "plot_heatmap",
@@ -234,8 +318,12 @@ class PlottingGalleryTests(unittest.TestCase):
                 {path.name for path in generated},
                 {
                     "category_composition__percent_annotated.png",
-                    "datapoints_dotplot_column__horizontal_pvalue.png",
-                    "datapoints_dotplot_column__vertical_interval.png",
+                    "datapoints_effect_panels_column__horizontal_four_effects.png",
+                    "datapoints_effect_panels_column__horizontal_one_effect.png",
+                    "datapoints_effect_panels_column__horizontal_pvalue.png",
+                    "datapoints_effect_panels_column__horizontal_three_effects.png",
+                    "datapoints_effect_panels_column__horizontal_two_effects.png",
+                    "datapoints_effect_panels_column__vertical_interval.png",
                     "geneset_enrichemnt_ol_ven_M_n_N_x__replacement_smoke.png",
                     "geneset_enrichment_venn__universe_filtered.png",
                     "plot_heatmap__clustered.png",

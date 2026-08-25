@@ -878,7 +878,7 @@ def _invoke_case(
             savefig=False,
         )
 
-    if case_key == ("datapoints_dotplot_column", "horizontal_pvalue"):
+    if case_key == ("datapoints_effect_panels_column", "horizontal_pvalue"):
         return renderer(
             adata=inputs.column_adata,
             feature_list=list(FEATURES),
@@ -903,7 +903,131 @@ def _invoke_case(
             tight_layout_rect=(0, 0.12, 1, 0.91),
         )
 
-    if case_key == ("datapoints_dotplot_column", "vertical_interval"):
+    replacement_case_settings = {
+        "horizontal_one_effect": (
+            1,
+            (10, 6.5),
+            "Expression and case-versus-control effect",
+            9,
+        ),
+        "horizontal_two_effects": (
+            2,
+            (15, 6.5),
+            "Expression with parametric and rank-test summaries",
+            8,
+        ),
+        "horizontal_three_effects": (
+            3,
+            (19, 6.5),
+            "Expression with unadjusted and adjusted summaries",
+            8,
+        ),
+        "horizontal_four_effects": (
+            4,
+            (19, 8.5),
+            "Expression with four inferential views",
+            9,
+        ),
+    }
+    if (
+            spec.name == "datapoints_effect_panels_column"
+            and case.case_id in replacement_case_settings
+    ):
+        panel_count, figsize, fig_title, legend_fontsize = (
+            replacement_case_settings[case.case_id]
+        )
+        effect_panels = [
+            {
+                "title": "Welch t-test",
+                "effect_mode": "pvalue",
+                "effect_column": "log2FoldChange",
+                "pvalue_column": "pvalue",
+                "effect_axis_label": "log2(case/control)",
+                "pvalue_label": "-log10(p-value)",
+                "legend_bins": 4,
+                "legend_bbox_to_anchor": (0.5, -0.04),
+            },
+            {
+                "title": "Mann–Whitney U",
+                "effect_mode": "pvalue",
+                "effect_column": "log2FoldChange_alt",
+                "pvalue_column": "pvalue_alt",
+                "effect_axis_label": "log2(case/control)",
+                "pvalue_label": "-log10(p-value)",
+                "legend_bins": 4,
+                "legend_bbox_to_anchor": (0.5, -0.04),
+            },
+            {
+                "title": "Age-adjusted OLS",
+                "effect_mode": "pvalue",
+                "effect_column": "log2FoldChange_alt2",
+                "pvalue_column": "pvalue_alt2",
+                "effect_axis_label": "Case coefficient",
+                "pvalue_label": "-log10(p-value)",
+                "legend_bins": 4,
+                "legend_bbox_to_anchor": (0.5, -0.04),
+            },
+            {
+                "title": "Age association",
+                "effect_mode": "pvalue",
+                "effect_column": "log2FoldChange_alt3",
+                "pvalue_column": "pvalue_alt3",
+                "effect_axis_label": "Age coefficient",
+                "pvalue_label": "-log10(p-value)",
+                "legend_bins": 4,
+                "legend_bbox_to_anchor": (0.5, -0.04),
+            },
+        ][:panel_count]
+        if panel_count == 1:
+            effect_panels[0].update({
+                "annotate": True,
+                "annotate_labels": ("l2fc: ", "p:"),
+                "annotate_fontsize": 9,
+            })
+        elif panel_count in {2, 3}:
+            legend_x_positions = np.linspace(0.15, 0.85, panel_count)
+            for panel, legend_x in zip(effect_panels, legend_x_positions):
+                panel["legend_bbox_to_anchor"] = (float(legend_x), -0.04)
+        return renderer(
+            adata=inputs.column_adata,
+            feature_list=list(FEATURES),
+            feature_label_vars_col="feature_label",
+            orientation="horizontal",
+            comparison_col="condition",
+            comparison_order=["control", "case"],
+            distribution_kind="bar",
+            include_stripplot=True,
+            distribution_palette={"control": "#1f77b4", "case": "#ff7f0e"},
+            effect_panels=effect_panels,
+            share_pvalue_scale=panel_count == 4,
+            share_effect_x=True,
+            distribution_legend=True,
+            feature_label_char_limit=25,
+            feature_labels_as_ylabels=True,
+            feature_label_x=-0.02,
+            feature_label_fontsize=10,
+            remove_group_tick_labels=True,
+            comparison_axis_label="",
+            axis_labels_outer_only=True,
+            figsize=figsize,
+            width_ratios=(1.5, 1.0),
+            fig_title=fig_title,
+            fig_title_y=0.99,
+            fig_title_fontsize=14,
+            distribution_title="Observed abundance",
+            column_title_fontsize=12,
+            distribution_axis_label="Simulated abundance",
+            tick_label_fontsize=9,
+            legend_fontsize=legend_fontsize,
+            numeric_tick_format="{x:g}",
+            use_tight_layout=True,
+            distribution_legend_loc="lower center",
+            distribution_legend_bbox_to_anchor=(0.5, -0.04),
+            distribution_legend_frameon=True,
+            tight_layout_rect=(0, 0.12, 1, 0.91),
+        )
+
+    if case_key == ("datapoints_effect_panels_column", "vertical_interval"):
         fixture_dir = REPO_ROOT / "example_plotting_gallery" / "data"
         expression_df = pd.read_csv(fixture_dir / "synthetic_expression.csv")
         effects_df = pd.read_csv(fixture_dir / "synthetic_effects.csv")
@@ -942,10 +1066,24 @@ def _invoke_case(
             effect_column="adjusted_log2fc",
             ci_low_column="ci_low",
             ci_high_column="ci_high",
+            effect_marker_size=5,
+            effect_color="black",
             figsize=(12, 7.5),
-            fig_title="SYNTHETIC EXAMPLE: supplied effects and intervals",
+            fig_title=(
+                "SYNTHETIC EXAMPLE: response-associated expression panel"
+            ),
+            fig_title_y=0.99,
             distribution_axis_label="Synthetic gTPM",
+            comparison_axis_label="",
             effect_axis_label="Adjusted log2FC\nResponder / NonResponder",
+            distribution_legend_loc="upper center",
+            distribution_legend_bbox_to_anchor=(0.5, 0.99),
+            distribution_legend_frameon=False,
+            footer=(
+                "All values, identifiers, groups, and effect estimates are "
+                "synthetic; intervals are supplied independently of the "
+                "expression table."
+            ),
             tight_layout_rect=(0, 0.03, 1, 0.91),
         )
 
