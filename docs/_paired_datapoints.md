@@ -69,6 +69,7 @@ def paired_datapoints(
     positive_slope_color: Any = "green",
     flat_slope_color: Any = "gray",
     show_paired_difference: bool = False,
+    paired_difference_mode: Literal["difference", "log2fc"] = "difference",
     paired_difference_label: str | None = None,
     paired_difference_ylabel: str | None = None,
     paired_difference_ylims: Sequence[float] | None = None,
@@ -303,41 +304,50 @@ fig, axes, plot_df = adtl.paired_datapoints(
 
 *`slope_colored_lines` — Deterministic positive, negative, and approximately-flat paired changes. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
 
-## Signed paired-difference axis
+## Paired change axis
 
 Set `show_paired_difference=True` to add a third x-axis position for signed
-paired differences. Each finite dot is computed in the original measurement
-units as `target - reference` and is drawn against a secondary y-axis on the
-right. It is not the normalized relative change used by
-`line_color_by_slope`.
+paired changes drawn against a secondary y-axis on the right. The default
+`paired_difference_mode="difference"` computes each finite dot in the original
+measurement units as `target - reference`. Set
+`paired_difference_mode="log2fc"` to display
+`log2(target / reference)`, so a Post value above its paired baseline produces
+a positive log2 fold change. This is not the normalized relative change used
+by `line_color_by_slope`.
 
 The calculation occurs after bounds, optional missing-value filling, collapsing,
 numeric coercion, and `nas2zeros`, but before `dropna` and `dropzeros`. The two
-row-wise filters then apply independently to endpoint and difference rows:
-`dropna=True` removes missing differences, `dropzeros=True` removes exact-zero
-differences, and a nonzero difference can remain when a zero endpoint is
-hidden. Consequently, `collapse_mode="aggregate"` uses the difference between
-the two transformed aggregates, while `collapse_mode="stack"` and
-`collapse_mode="all"` calculate one difference per pair and source variable.
-Nonfinite or unrepresentable differences do not produce visible dots.
+row-wise filters then apply independently to endpoint and derived-change rows:
+`dropna=True` removes missing changes and `dropzeros=True` removes exact-zero
+changes. In difference mode, a nonzero change can remain when a zero endpoint
+is hidden. Consequently, `collapse_mode="aggregate"` calculates the selected
+change from the two transformed aggregates, while `collapse_mode="stack"` and
+`collapse_mode="all"` calculate one change per pair and source variable.
+Nonfinite or unrepresentable changes do not produce visible dots.
 
-With `paired_difference_label=None`, the third x tick is
-`<target label> - <reference label>`; with
-`paired_difference_ylabel=None`, the right-axis label is
-`Paired difference`. Explicit strings, including empty strings,
-override those labels. `paired_difference_ylims` sets explicit right-axis
-limits and must contain finite, increasing bounds symmetric around zero. Every
-populated panel uses the same secondary limits; without explicit limits, that
-shared scale is resolved symmetrically around zero to span all displayed
-differences. Existing `ylims` continues to control only the primary
-reference/target axis.
+Log2 fold changes require finite, strictly positive reference and target
+values. Pairs containing zero, a negative value, or a nonfinite endpoint have
+missing log2FC values and are counted in a warning; no pseudocount is added.
+The calculation uses `log2(target) - log2(reference)` to avoid overflow from
+forming the ratio directly.
 
-Difference dots reuse the same point and subset-hue styling as the reference
+Default third-tick and right-axis labels follow the selected mode. Difference
+mode uses `<target label> - <reference label>` and `Paired difference`; log2FC
+mode uses `log2(<target label> / <reference label>)` and
+`Paired log2FC (<target label> / <reference label>)`. Explicit strings,
+including empty strings, override those labels. `paired_difference_ylims` sets
+explicit right-axis limits and must contain finite, increasing bounds symmetric
+around zero. Every populated panel uses the same secondary limits; without
+explicit limits, that shared scale is resolved symmetrically around zero to
+span all displayed changes. Existing `ylims` continues to control only the
+primary reference/target axis.
+
+Derived-change dots reuse the same point and subset-hue styling as the reference
 and target dots. Slope colors remain connector-only: line color represents the
-signed normalized relative change, while the third dot represents signed raw
-change. Difference dots are not included in the endpoint boxplots and are not
-connected to the target point because their y coordinates belong to the right
-axis.
+signed normalized relative change, while the third dot represents the selected
+signed paired change. Derived-change dots are not included in the endpoint
+boxplots and are not connected to the target point because their y coordinates
+belong to the right axis.
 
 ```python
 fig, axes, plot_df = adtl.paired_datapoints(
@@ -356,6 +366,26 @@ fig, axes, plot_df = adtl.paired_datapoints(
 <img src="assets/plotting_gallery/paired_datapoints__difference_axis.png" alt="Varied paired slopes with a combined-direction panel and signed secondary difference axes" width="960">
 
 *`difference_axis` — Varied positive, negative, and approximately-flat slopes are shown separately and together, with raw signed paired differences on zero-centered symmetric secondary axes. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+
+Use log2FC mode when proportional paired changes are more meaningful than raw
+measurement-unit differences:
+
+```python
+fig, axes, plot_df = adtl.paired_datapoints(
+    adata=adata,
+    var_names=["IL6"],
+    pair_by_key="Subject_ID",
+    subset_obs_key="Treatment",
+    show_paired_difference=True,
+    paired_difference_mode="log2fc",
+    line_color_by_slope=True,
+    show=False,
+)
+```
+
+<img src="assets/plotting_gallery/paired_datapoints__log2fc_axis.png" alt="Varied paired slopes with a combined-direction panel and post-over-baseline log2 fold changes" width="960">
+
+*`log2fc_axis` — The same varied positive, negative, and approximately-flat slopes are shown separately and together, with signed `log2(post / baseline)` values on zero-centered symmetric secondary axes. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
 
 ## Bounds
 
@@ -578,8 +608,9 @@ The return value is `(fig, axes, plot_df)`.
 
 4. With `show_paired_difference=True`, each plotted difference is an additional
    row with `side="difference"`, `x_order=3`, and
-   `value=target - reference`. Its `value` is interpreted on the secondary
-   y-axis.
+   `value=target - reference` in difference mode or
+   `value=log2(target / reference)` in log2FC mode. Its `value` is interpreted
+   on the secondary y-axis.
 
 5. When `show=False`, the figure is closed before returning, matching the
    package's test-backed plotting APIs.

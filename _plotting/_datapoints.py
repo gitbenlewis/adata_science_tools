@@ -1508,6 +1508,7 @@ def paired_datapoints(
     positive_slope_color: Any = "green",
     flat_slope_color: Any = "gray",
     show_paired_difference: bool = False,
+    paired_difference_mode: Literal["difference", "log2fc"] = "difference",
     paired_difference_label: str | None = None,
     paired_difference_ylabel: str | None = None,
     paired_difference_ylims: Sequence[float] | None = None,
@@ -1598,6 +1599,10 @@ def paired_datapoints(
         raise ValueError("'ncols' must be at least 1.")
     if legend_scope not in {"axis", "figure"}:
         raise ValueError("'legend_scope' must be one of 'axis' or 'figure'.")
+    if paired_difference_mode not in {"difference", "log2fc"}:
+        raise ValueError(
+            "'paired_difference_mode' must be one of 'difference' or 'log2fc'."
+        )
     if (
         isinstance(slope_color_threshold, (bool, np.bool_))
         or not isinstance(slope_color_threshold, _Real)
@@ -2023,13 +2028,21 @@ def paired_datapoints(
     records: list[dict[str, Any]] = []
     ref_label = str(groupby_key_ref_value)
     target_label = str(groupby_key_target_value)
+    if paired_difference_mode == "log2fc":
+        default_difference_label = f"log2({target_label} / {ref_label})"
+        default_difference_ylabel = (
+            f"Paired log2FC ({target_label} / {ref_label})"
+        )
+    else:
+        default_difference_label = f"{target_label} - {ref_label}"
+        default_difference_ylabel = "Paired difference"
     resolved_difference_label = (
-        f"{target_label} - {ref_label}"
+        default_difference_label
         if paired_difference_label is None
         else str(paired_difference_label)
     )
     resolved_difference_ylabel = (
-        "Paired difference"
+        default_difference_ylabel
         if paired_difference_ylabel is None
         else str(paired_difference_ylabel)
     )
@@ -2272,20 +2285,40 @@ def paired_datapoints(
         ].to_numpy(dtype=float)
         difference_df = plot_df.loc[plot_df["side"] == "target"].copy()
         target_values = difference_df["value"].to_numpy(dtype=float)
-        with np.errstate(invalid="ignore", over="ignore"):
-            difference_values = target_values - ref_values
-        invalid_difference = (
-            ~np.isfinite(ref_values)
-            | ~np.isfinite(target_values)
-            | ~np.isfinite(difference_values)
-        )
-        if invalid_difference.any():
-            log.warning(
-                "Paired differences were nonfinite for %d line(s); setting "
-                "their derived values to NaN.",
-                int(invalid_difference.sum()),
+        if paired_difference_mode == "log2fc":
+            valid_difference = (
+                np.isfinite(ref_values)
+                & np.isfinite(target_values)
+                & (ref_values > 0)
+                & (target_values > 0)
             )
-            difference_values[invalid_difference] = np.nan
+            difference_values = np.full(len(target_values), np.nan, dtype=float)
+            difference_values[valid_difference] = (
+                np.log2(target_values[valid_difference])
+                - np.log2(ref_values[valid_difference])
+            )
+            invalid_difference = ~valid_difference
+            if invalid_difference.any():
+                log.warning(
+                    "Paired log2FC values were undefined for %d line(s); setting "
+                    "their derived values to NaN.",
+                    int(invalid_difference.sum()),
+                )
+        else:
+            with np.errstate(invalid="ignore", over="ignore"):
+                difference_values = target_values - ref_values
+            invalid_difference = (
+                ~np.isfinite(ref_values)
+                | ~np.isfinite(target_values)
+                | ~np.isfinite(difference_values)
+            )
+            if invalid_difference.any():
+                log.warning(
+                    "Paired differences were nonfinite for %d line(s); setting "
+                    "their derived values to NaN.",
+                    int(invalid_difference.sum()),
+                )
+                difference_values[invalid_difference] = np.nan
         difference_df["x_label"] = resolved_difference_label
         difference_df["x_order"] = 3
         difference_df["value"] = difference_values

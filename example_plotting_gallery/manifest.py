@@ -557,6 +557,17 @@ RENDERER_MANIFEST: tuple[RendererSpec, ...] = (
                 ),
             ),
             GalleryCase(
+                case_id="log2fc_axis",
+                title="Varied paired slopes and log2 fold changes",
+                asset="paired_datapoints__log2fc_axis.png",
+                features=(
+                    "varied slope magnitudes",
+                    "combined positive, negative, and flat panel",
+                    "post-over-baseline log2 fold changes",
+                    "zero-centered symmetric secondary y axes",
+                ),
+            ),
+            GalleryCase(
                 case_id="precomputed_pair_values",
                 title="Paired values from preserved source matrices",
                 asset="paired_datapoints__precomputed_pair_values.png",

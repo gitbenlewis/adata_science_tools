@@ -1278,7 +1278,10 @@ def _invoke_case(
             show=False,
         )
 
-    if case_key == ("paired_datapoints", "difference_axis"):
+    if case_key in {
+        ("paired_datapoints", "difference_axis"),
+        ("paired_datapoints", "log2fc_axis"),
+    }:
         paired = inputs.paired
         post_mask = paired.obs["condition"].astype(str).eq("post").to_numpy()
         subject_ids = pd.Index(pd.unique(paired.obs["subject_id"].astype(str)))
@@ -1325,6 +1328,23 @@ def _invoke_case(
             },
             index=individual_variables + combined_variables,
         )
+        if case_key[1] == "difference_axis":
+            derived_axis_options = {
+                "paired_difference_label": "post - pre",
+                "paired_difference_ylabel": "Paired difference",
+                "paired_difference_ylims": (-3.0, 3.0),
+                "title": "Varied paired slopes and signed differences",
+                "xlabel": "Condition and derived change",
+            }
+        else:
+            derived_axis_options = {
+                "paired_difference_mode": "log2fc",
+                "paired_difference_label": "log2(post / pre)",
+                "paired_difference_ylabel": "Paired log2FC (post / pre)",
+                "paired_difference_ylims": (-0.4, 0.4),
+                "title": "Varied paired slopes and log2 fold changes",
+                "xlabel": "Condition and derived log2 fold change",
+            }
         return renderer(
             df=gallery_df,
             var_df=gallery_var_df,
@@ -1344,9 +1364,6 @@ def _invoke_case(
             subset_order=["cohort_a", "cohort_b"],
             subset_palette=["#4477AA", "#CC6677"],
             show_paired_difference=True,
-            paired_difference_label="post - pre",
-            paired_difference_ylabel="Paired difference",
-            paired_difference_ylims=(-3.0, 3.0),
             line_color_by_slope=True,
             slope_color_threshold=0.05,
             line_alpha=0.5,
@@ -1360,12 +1377,11 @@ def _invoke_case(
             legend_scope="figure",
             legend_loc="center left",
             legend_bbox_to_anchor=(1.01, 0.5),
-            title="Varied paired slopes and signed differences",
-            xlabel="Condition and derived change",
             ylabel="Simulated abundance",
             ncols=4,
             figsize=(16, 4.2),
             show=False,
+            **derived_axis_options,
         )
 
     if case_key == ("paired_datapoints", "precomputed_pair_values"):

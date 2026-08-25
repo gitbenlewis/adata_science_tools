@@ -63,7 +63,7 @@ class PlottingGalleryTests(unittest.TestCase):
         self.assertEqual(len(RENDERER_MANIFEST), 45)
         self.assertEqual(
             sum(len(spec.cases) for spec in RENDERER_MANIFEST),
-            60,
+            61,
         )
         for spec in RENDERER_MANIFEST:
             renderer = getattr(adtl.pl, spec.name)
@@ -263,6 +263,53 @@ class PlottingGalleryTests(unittest.TestCase):
         self.assertEqual(kwargs["paired_difference_ylabel"], "Paired difference")
         self.assertEqual(kwargs["paired_difference_ylims"], (-3.0, 3.0))
 
+    def test_log2fc_gallery_reuses_varied_difference_fixture(self):
+        spec = next(
+            spec for spec in RENDERER_MANIFEST if spec.name == "paired_datapoints"
+        )
+        cases = {case.case_id: case for case in spec.cases}
+        inputs = gallery_module.GalleryInputs()
+
+        with mock.patch.object(
+            gallery_module.adtl,
+            "paired_datapoints",
+            return_value=plt.figure(),
+        ) as renderer:
+            gallery_module._invoke_case(
+                spec,
+                cases["difference_axis"],
+                inputs,
+                Path("unused.png"),
+            )
+            difference_kwargs = renderer.call_args.kwargs
+            gallery_module._invoke_case(
+                spec,
+                cases["log2fc_axis"],
+                inputs,
+                Path("unused.png"),
+            )
+            log2fc_kwargs = renderer.call_args.kwargs
+
+        pd.testing.assert_frame_equal(
+            log2fc_kwargs["df"],
+            difference_kwargs["df"],
+        )
+        pd.testing.assert_frame_equal(
+            log2fc_kwargs["var_df"],
+            difference_kwargs["var_df"],
+        )
+        self.assertTrue(log2fc_kwargs["show_paired_difference"])
+        self.assertEqual(log2fc_kwargs["paired_difference_mode"], "log2fc")
+        self.assertEqual(
+            log2fc_kwargs["paired_difference_label"],
+            "log2(post / pre)",
+        )
+        self.assertEqual(
+            log2fc_kwargs["paired_difference_ylabel"],
+            "Paired log2FC (post / pre)",
+        )
+        self.assertEqual(log2fc_kwargs["paired_difference_ylims"], (-0.4, 0.4))
+
     def test_committed_assets_exactly_match_manifest_cases(self):
         declared_assets = {
             case.asset
@@ -435,6 +482,7 @@ class PlottingGalleryTests(unittest.TestCase):
                     "geneset_enrichemnt_ol_ven_M_n_N_x__replacement_smoke.png",
                     "geneset_enrichment_venn__universe_filtered.png",
                     "paired_datapoints__difference_axis.png",
+                    "paired_datapoints__log2fc_axis.png",
                     "paired_datapoints__paired_groups.png",
                     "paired_datapoints__precomputed_pair_values.png",
                     "paired_datapoints__slope_colored_lines.png",
@@ -511,6 +559,7 @@ class PlottingGalleryTests(unittest.TestCase):
                 for renderer_name, case_id in (
                     ("barh_column", "grouped_expression"),
                     ("paired_datapoints", "difference_axis"),
+                    ("paired_datapoints", "log2fc_axis"),
                 ):
                     with self.subTest(renderer=renderer_name, case=case_id):
                         first = generate_gallery(

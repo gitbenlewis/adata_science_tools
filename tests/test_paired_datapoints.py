@@ -721,6 +721,225 @@ class PairedDatapointsTests(unittest.TestCase):
             ["Pre", "Post"],
         )
 
+    def test_paired_difference_mode_defaults_to_difference(self):
+        plot_kwargs = {
+            "adata": self.make_adata(),
+            "var_names": ["A_v1"],
+            "pair_by_key": "Subject_ID",
+            "show_paired_difference": True,
+            "jitter_amount": 0,
+            "boxplot": False,
+            "show": False,
+        }
+
+        default_fig, default_axes, default_df = adtl.paired_datapoints(
+            **plot_kwargs,
+        )
+        explicit_fig, explicit_axes, explicit_df = adtl.paired_datapoints(
+            paired_difference_mode="difference",
+            **plot_kwargs,
+        )
+        self.addCleanup(plt.close, default_fig)
+        self.addCleanup(plt.close, explicit_fig)
+
+        pd.testing.assert_frame_equal(default_df, explicit_df)
+        for fig, axes in (
+            (default_fig, default_axes),
+            (explicit_fig, explicit_axes),
+        ):
+            self.assertEqual(
+                [tick.get_text() for tick in axes["A_v1"].get_xticklabels()],
+                ["Pre", "Post", "Post - Pre"],
+            )
+            difference_ax = next(
+                ax
+                for ax in fig.axes
+                if ax.get_label() == "A_v1__paired_difference"
+            )
+            self.assertEqual(difference_ax.get_ylabel(), "Paired difference")
+
+    def test_paired_log2fc_uses_target_over_reference_and_default_labels(self):
+        paired_df = pd.DataFrame(
+            {
+                "condition": ["Baseline", "Post"] * 3,
+                "subject": ["S1", "S1", "S2", "S2", "S3", "S3"],
+                "feature": [1.0, 4.0, 4.0, 1.0, 2.0, 2.0],
+            }
+        )
+
+        fig, axes, plot_df = adtl.paired_datapoints(
+            df=paired_df,
+            var_names=["feature"],
+            groupby_key="condition",
+            groupby_key_ref_value="Baseline",
+            groupby_key_target_value="Post",
+            pair_by_key="subject",
+            show_paired_difference=True,
+            paired_difference_mode="log2fc",
+            jitter_amount=0,
+            boxplot=False,
+            show=False,
+        )
+        self.addCleanup(plt.close, fig)
+
+        difference_values = plot_df.loc[
+            plot_df["side"] == "difference",
+            "value",
+        ].to_numpy()
+        np.testing.assert_allclose(difference_values, [2.0, -2.0, 0.0])
+        self.assertEqual(
+            [tick.get_text() for tick in axes["feature"].get_xticklabels()],
+            ["Baseline", "Post", "log2(Post / Baseline)"],
+        )
+        difference_ax = next(
+            ax for ax in fig.axes if ax.get_label() == "feature__paired_difference"
+        )
+        self.assertEqual(
+            difference_ax.get_ylabel(),
+            "Paired log2FC (Post / Baseline)",
+        )
+        lower, upper = difference_ax.get_ylim()
+        self.assertAlmostEqual(lower, -upper)
+        self.assertLessEqual(lower, -2.0)
+        self.assertGreaterEqual(upper, 2.0)
+
+    def test_paired_difference_mode_rejects_unknown_value(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            "'paired_difference_mode' must be one of 'difference' or 'log2fc'",
+        ):
+            adtl.paired_datapoints(
+                adata=self.make_adata(),
+                var_names=["A_v1"],
+                pair_by_key="Subject_ID",
+                paired_difference_mode="ratio",
+                show=False,
+            )
+
+    def test_paired_log2fc_invalid_endpoints_become_nan_with_one_warning(self):
+        paired_df = pd.DataFrame(
+            {
+                "Pre_or_Post_obs_col": ["Pre", "Post"] * 6,
+                "Subject_ID": [
+                    subject
+                    for subject in ("S1", "S2", "S3", "S4", "S5", "S6")
+                    for _ in range(2)
+                ],
+                "feature": [
+                    0.0,
+                    1.0,
+                    -1.0,
+                    1.0,
+                    1.0,
+                    0.0,
+                    1.0,
+                    -1.0,
+                    np.inf,
+                    1.0,
+                    1.0,
+                    np.inf,
+                ],
+            }
+        )
+
+        with (
+            self.assertLogs(
+                "adata_science_tools._plotting._datapoints",
+                level="WARNING",
+            ) as captured_logs,
+            mock.patch.object(plt, "tight_layout"),
+        ):
+            fig, _, plot_df = adtl.paired_datapoints(
+                df=paired_df,
+                var_names=["feature"],
+                pair_by_key="Subject_ID",
+                show_paired_difference=True,
+                paired_difference_mode="log2fc",
+                dropna=False,
+                boxplot=False,
+                show=False,
+            )
+        self.addCleanup(plt.close, fig)
+
+        self.assertEqual(
+            captured_logs.output,
+            [
+                "WARNING:adata_science_tools._plotting._datapoints:"
+                "Paired log2FC values were undefined for 6 line(s); setting "
+                "their derived values to NaN."
+            ],
+        )
+        difference_values = plot_df.loc[
+            plot_df["side"] == "difference",
+            "value",
+        ]
+        self.assertEqual(len(difference_values), 6)
+        self.assertTrue(difference_values.isna().all())
+
+    def test_paired_log2fc_is_stable_for_extreme_finite_positive_values(self):
+        paired_df = pd.DataFrame(
+            {
+                "Pre_or_Post_obs_col": ["Pre", "Post"] * 2,
+                "Subject_ID": ["S1", "S1", "S2", "S2"],
+                "feature": [1e-200, 1e200, 1e200, 1e-200],
+            }
+        )
+
+        fig, _, plot_df = adtl.paired_datapoints(
+            df=paired_df,
+            var_names=["feature"],
+            pair_by_key="Subject_ID",
+            show_paired_difference=True,
+            paired_difference_mode="log2fc",
+            connect_lines=False,
+            boxplot=False,
+            show=False,
+        )
+        self.addCleanup(plt.close, fig)
+
+        difference_values = plot_df.loc[
+            plot_df["side"] == "difference",
+            "value",
+        ].to_numpy()
+        expected_magnitude = np.log2(1e200) - np.log2(1e-200)
+        self.assertTrue(np.isfinite(difference_values).all())
+        np.testing.assert_allclose(
+            difference_values,
+            [expected_magnitude, -expected_magnitude],
+        )
+
+    def test_paired_log2fc_uses_bounded_and_filled_endpoint_values(self):
+        paired_df = pd.DataFrame(
+            {
+                "Pre_or_Post_obs_col": ["Pre", "Post"] * 2,
+                "Subject_ID": ["S1", "S1", "S2", "S2"],
+                "feature": [1.0, 16.0, np.nan, 4.0],
+            }
+        )
+
+        fig, _, plot_df = adtl.paired_datapoints(
+            df=paired_df,
+            var_names=["feature"],
+            pair_by_key="Subject_ID",
+            ref_min_value=2.0,
+            target_max_value=8.0,
+            bounds_fill_missing=True,
+            show_paired_difference=True,
+            paired_difference_mode="log2fc",
+            boxplot=False,
+            show=False,
+        )
+        self.addCleanup(plt.close, fig)
+
+        differences = plot_df.loc[
+            plot_df["side"] == "difference",
+            ["pair_id", "value"],
+        ]
+        self.assertEqual(
+            list(differences.itertuples(index=False, name=None)),
+            [("S1", 2.0), ("S2", 1.0)],
+        )
+
     def test_paired_difference_adds_signed_values_and_secondary_axis_dots(self):
         paired_df = pd.DataFrame(
             {
