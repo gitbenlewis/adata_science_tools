@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import anndata  # or use the quoted type hint instead
+from matplotlib.colors import to_rgba as _to_rgba
 from matplotlib.patches import Patch
 import anndata 
 import numpy as np
@@ -101,11 +102,16 @@ def _distribution_legend_title(
         group_column: str,
         point_color_column: str | None,
         point_shape_column: str | None,
+        include_group: bool = True,
 ):
     """Describe group, color, and shape semantics in one legend title."""
-    if point_color_column is None and point_shape_column is None:
+    if (
+            include_group
+            and point_color_column is None
+            and point_shape_column is None
+    ):
         return group_column
-    title_parts = [f"group: {group_column}"]
+    title_parts = [f"group: {group_column}"] if include_group else []
     if point_color_column is not None:
         title_parts.append(f"color: {point_color_column}")
     if point_shape_column is not None:
@@ -130,6 +136,7 @@ def _plot_group_distribution(
         point_markers: dict | None = None,
         point_jitter: float | None = None,
         point_size: float | None = None,
+        deterministic_jitter: bool = False,
 ):
     """Draw one grouped distribution layer and its optional observation overlay."""
     if distribution_kind not in _DISTRIBUTION_KINDS:
@@ -181,7 +188,11 @@ def _plot_group_distribution(
 
     if not include_stripplot:
         return
-    if point_color_column is None and point_shape_column is None:
+    if (
+            point_color_column is None
+            and point_shape_column is None
+            and not deterministic_jitter
+    ):
         stripplot_kwargs = {**common, "color": "black", "legend": False}
         if point_jitter is not None:
             stripplot_kwargs["jitter"] = point_jitter
@@ -302,6 +313,545 @@ def _plot_ci_effect(
     if reference_value is not None:
         ax.axvline(reference_value, color="black", linestyle="--", linewidth=1)
     ax.set_yticks([])
+
+
+def _prepare_pvalue_effects(
+        *,
+        var_df: pd.DataFrame,
+        feature_list: list[str],
+        effect_column: str,
+        pvalue_column: str,
+        pvalue_cutoff: float,
+):
+    """Prepare supplied effect and p-value columns for dot rendering."""
+    if not 0 < pvalue_cutoff <= 1:
+        raise ValueError("pvalue_cutoff must be greater than 0 and at most 1.")
+    effects = var_df.loc[feature_list, [effect_column, pvalue_column]].copy()
+    effects[effect_column] = pd.to_numeric(
+        effects[effect_column], errors="coerce"
+    )
+    if not np.isfinite(effects[effect_column].to_numpy(dtype=float)).all():
+        raise ValueError("Effect estimates must be finite numeric values.")
+
+    pvalues = pd.to_numeric(effects[pvalue_column], errors="coerce")
+    if not np.isfinite(pvalues.to_numpy(dtype=float)).all():
+        raise ValueError("P-values must be finite numeric values.")
+    if ((pvalues < 0) | (pvalues > 1)).any():
+        raise ValueError("P-values must be between 0 and 1, inclusive.")
+    pvalues = pvalues.clip(lower=1e-300, upper=1.0)
+    effects["_datapoints_log10_pvalue"] = -np.log10(pvalues)
+    effects["_datapoints_size_metric"] = np.where(
+        pvalues > 0.5, 0.0, effects["_datapoints_log10_pvalue"]
+    )
+    threshold = float(-np.log10(pvalue_cutoff))
+    finite_sizes = effects["_datapoints_size_metric"].replace(
+        [np.inf, -np.inf], np.nan
+    )
+    size_max = finite_sizes.max()
+    size_max = float(size_max) if np.isfinite(size_max) else 0.0
+    size_max = max(size_max, threshold, 1e-6)
+    cmap = plt.get_cmap("viridis_r")
+    norm = plt.Normalize(
+        vmin=threshold, vmax=max(size_max, threshold), clip=True
+    )
+    return effects, threshold, size_max, cmap, norm
+
+
+def _plot_pvalue_effect(
+        *,
+        ax,
+        row: pd.Series,
+        effect_column: str,
+        threshold: float,
+        size_max: float,
+        cmap,
+        norm,
+        reference_value: float | None,
+        sizes: tuple[float, float] = (20, 2000),
+):
+    """Draw one effect with p-value encoded as dot size and color."""
+    effect = float(row[effect_column])
+    log10_pvalue = float(row["_datapoints_log10_pvalue"])
+    size_metric = float(row["_datapoints_size_metric"])
+    ring_area = float(np.interp(threshold, [0.0, size_max], sizes))
+    ax.scatter(
+        effect, 0, s=ring_area, facecolors="none", edgecolors="red",
+        linewidths=1.5, zorder=4,
+    )
+    if np.isfinite(size_metric):
+        dot_area = float(np.interp(size_metric, [0.0, size_max], sizes))
+        dot_color = cmap(norm(log10_pvalue)) if log10_pvalue >= threshold else "grey"
+        ax.scatter(
+            effect, 0, s=dot_area, color=dot_color, edgecolors="black",
+            linewidths=0.5, zorder=3,
+        )
+    if reference_value is not None:
+        ax.axvline(reference_value, color="red", linestyle="--", linewidth=1)
+    ax.set_yticks([])
+
+
+def _pad_pvalue_effect_axis(ax):
+    """Expand symmetric x-limits enough to keep effect markers inside the axes."""
+    marker_area = max(
+        float(np.max(collection.get_sizes()))
+        for collection in ax.collections
+        if len(collection.get_sizes())
+    )
+    marker_linewidth = max(
+        float(np.max(collection.get_linewidths()))
+        for collection in ax.collections
+        if len(collection.get_linewidths())
+    )
+    axis_width_points = ax.get_window_extent().width * 72.0 / ax.figure.dpi
+    marker_radius_points = np.sqrt(marker_area) / 2.0 + marker_linewidth / 2.0
+    available_fraction = max(
+        1.0 - 2.0 * marker_radius_points / axis_width_points,
+        0.05,
+    )
+    effect_magnitude = max(
+        abs(float(offset[0]))
+        for collection in ax.collections
+        for offset in collection.get_offsets()
+    )
+    current_limit = max(abs(bound) for bound in ax.get_xlim())
+    padded_limit = max(
+        current_limit,
+        1.02 * effect_magnitude / available_fraction,
+        1e-6,
+    )
+    ax.set_xlim(-padded_limit, padded_limit)
+
+
+def _pvalue_legend_handles(
+        *,
+        threshold: float,
+        size_max: float,
+        cmap,
+        norm,
+        bins: int = 4,
+        sizes: tuple[float, float] = (20, 2000),
+):
+    """Build the shared p-value size/color legend used by column plots."""
+    from matplotlib.lines import Line2D
+
+    def marker_size(value):
+        area = float(np.interp(value, [0.0, size_max], sizes))
+        raw_size = np.sqrt(area)
+        return float(np.interp(
+            raw_size,
+            np.sqrt(sizes),
+            (4.0, 18.0),
+        ))
+
+    upper_values = np.linspace(threshold, size_max, max(1, bins) + 1)[1:]
+    unique_values = []
+    seen = set()
+    for value in upper_values:
+        rounded = round(float(value), 1)
+        if rounded <= round(threshold, 1) + 1e-6 or rounded in seen:
+            continue
+        seen.add(rounded)
+        unique_values.append(float(value))
+
+    grey_value = max(0.0, min(threshold - 0.01, size_max))
+    handles = [Line2D(
+        [0], [0], marker="o", linestyle="", markerfacecolor="grey",
+        markeredgecolor="black", markersize=marker_size(grey_value),
+        label=f"< {threshold:.1f}",
+    )]
+    handles.extend([
+        Line2D(
+            [0], [0], marker="o", linestyle="",
+            markerfacecolor=cmap(norm(value)), markeredgecolor="black",
+            markersize=marker_size(value), label=f"{value:.1f}",
+        )
+        for value in unique_values
+    ])
+    handles.append(Line2D(
+        [0], [0], marker="o", linestyle="", markerfacecolor="none",
+        markeredgecolor="red", markeredgewidth=1.5,
+        markersize=marker_size(threshold), label=f"{threshold:.1f} ring",
+    ))
+    return handles
+
+
+def datapoints_dotplot_column(
+        adata: anndata.AnnData | None = None,
+        *,
+        layer: str | None = None,
+        x_df: pd.DataFrame | None = None,
+        obs_df: pd.DataFrame | None = None,
+        var_df: pd.DataFrame | None = None,
+        feature_list: list[str] | None = None,
+        orientation: str = "horizontal",
+        effect_mode: str = "pvalue",
+        comparison_col: str = "Treatment",
+        comparison_order: list[str] | None = None,
+        feature_label_vars_col: str | None = None,
+        distribution_kind: str = "bar",
+        include_stripplot: bool = True,
+        distribution_palette: dict | None = None,
+        point_color_column: str | None = None,
+        point_shape_column: str | None = None,
+        point_palette: dict | None = None,
+        point_markers: dict | None = None,
+        point_jitter: float | None = None,
+        point_size: float | None = None,
+        effect_column: str = "log2FoldChange",
+        pvalue_column: str = "pvalue",
+        ci_low_column: str = "ci_low",
+        ci_high_column: str = "ci_high",
+        pvalue_cutoff: float = 0.1,
+        effect_reference_value: float | None = 0,
+        share_distribution_axis: bool = False,
+        distribution_axis_limits: tuple[float, float] | None = None,
+        share_effect_x: bool = False,
+        effect_xlim: tuple[float, float] | None = None,
+        figsize: tuple[float, float] | None = None,
+        width_ratios: tuple[float, float] = (3.0, 1.0),
+        fig_title: str | None = None,
+        distribution_axis_label: str = "Expression",
+        effect_axis_label: str = "log2FoldChange",
+        legend: bool = True,
+        tight_layout_rect: tuple[float, float, float, float] | None = None,
+        savefig: bool = False,
+        file_name: str = "datapoints_dotplot_column.png",
+):
+    """Plot grouped observations beside supplied feature-level effects.
+
+    Expression may be supplied as an ``AnnData`` object or as aligned wide
+    ``x_df`` and ``obs_df`` tables. Feature-level values are always read from
+    ``var_df`` (or ``adata.var``); this function does not estimate effects,
+    p-values, or confidence intervals from the expression matrix.
+
+    ``orientation`` changes only the grouped distribution panel. The effect is
+    always plotted on the x-axis. ``effect_mode='pvalue'`` encodes the supplied
+    p-value as dot size/color, while ``effect_mode='interval'`` draws the
+    supplied confidence interval.
+
+    Returns
+    -------
+    tuple[matplotlib.figure.Figure, numpy.ndarray]
+        Figure and an ``(n_features, 2)`` axes array.
+    """
+    if not feature_list:
+        raise ValueError("feature_list must be provided and non-empty.")
+    feature_list = list(feature_list)
+    if pd.Index(feature_list).has_duplicates:
+        raise ValueError("feature_list must contain unique feature identifiers.")
+    if orientation not in {"horizontal", "vertical"}:
+        raise ValueError("orientation must be 'horizontal' or 'vertical'.")
+    if effect_mode not in {"pvalue", "interval"}:
+        raise ValueError("effect_mode must be 'pvalue' or 'interval'.")
+    active_point_color_column = point_color_column if include_stripplot else None
+    active_point_shape_column = point_shape_column if include_stripplot else None
+    required_obs_columns = list(dict.fromkeys(
+        column
+        for column in (
+            comparison_col,
+            active_point_color_column,
+            active_point_shape_column,
+        )
+        if column is not None
+    ))
+    required_var_columns = list(dict.fromkeys(
+        column
+        for column in (
+            feature_label_vars_col,
+            effect_column,
+            pvalue_column if effect_mode == "pvalue" else ci_low_column,
+            None if effect_mode == "pvalue" else ci_high_column,
+        )
+        if column is not None
+    ))
+
+    if x_df is None:
+        if adata is None:
+            raise ValueError("Provide adata or all of x_df, obs_df, and var_df.")
+        if layer is not None and layer not in adata.layers:
+            raise ValueError(f"Layer '{layer}' not found in adata.layers.")
+        missing_features = [
+            feature for feature in feature_list if feature not in adata.var_names
+        ]
+        if missing_features:
+            raise KeyError(f"Features not found in expression data: {missing_features}")
+        feature_positions = adata.var_names.get_indexer(feature_list)
+        storage_positions, requested_order = np.unique(
+            feature_positions, return_inverse=True
+        )
+        expression = adata.layers[layer] if layer is not None else adata.X
+        # Subset before materializing a sparse matrix to bound peak memory use.
+        # Backed dense matrices require increasing, unique storage positions.
+        expression = expression[:, storage_positions]
+        if hasattr(expression, "toarray"):
+            expression = expression.toarray()
+        expression = np.asarray(expression)[:, requested_order]
+        selected_x = pd.DataFrame(
+            expression, index=adata.obs_names, columns=feature_list
+        )
+        source_obs = adata.obs if obs_df is None else obs_df
+        source_var = adata.var if var_df is None else var_df
+    else:
+        if obs_df is None or var_df is None:
+            raise ValueError("x_df requires both obs_df and var_df.")
+        missing_features = [
+            feature for feature in feature_list if feature not in x_df.columns
+        ]
+        if missing_features:
+            raise KeyError(f"Features not found in expression data: {missing_features}")
+        # Select requested columns before copying a potentially large wide input.
+        selected_x = x_df.loc[:, feature_list].copy()
+        source_obs = obs_df
+        source_var = var_df
+
+    if not selected_x.index.equals(source_obs.index):
+        raise ValueError("x_df and obs_df indexes must match exactly and in order.")
+    if source_var.index.has_duplicates:
+        raise ValueError("var_df must contain exactly one row per feature.")
+    missing_var_features = [
+        feature for feature in feature_list if feature not in source_var.index
+    ]
+    if missing_var_features:
+        raise KeyError(f"Features not found in var_df: {missing_var_features}")
+    for column in required_obs_columns:
+        if column not in source_obs.columns:
+            raise ValueError(f"Column '{column}' not found in obs_df.")
+    for column in required_var_columns:
+        if column not in source_var.columns:
+            raise ValueError(f"Column '{column}' not found in var_df.")
+
+    selected_obs = source_obs.loc[:, required_obs_columns].copy()
+    selected_var = source_var.loc[feature_list, required_var_columns].copy()
+
+    feature_value_columns = {}
+    reserved_columns = set(selected_obs.columns)
+    for row_index, feature in enumerate(feature_list):
+        value_column = f"_datapoints_feature_{row_index}"
+        while value_column in reserved_columns:
+            value_column = f"_{value_column}"
+        feature_value_columns[feature] = value_column
+        reserved_columns.add(value_column)
+    selected_x.columns = [feature_value_columns[feature] for feature in feature_list]
+    plotted_data = pd.concat([selected_obs, selected_x], axis=1)
+    comparison_order = (
+        list(pd.unique(plotted_data[comparison_col]))
+        if comparison_order is None else list(comparison_order)
+    )
+    distribution_color_map = distribution_palette or dict(zip(
+        comparison_order,
+        sns.color_palette("tab10", n_colors=len(comparison_order)),
+    ))
+    displayed_data = plotted_data.loc[
+        plotted_data[comparison_col].isin(comparison_order)
+    ]
+    _, _, resolved_point_palette, resolved_point_markers = _resolve_point_encodings(
+        displayed_data,
+        active_point_color_column,
+        active_point_shape_column,
+        point_palette,
+        point_markers,
+    )
+
+    if effect_mode == "interval":
+        required_columns = [effect_column, ci_low_column, ci_high_column]
+        for column in required_columns:
+            if column not in selected_var.columns:
+                raise ValueError(f"Column '{column}' not found in var_df.")
+        effect_data = selected_var.loc[
+            feature_list, required_columns
+        ].apply(pd.to_numeric, errors="coerce")
+        if not np.isfinite(effect_data.to_numpy(dtype=float)).all():
+            raise ValueError(
+                "Effect estimates and confidence intervals must be finite numeric values."
+            )
+        invalid_intervals = (
+            (effect_data[ci_low_column] > effect_data[effect_column])
+            | (effect_data[effect_column] > effect_data[ci_high_column])
+        )
+        if invalid_intervals.any():
+            raise ValueError(
+                "Each confidence interval must satisfy ci_low <= effect <= ci_high."
+            )
+        effect_bound_columns = [ci_low_column, ci_high_column]
+        pvalue_details = None
+    else:
+        if pvalue_column not in selected_var.columns:
+            raise ValueError(f"Column '{pvalue_column}' not found in var_df.")
+        effect_data, threshold, size_max, cmap, norm = _prepare_pvalue_effects(
+            var_df=selected_var,
+            feature_list=feature_list,
+            effect_column=effect_column,
+            pvalue_column=pvalue_column,
+            pvalue_cutoff=pvalue_cutoff,
+        )
+        effect_bound_columns = [effect_column]
+        pvalue_details = (threshold, size_max, cmap, norm)
+
+    if figsize is None:
+        figsize = (12, max(3, 2.75 * len(feature_list)))
+    fig, axes = plt.subplots(
+        len(feature_list), 2, figsize=figsize, squeeze=False,
+        gridspec_kw={"width_ratios": width_ratios},
+    )
+    if share_distribution_axis:
+        for distribution_ax in axes[1:, 0]:
+            if orientation == "horizontal":
+                distribution_ax.sharex(axes[0, 0])
+            else:
+                distribution_ax.sharey(axes[0, 0])
+    if share_effect_x:
+        for effect_ax in axes[1:, 1]:
+            effect_ax.sharex(axes[0, 1])
+    if fig_title is not None:
+        fig.suptitle(fig_title, y=0.995)
+
+    resolved_effect_xlim = effect_xlim
+    if share_effect_x and resolved_effect_xlim is None:
+        limit = float(effect_data[effect_bound_columns].abs().to_numpy().max())
+        if effect_reference_value is not None:
+            limit = max(limit, abs(float(effect_reference_value)))
+        limit = max(limit, 1e-6)
+        resolved_effect_xlim = (-1.05 * limit, 1.05 * limit)
+
+    for row_index, feature in enumerate(feature_list):
+        distribution_ax, effect_ax = axes[row_index]
+        _plot_group_distribution(
+            data=plotted_data,
+            value_column=feature_value_columns[feature],
+            group_column=comparison_col,
+            group_order=comparison_order,
+            ax=distribution_ax,
+            orientation=orientation,
+            distribution_kind=distribution_kind,
+            color_map=distribution_color_map,
+            include_stripplot=include_stripplot,
+            point_color_column=active_point_color_column,
+            point_shape_column=active_point_shape_column,
+            point_palette=resolved_point_palette,
+            point_markers=resolved_point_markers,
+            point_jitter=point_jitter,
+            point_size=point_size,
+            deterministic_jitter=True,
+        )
+        feature_label = feature
+        if feature_label_vars_col is not None:
+            label_value = selected_var.loc[feature, feature_label_vars_col]
+            if pd.notna(label_value):
+                feature_label = label_value
+        distribution_ax.set_title(str(feature_label), loc="left", fontweight="bold")
+        if orientation == "horizontal":
+            distribution_ax.set_xlabel(distribution_axis_label)
+            distribution_ax.set_ylabel(comparison_col)
+            if distribution_axis_limits is not None:
+                distribution_ax.set_xlim(distribution_axis_limits)
+        else:
+            distribution_ax.set_xlabel(comparison_col)
+            distribution_ax.set_ylabel(distribution_axis_label)
+            if distribution_axis_limits is not None:
+                distribution_ax.set_ylim(distribution_axis_limits)
+
+        if effect_mode == "interval":
+            _plot_ci_effect(
+                ax=effect_ax,
+                row=effect_data.loc[feature],
+                effect_column=effect_column,
+                ci_low_column=ci_low_column,
+                ci_high_column=ci_high_column,
+                marker_size=5,
+                color="black",
+                reference_value=effect_reference_value,
+            )
+        else:
+            threshold, size_max, cmap, norm = pvalue_details
+            _plot_pvalue_effect(
+                ax=effect_ax,
+                row=effect_data.loc[feature],
+                effect_column=effect_column,
+                threshold=threshold,
+                size_max=size_max,
+                cmap=cmap,
+                norm=norm,
+                reference_value=effect_reference_value,
+            )
+        row_effect_xlim = resolved_effect_xlim
+        if row_effect_xlim is None:
+            limit = float(
+                effect_data.loc[[feature], effect_bound_columns].abs().to_numpy().max()
+            )
+            if effect_reference_value is not None:
+                limit = max(limit, abs(float(effect_reference_value)))
+            limit = max(limit, 1e-6)
+            row_effect_xlim = (-1.05 * limit, 1.05 * limit)
+        effect_ax.set_xlim(row_effect_xlim)
+        effect_ax.set_xlabel(effect_axis_label)
+
+    distribution_handles = []
+    if legend:
+        show_group_handles = len({
+            _to_rgba(distribution_color_map[group]) for group in comparison_order
+        }) > 1
+        if show_group_handles:
+            distribution_handles.extend([
+                Patch(
+                    facecolor=distribution_color_map[group],
+                    edgecolor="none",
+                    label=str(group),
+                )
+                for group in comparison_order
+            ])
+        if include_stripplot:
+            distribution_handles.extend(_point_legend_handles(
+                displayed_data,
+                active_point_color_column,
+                active_point_shape_column,
+                resolved_point_palette,
+                resolved_point_markers,
+                point_size,
+            ))
+        if distribution_handles:
+            fig.legend(
+                handles=distribution_handles,
+                loc="upper center",
+                ncol=min(len(distribution_handles), 8),
+                bbox_to_anchor=(0.5, 0.97),
+                title=_distribution_legend_title(
+                    comparison_col,
+                    active_point_color_column,
+                    active_point_shape_column,
+                    include_group=show_group_handles,
+                ),
+                frameon=False,
+            )
+    if legend and effect_mode == "pvalue":
+        threshold, size_max, cmap, norm = pvalue_details
+        pvalue_handles = _pvalue_legend_handles(
+            threshold=threshold, size_max=size_max, cmap=cmap, norm=norm
+        )
+        fig.legend(
+            handles=pvalue_handles,
+            loc="lower center",
+            ncol=min(len(pvalue_handles), 6),
+            bbox_to_anchor=(0.5, 0.005),
+            title=f"-log10({pvalue_column})",
+            frameon=True,
+        )
+
+    if tight_layout_rect is None:
+        top = 0.91 if distribution_handles or fig_title is not None else 0.98
+        bottom = 0.12 if legend and effect_mode == "pvalue" else 0.04
+        tight_layout_rect = (0, bottom, 1, top)
+    fig.tight_layout(rect=tight_layout_rect)
+    if effect_mode == "pvalue" and effect_xlim is None:
+        # Final axes widths are needed to convert marker points to data padding.
+        fig.canvas.draw()
+        for effect_ax in axes[:, 1]:
+            _pad_pvalue_effect_axis(effect_ax)
+    if savefig:
+        fig.savefig(file_name, dpi=300, bbox_inches="tight")
+        print(f"Saved plot to {file_name}")
+    plt.show()
+    return fig, axes
+
 
 def barh_column(
         adata: anndata.AnnData | None = None,

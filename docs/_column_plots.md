@@ -1,12 +1,14 @@
 # `_column_plots`
 
-Horizontal bar and log2 fold-change dotplot figure builders from `_plotting/_column_plots.py`.
+Per-feature distribution and effect-column figure builders from
+`_plotting/_column_plots.py`.
 
 These functions are the package's main helpers for per-feature distribution
 columns and composite distribution-plus-effect layouts.
 
 ## Public entry points
 
+- `datapoints_dotplot_column` (preferred composite API)
 - `barh_column`
 - `l2fc_dotplot_single`
 - `l2fc_dotplot_column`
@@ -26,14 +28,17 @@ Most functions support one of these input paths:
 Shared expectations:
 
 - `feature_list` is required for every feature-oriented plot.
-- Bar panels read expression values from `adata.X`, `adata.layers[layer]`, or `x_df`.
-- Dotplot panels read per-feature statistics from `adata.var` or `var_df`.
-- Grouping for bar plots comes from `comparison_col` in `adata.obs` or `obs_df`.
+- Distribution panels read expression values from `adata.X`,
+  `adata.layers[layer]`, or `x_df`.
+- Effect panels read per-feature statistics from `adata.var` or `var_df`.
+- Grouping for distributions comes from `comparison_col` in `adata.obs` or
+  `obs_df`.
 
 ## Choosing a column renderer
 
 | Renderer | Distribution orientation | Distribution layers | Effect display |
 | --- | --- | --- | --- |
+| `datapoints_dotplot_column` (preferred) | horizontal or vertical | bar, box, or violin; optional observations | p-value encoding or supplied confidence interval |
 | `barh_column` | horizontal | bar, box, or violin; optional observations | none |
 | `barh_l2fc_dotplot_column` | horizontal | bar, box, or violin; optional observations | one p-value-encoded effect column |
 | `barh_dotplot_dotplot_column` | horizontal | bar, box, or violin; optional observations | two p-value-encoded effect columns |
@@ -42,10 +47,174 @@ Shared expectations:
 | `vbar_l2fc_dotplot_column` | vertical | bar, box, or violin; optional color/shape observations | supplied effect and confidence interval |
 | `l2fc_dotplot_column` | none | none | p-value encoding or supplied confidence interval |
 
+`orientation` and `effect_mode` are independent in the preferred API. For
+example, horizontal distributions can be paired with p-value-encoded effects,
+while vertical distributions can be paired with supplied confidence intervals;
+either effect mode is available in either orientation.
+
 For the distribution column, `distribution_kind="bar"` preserves the historical
 default. Use `"box"` to show quartiles and whiskers or `"violin"` to show a
 kernel-density summary. `include_stripplot` independently controls whether raw
 observations are drawn over the selected summary layer.
+
+## `datapoints_dotplot_column`
+
+Use `datapoints_dotplot_column(...)` for new composite plots. It gives every
+selected feature one distribution panel and one effect panel, with a stable
+`(n_features, 2)` axes array returned for both one-feature and multi-feature
+calls.
+
+### Full signature
+
+```python
+def datapoints_dotplot_column(
+        adata: anndata.AnnData | None = None,
+        *,
+        layer: str | None = None,
+        x_df: pd.DataFrame | None = None,
+        obs_df: pd.DataFrame | None = None,
+        var_df: pd.DataFrame | None = None,
+        feature_list: list[str] | None = None,
+        orientation: str = "horizontal",
+        effect_mode: str = "pvalue",
+        comparison_col: str = "Treatment",
+        comparison_order: list[str] | None = None,
+        feature_label_vars_col: str | None = None,
+        distribution_kind: str = "bar",
+        include_stripplot: bool = True,
+        distribution_palette: dict | None = None,
+        point_color_column: str | None = None,
+        point_shape_column: str | None = None,
+        point_palette: dict | None = None,
+        point_markers: dict | None = None,
+        point_jitter: float | None = None,
+        point_size: float | None = None,
+        effect_column: str = "log2FoldChange",
+        pvalue_column: str = "pvalue",
+        ci_low_column: str = "ci_low",
+        ci_high_column: str = "ci_high",
+        pvalue_cutoff: float = 0.1,
+        effect_reference_value: float | None = 0,
+        share_distribution_axis: bool = False,
+        distribution_axis_limits: tuple[float, float] | None = None,
+        share_effect_x: bool = False,
+        effect_xlim: tuple[float, float] | None = None,
+        figsize: tuple[float, float] | None = None,
+        width_ratios: tuple[float, float] = (3.0, 1.0),
+        fig_title: str | None = None,
+        distribution_axis_label: str = "Expression",
+        effect_axis_label: str = "log2FoldChange",
+        legend: bool = True,
+        tight_layout_rect: tuple[float, float, float, float] | None = None,
+        savefig: bool = False,
+        file_name: str = "datapoints_dotplot_column.png",
+):
+```
+
+### Input and mode contract
+
+- Supply either `adata` or all three aligned tables: wide `x_df`, observation
+  metadata `obs_df`, and feature-indexed metadata `var_df`. Rows of `x_df` and
+  `obs_df` must align, and columns of `x_df` must contain the unique identifiers
+  in `feature_list`.
+- `orientation="horizontal"` or `"vertical"` controls only the distribution
+  panels. `effect_mode="pvalue"` or `"interval"` independently controls only
+  the effect panels.
+- P-value mode reads `effect_column` and `pvalue_column` from feature metadata.
+  P-values must be finite values from 0 through 1. Point size and color encode
+  significance, and `pvalue_cutoff` controls the threshold ring.
+- Interval mode reads `effect_column`, `ci_low_column`, and `ci_high_column`
+  from feature metadata. The bounds must be finite and satisfy
+  `ci_low <= effect <= ci_high`.
+- Confidence intervals are supplied plotting metadata. This function never
+  estimates an effect or interval from the expression observations.
+- `distribution_kind` selects `"bar"`, `"box"`, or `"violin"`, while
+  `include_stripplot` independently controls individual observations.
+  `point_color_column` and `point_shape_column` map observation metadata to
+  point color and marker shape when those observations are shown. The shared
+  legend includes only displayed levels; redundant group handles are omitted
+  when every distribution group uses the same fill color.
+- `share_distribution_axis` shares the numeric distribution axis: x for
+  horizontal distributions and y for vertical distributions.
+  `share_effect_x` independently shares the effect-panel x axes.
+- Calling the renderer displays the figure through Matplotlib, matching the
+  existing column-plot family. `savefig=True` additionally writes `file_name`.
+
+### Gallery examples
+
+<img src="assets/plotting_gallery/datapoints_dotplot_column__horizontal_pvalue.png" alt="Horizontal distributions with p-value effects" width="720">
+
+*`horizontal_pvalue` — Horizontal violin distributions paired with
+p-value-encoded effects from deterministic library-derived differential-test
+results. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+
+<img src="assets/plotting_gallery/datapoints_dotplot_column__vertical_interval.png" alt="Vertical distributions with supplied intervals" width="720">
+
+*`vertical_interval` — Vertical boxplots paired with independently supplied
+synthetic effect intervals. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+
+### Migrating from legacy composite renderers
+
+Calls using the wide/AnnData `barh_l2fc_dotplot_column(...)` data model can move
+directly to the preferred API. Rename the effect-column arguments and select the
+two independent modes explicitly:
+
+```python
+fig, axes = adtl.datapoints_dotplot_column(
+    adata=adata,
+    layer="pgml",
+    feature_list=feature_list,
+    comparison_col="Treatment",
+    comparison_order=["control", "case"],
+    orientation="horizontal",
+    effect_mode="pvalue",
+    effect_column="log2FoldChange",
+    pvalue_column="FDR",
+    distribution_kind="box",
+)
+```
+
+The long-form `vbar_l2fc_dotplot_column(...)` contract requires one explicit
+reshape. Sample metadata must be invariant across feature rows before it is
+deduplicated:
+
+```python
+sample_metadata = (
+    expression_df.drop_duplicates("sample_id")
+    .set_index("sample_id")[["response_group", "subtype", "cohort"]]
+)
+x_df = expression_df.pivot(
+    index="sample_id",
+    columns="feature",
+    values="gtpm",
+).reindex(sample_metadata.index)
+var_df = effects_df.set_index("feature")
+
+fig, axes = adtl.datapoints_dotplot_column(
+    x_df=x_df,
+    obs_df=sample_metadata,
+    var_df=var_df,
+    feature_list=["GENE_A", "GENE_B", "GENE_C"],
+    comparison_col="response_group",
+    comparison_order=["NonResponder", "Responder"],
+    orientation="vertical",
+    effect_mode="interval",
+    effect_column="adjusted_log2fc",
+    ci_low_column="ci_low",
+    ci_high_column="ci_high",
+    distribution_kind="box",
+    point_color_column="subtype",
+    point_shape_column="cohort",
+)
+```
+
+The existing entry points remain public for compatibility with their established
+signatures and return conventions. `barh_l2fc_dotplot_column(...)` retains its
+historical horizontal parameter names, while `vbar_l2fc_dotplot_column(...)`
+remains the specialized long-form response-panel API with a separate effects
+table. `l2fc_dotplot_column(...)` remains effect-only, with no distribution
+panel, and the three- and four-effect horizontal variants remain appropriate
+when more than one inferential column is required.
 
 ## `barh_column`
 

@@ -4,7 +4,7 @@ This gallery is a repository-owned visual catalog for the plotting functions
 exported by `adata_science_tools._plotting`. The coverage contract and asset
 filenames come from
 [`example_plotting_gallery/manifest.py`](../example_plotting_gallery/manifest.py):
-44 renderers and 51 cases, split across maintained, compatibility, and
+45 renderers and 53 cases, split across maintained, compatibility, and
 deprecated APIs.
 
 The examples are for rendering and API coverage. They are not benchmark
@@ -21,19 +21,22 @@ rows. These precomputed tables, and the deterministic continuous-effect curve
 and interval, are plotting inputs rather than estimates produced by the
 library.
 
-The `vbar_l2fc_dotplot_column` response-panel case reads the fixed
-`synthetic_expression.csv` and `synthetic_effects.csv` fixtures. Every sample,
-feature, group assignment, abundance, effect, and interval is synthetic. The
-effect intervals are supplied plotting values and are not estimated from the
-expression table. Response group, subtype, and cohort remain constant for each
-synthetic sample across feature rows.
+The `vbar_l2fc_dotplot_column` response-panel case and the vertical-interval
+`datapoints_dotplot_column` case read the fixed `synthetic_expression.csv` and
+`synthetic_effects.csv` fixtures. Every sample, feature, group assignment,
+abundance, effect, and interval is synthetic. The effect intervals are supplied
+plotting values and are not estimated from the expression table. Response group,
+subtype, and cohort remain constant for each synthetic sample across feature
+rows. The latter case reshapes the long expression fixture into the preferred
+API's aligned wide expression, observation-metadata, and feature-metadata
+tables without changing any values.
 
 Some examples deliberately consume analysis results produced by public library
 functions:
 
 | Library-derived result | Gallery consumers |
 | --- | --- |
-| `diff_test` effects and p-values, via `run_independent_diff_test` | `barh_l2fc_dotplot_column`, `barh_dotplot_dotplot_column`, `barh_dotplot_dotplot_dotplot_column`, `barh_4X_dotplot_column`, `l2fc_dotplot_column`, `l2fc_dotplot_single`, `qqplot`, and `volcano_plot_generic`; the deprecated `l2fc_pvalue_dotplot_gex`, `l2fc_pvalue_dotplot_protein_metabolite`, `plot_column_of_bar_h_2groups_with_l2fc_dotplot_GEX_adata`, `qqplot_pvalues`, and `volcano_plot_sns_single_comparison_generic` cases reuse the same results through their legacy contracts. |
+| `diff_test` effects and p-values, via `run_independent_diff_test` | The horizontal p-value `datapoints_dotplot_column` case, `barh_l2fc_dotplot_column`, `barh_dotplot_dotplot_column`, `barh_dotplot_dotplot_dotplot_column`, `barh_4X_dotplot_column`, `l2fc_dotplot_column`, `l2fc_dotplot_single`, `qqplot`, and `volcano_plot_generic`; the deprecated `l2fc_pvalue_dotplot_gex`, `l2fc_pvalue_dotplot_protein_metabolite`, `plot_column_of_bar_h_2groups_with_l2fc_dotplot_GEX_adata`, `qqplot_pvalues`, and `volcano_plot_sns_single_comparison_generic` cases reuse the same results through their legacy contracts. |
 | `fit_smf_ols_models_and_summarize_adata` coefficients, confidence intervals, p-values, and sample counts | Both `forest` cases, plus the adjusted OLS panels in `barh_dotplot_dotplot_dotplot_column` and `barh_4X_dotplot_column`. |
 | `calculate_expectations`, `predict_expectation`, and `excess_expectation` fitted values and residuals | `residual_diagnostic`. |
 | `pairwise_spearman_corr_matrix` rank-correlation matrix | Both `plot_heatmap` cases. The three `plot_rank_*` renderers instead calculate their displayed rank summaries from the deterministic ranked lists passed to them. |
@@ -48,7 +51,7 @@ analysis values.
 
 ## Coverage boundaries
 
-The manifest labels 34 renderers as maintained, 1 as a compatibility API, and 9
+The manifest labels 35 renderers as maintained, 1 as a compatibility API, and 9
 as deprecated. Compatibility and deprecated entries remain in the catalog so
 their current call paths and recommended replacements are visible; their
 screenshots do not change their support status.
@@ -75,7 +78,7 @@ The entries, order, case IDs, titles, statuses, replacements, and filenames
 below are derived from `RENDERER_MANIFEST`; the manifest remains authoritative
 if coverage changes.
 
-### Maintained renderers (34)
+### Maintained renderers (35)
 
 | Renderer | Gallery cases |
 | --- | --- |
@@ -85,6 +88,7 @@ if coverage changes.
 | `barh_dotplot_dotplot_column`<br><small>`_plotting._column_plots`</small> | <a href="assets/plotting_gallery/barh_dotplot_dotplot_column__three_panel.png"><img src="assets/plotting_gallery/barh_dotplot_dotplot_column__three_panel.png" alt="Expression with two differential summaries" width="260"></a><br>`three_panel` — Expression with two differential summaries |
 | `barh_dotplot_dotplot_dotplot_column`<br><small>`_plotting._column_plots`</small> | <a href="assets/plotting_gallery/barh_dotplot_dotplot_dotplot_column__four_panel.png"><img src="assets/plotting_gallery/barh_dotplot_dotplot_dotplot_column__four_panel.png" alt="Expression with three differential summaries" width="260"></a><br>`four_panel` — Expression with three differential summaries |
 | `barh_l2fc_dotplot_column`<br><small>`_plotting._column_plots`</small> | <a href="assets/plotting_gallery/barh_l2fc_dotplot_column__two_panel.png"><img src="assets/plotting_gallery/barh_l2fc_dotplot_column__two_panel.png" alt="Expression and differential effect" width="260"></a><br>`two_panel` — Expression and differential effect |
+| `datapoints_dotplot_column`<br><small>`_plotting._column_plots`</small> | <a href="assets/plotting_gallery/datapoints_dotplot_column__horizontal_pvalue.png"><img src="assets/plotting_gallery/datapoints_dotplot_column__horizontal_pvalue.png" alt="Horizontal distributions with p-value effects" width="260"></a><br>`horizontal_pvalue` — Horizontal distributions with p-value effects<br><br><a href="assets/plotting_gallery/datapoints_dotplot_column__vertical_interval.png"><img src="assets/plotting_gallery/datapoints_dotplot_column__vertical_interval.png" alt="Vertical distributions with supplied intervals" width="260"></a><br>`vertical_interval` — Vertical distributions with supplied intervals |
 | `category_composition`<br><small>`_plotting._tabular_plots`</small> | <a href="assets/plotting_gallery/category_composition__percent_annotated.png"><img src="assets/plotting_gallery/category_composition__percent_annotated.png" alt="Response composition by cohort" width="260"></a><br>`percent_annotated` — Response composition by cohort |
 | `continuous_effect_plot`<br><small>`_plotting._analytical_plots`</small> | <a href="assets/plotting_gallery/continuous_effect_plot__observed_categories.png"><img src="assets/plotting_gallery/continuous_effect_plot__observed_categories.png" alt="Continuous exposure effect" width="260"></a><br>`observed_categories` — Continuous exposure effect |
 | `corr_dotplot`<br><small>`_plotting._corr_dotplots`</small> | <a href="assets/plotting_gallery/corr_dotplot__subgroup_marginals.png"><img src="assets/plotting_gallery/corr_dotplot__subgroup_marginals.png" alt="Correlation with subgroup fits and marginals" width="260"></a><br>`subgroup_marginals` — Correlation with subgroup fits and marginals<br><br><a href="assets/plotting_gallery/corr_dotplot__log1p_identity.png"><img src="assets/plotting_gallery/corr_dotplot__log1p_identity.png" alt="Correlation on synchronized log1p axes" width="260"></a><br>`log1p_identity` — Correlation on synchronized log1p axes |

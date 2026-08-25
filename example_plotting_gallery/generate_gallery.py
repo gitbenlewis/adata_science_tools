@@ -878,6 +878,77 @@ def _invoke_case(
             savefig=False,
         )
 
+    if case_key == ("datapoints_dotplot_column", "horizontal_pvalue"):
+        return renderer(
+            adata=inputs.column_adata,
+            feature_list=list(FEATURES),
+            feature_label_vars_col="feature_label",
+            orientation="horizontal",
+            effect_mode="pvalue",
+            comparison_col="condition",
+            comparison_order=["control", "case"],
+            distribution_kind="violin",
+            include_stripplot=True,
+            distribution_palette=GROUP_COLORS,
+            point_color_column="batch",
+            point_palette={
+                "batch_1": "#0072B2",
+                "batch_2": "#E69F00",
+                "batch_3": "#009E73",
+            },
+            figsize=(10, 6.5),
+            fig_title="Horizontal distributions with p-value effects",
+            distribution_axis_label="Simulated abundance",
+            effect_axis_label="log2(case/control)",
+            tight_layout_rect=(0, 0.12, 1, 0.91),
+        )
+
+    if case_key == ("datapoints_dotplot_column", "vertical_interval"):
+        fixture_dir = REPO_ROOT / "example_plotting_gallery" / "data"
+        expression_df = pd.read_csv(fixture_dir / "synthetic_expression.csv")
+        effects_df = pd.read_csv(fixture_dir / "synthetic_effects.csv")
+        obs_df = (
+            expression_df.drop_duplicates("sample_id")
+            .set_index("sample_id")[["response_group", "subtype", "cohort"]]
+        )
+        x_df = expression_df.pivot(
+            index="sample_id",
+            columns="feature",
+            values="gtpm",
+        ).reindex(obs_df.index)
+        return renderer(
+            x_df=x_df,
+            obs_df=obs_df,
+            var_df=effects_df.set_index("feature"),
+            feature_list=["GENE_A", "GENE_B", "GENE_C"],
+            orientation="vertical",
+            effect_mode="interval",
+            comparison_col="response_group",
+            comparison_order=["NonResponder", "Responder"],
+            distribution_kind="box",
+            include_stripplot=True,
+            distribution_palette={
+                "NonResponder": "#eeeeee",
+                "Responder": "#eeeeee",
+            },
+            point_color_column="subtype",
+            point_shape_column="cohort",
+            point_palette={
+                "Subtype A": "#0072B2",
+                "Subtype B": "#E69F00",
+                "Subtype C": "#009E73",
+            },
+            point_markers={"Cohort 1": "o", "Cohort 2": "s"},
+            effect_column="adjusted_log2fc",
+            ci_low_column="ci_low",
+            ci_high_column="ci_high",
+            figsize=(12, 7.5),
+            fig_title="SYNTHETIC EXAMPLE: supplied effects and intervals",
+            distribution_axis_label="Synthetic gTPM",
+            effect_axis_label="Adjusted log2FC\nResponder / NonResponder",
+            tight_layout_rect=(0, 0.03, 1, 0.91),
+        )
+
     if case_key == ("vbar_l2fc_dotplot_column", "synthetic_response_panel"):
         fixture_dir = REPO_ROOT / "example_plotting_gallery" / "data"
         expression_df = pd.read_csv(fixture_dir / "synthetic_expression.csv")
@@ -1608,7 +1679,7 @@ def generate_gallery(
     output_dir
         Directory that receives the manifest-declared PNG filenames.
     renderer_names
-        Optional exported renderer names. By default all 44 are invoked.
+        Optional exported renderer names. By default all 45 are invoked.
     case_ids
         Optional manifest case IDs, applied within the selected renderer set.
     """

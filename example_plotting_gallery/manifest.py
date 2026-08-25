@@ -153,6 +153,38 @@ RENDERER_MANIFEST: tuple[RendererSpec, ...] = (
         ),
     ),
     RendererSpec(
+        name="datapoints_dotplot_column",
+        module="_plotting._column_plots",
+        status="maintained",
+        provenance=(
+            "make_independent_group_adata plus run_independent_diff_test for "
+            "the p-value case; synthetic_expression.csv plus "
+            "synthetic_effects.csv for the supplied-interval case"
+        ),
+        cases=(
+            GalleryCase(
+                case_id="horizontal_pvalue",
+                title="Horizontal distributions with p-value effects",
+                asset="datapoints_dotplot_column__horizontal_pvalue.png",
+                features=(
+                    "horizontal grouped distributions",
+                    "effect direction",
+                    "p-value size and threshold ring",
+                ),
+            ),
+            GalleryCase(
+                case_id="vertical_interval",
+                title="Vertical distributions with supplied intervals",
+                asset="datapoints_dotplot_column__vertical_interval.png",
+                features=(
+                    "vertical boxplots with observation overlays",
+                    "subtype color and cohort shape",
+                    "supplied effect confidence intervals",
+                ),
+            ),
+        ),
+    ),
+    RendererSpec(
         name="vbar_l2fc_dotplot_column",
         module="_plotting._column_plots",
         status="maintained",
@@ -776,6 +808,7 @@ EXPECTED_RENDERER_NAMES = frozenset(
         "corr_dotplot",
         "corr_dotplot_dev",
         "datapoints",
+        "datapoints_dotplot_column",
         "forest",
         "geneset_enrichemnt_ol_ven_M_n_N_x",
         "geneset_enrichment_venn",
@@ -826,8 +859,8 @@ MANIFEST_BY_NAME = {spec.name: spec for spec in RENDERER_MANIFEST}
 def validate_manifest() -> None:
     """Raise ``ValueError`` when the gallery coverage contract is inconsistent."""
 
-    if len(RENDERER_MANIFEST) != 44:
-        raise ValueError(f"Expected 44 renderer entries, found {len(RENDERER_MANIFEST)}.")
+    if len(RENDERER_MANIFEST) != 45:
+        raise ValueError(f"Expected 45 renderer entries, found {len(RENDERER_MANIFEST)}.")
     if len(RENDERER_NAMES) != len(RENDERER_MANIFEST):
         raise ValueError("Renderer names must be unique.")
     if RENDERER_NAMES != EXPECTED_RENDERER_NAMES:
