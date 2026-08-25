@@ -4,7 +4,7 @@ This gallery is a repository-owned visual catalog for the plotting functions
 exported by `adata_science_tools._plotting`. The coverage contract and asset
 filenames come from
 [`example_plotting_gallery/manifest.py`](../example_plotting_gallery/manifest.py):
-43 renderers and 50 cases, split across maintained, compatibility, and
+44 renderers and 51 cases, split across maintained, compatibility, and
 deprecated APIs.
 
 The examples are for rendering and API coverage. They are not benchmark
@@ -20,6 +20,13 @@ categories. Other builders return fixed survival curves and meta-analysis
 rows. These precomputed tables, and the deterministic continuous-effect curve
 and interval, are plotting inputs rather than estimates produced by the
 library.
+
+The `vbar_l2fc_dotplot_column` response-panel case reads the fixed
+`synthetic_expression.csv` and `synthetic_effects.csv` fixtures. Every sample,
+feature, group assignment, abundance, effect, and interval is synthetic. The
+effect intervals are supplied plotting values and are not estimated from the
+expression table. Response group, subtype, and cohort remain constant for each
+synthetic sample across feature rows.
 
 Some examples deliberately consume analysis results produced by public library
 functions:
@@ -41,7 +48,7 @@ analysis values.
 
 ## Coverage boundaries
 
-The manifest labels 33 renderers as maintained, 1 as a compatibility API, and 9
+The manifest labels 34 renderers as maintained, 1 as a compatibility API, and 9
 as deprecated. Compatibility and deprecated entries remain in the catalog so
 their current call paths and recommended replacements are visible; their
 screenshots do not change their support status.
@@ -68,7 +75,7 @@ The entries, order, case IDs, titles, statuses, replacements, and filenames
 below are derived from `RENDERER_MANIFEST`; the manifest remains authoritative
 if coverage changes.
 
-### Maintained renderers (33)
+### Maintained renderers (34)
 
 | Renderer | Gallery cases |
 | --- | --- |
@@ -87,6 +94,7 @@ if coverage changes.
 | `kaplan_meier_plot`<br><small>`_plotting._analytical_plots`</small> | <a href="assets/plotting_gallery/kaplan_meier_plot__grouped_risk_censor.png"><img src="assets/plotting_gallery/kaplan_meier_plot__grouped_risk_censor.png" alt="Survival curves with numbers at risk" width="260"></a><br>`grouped_risk_censor` — Survival curves with numbers at risk |
 | `l2fc_dotplot_column`<br><small>`_plotting._column_plots`</small> | <a href="assets/plotting_gallery/l2fc_dotplot_column__multi_feature.png"><img src="assets/plotting_gallery/l2fc_dotplot_column__multi_feature.png" alt="Differential effects by feature" width="260"></a><br>`multi_feature` — Differential effects by feature |
 | `l2fc_dotplot_single`<br><small>`_plotting._column_plots`</small> | <a href="assets/plotting_gallery/l2fc_dotplot_single__single_axis.png"><img src="assets/plotting_gallery/l2fc_dotplot_single__single_axis.png" alt="Differential effect overview" width="260"></a><br>`single_axis` — Differential effect overview |
+| `vbar_l2fc_dotplot_column`<br><small>`_plotting._column_plots`</small> | <a href="assets/plotting_gallery/vbar_l2fc_dotplot_column__synthetic_response_panel.png"><img src="assets/plotting_gallery/vbar_l2fc_dotplot_column__synthetic_response_panel.png" alt="Synthetic response-associated expression panel" width="260"></a><br>`synthetic_response_panel` — Synthetic response-associated expression panel |
 | `longitudinal_trajectories`<br><small>`_plotting._longitudinal`</small> | <a href="assets/plotting_gallery/longitudinal_trajectories__markers_and_gaps.png"><img src="assets/plotting_gallery/longitudinal_trajectories__markers_and_gaps.png" alt="Longitudinal trajectories with visit gaps" width="260"></a><br>`markers_and_gaps` — Longitudinal trajectories with visit gaps |
 | `meta_forest`<br><small>`_plotting._meta_forest`</small> | <a href="assets/plotting_gallery/meta_forest__study_summary_prediction.png"><img src="assets/plotting_gallery/meta_forest__study_summary_prediction.png" alt="Meta-analysis summary" width="260"></a><br>`study_summary_prediction` — Meta-analysis summary |
 | `paired_datapoints`<br><small>`_plotting._datapoints`</small> | <a href="assets/plotting_gallery/paired_datapoints__paired_groups.png"><img src="assets/plotting_gallery/paired_datapoints__paired_groups.png" alt="Paired changes by treatment" width="260"></a><br>`paired_groups` — Paired changes by treatment<br><br><a href="assets/plotting_gallery/paired_datapoints__precomputed_pair_values.png"><img src="assets/plotting_gallery/paired_datapoints__precomputed_pair_values.png" alt="Paired values from preserved source matrices" width="260"></a><br>`precomputed_pair_values` — Paired values from preserved source matrices |

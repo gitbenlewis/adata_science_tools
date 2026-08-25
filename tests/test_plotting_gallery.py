@@ -60,10 +60,10 @@ class PlottingGalleryTests(unittest.TestCase):
             public_functions,
             RENDERER_NAMES | set(EXCLUDED_PUBLIC_CALLABLES),
         )
-        self.assertEqual(len(RENDERER_MANIFEST), 43)
+        self.assertEqual(len(RENDERER_MANIFEST), 44)
         self.assertEqual(
             sum(len(spec.cases) for spec in RENDERER_MANIFEST),
-            50,
+            51,
         )
         for spec in RENDERER_MANIFEST:
             renderer = getattr(adtl.pl, spec.name)
@@ -137,6 +137,24 @@ class PlottingGalleryTests(unittest.TestCase):
             ["positive", "negative", "null", "constant", "all_zero"],
         )
 
+    def test_synthetic_response_fixture_has_invariant_sample_metadata(self):
+        expression = pd.read_csv(
+            REPO_ROOT
+            / "example_plotting_gallery"
+            / "data"
+            / "synthetic_expression.csv"
+        )
+        metadata_cardinality = expression.groupby("sample_id")[[
+            "response_group",
+            "subtype",
+            "cohort",
+        ]].nunique()
+
+        self.assertTrue(
+            metadata_cardinality.eq(1).all().all(),
+            metadata_cardinality.loc[~metadata_cardinality.eq(1).all(axis=1)],
+        )
+
     def test_diff_results_are_left_joined_without_matrix_misalignment(self):
         source = make_independent_group_adata(random_seed=2026)
         with warnings.catch_warnings():
@@ -205,6 +223,7 @@ class PlottingGalleryTests(unittest.TestCase):
                     "geneset_enrichment_venn",
                     "plot_heatmap",
                     "spearman_cor_dotplot_2",
+                    "vbar_l2fc_dotplot_column",
                     "venn_plot_2list",
                     "venn_plot_3list",
                 ],
@@ -219,6 +238,7 @@ class PlottingGalleryTests(unittest.TestCase):
                     "plot_heatmap__clustered.png",
                     "plot_heatmap__fixed_order.png",
                     "spearman_cor_dotplot_2__dual_hue.png",
+                    "vbar_l2fc_dotplot_column__synthetic_response_panel.png",
                     "venn_plot_2list__two_set_overlap.png",
                     "venn_plot_3list__three_set_overlap.png",
                 },

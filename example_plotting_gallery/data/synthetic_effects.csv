@@ -1,0 +1,4 @@
+feature,adjusted_log2fc,ci_low,ci_high
+GENE_A,0.36,0.12,0.61
+GENE_B,-0.31,-0.62,-0.02
+GENE_C,0.08,-0.28,0.43

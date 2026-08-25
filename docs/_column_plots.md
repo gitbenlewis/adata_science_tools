@@ -2,7 +2,8 @@
 
 Horizontal bar and log2 fold-change dotplot figure builders from `_plotting/_column_plots.py`.
 
-These functions are the package's main helpers for per-feature summary columns and composite bar-plus-dotplot layouts.
+These functions are the package's main helpers for per-feature distribution
+columns and composite distribution-plus-effect layouts.
 
 ## Public entry points
 
@@ -10,6 +11,7 @@ These functions are the package's main helpers for per-feature summary columns a
 - `l2fc_dotplot_single`
 - `l2fc_dotplot_column`
 - `barh_l2fc_dotplot_column`
+- `vbar_l2fc_dotplot_column`
 - `barh_dotplot_dotplot_column`
 - `barh_dotplot_dotplot_dotplot_column`
 - `barh_4X_dotplot_column`
@@ -27,6 +29,23 @@ Shared expectations:
 - Bar panels read expression values from `adata.X`, `adata.layers[layer]`, or `x_df`.
 - Dotplot panels read per-feature statistics from `adata.var` or `var_df`.
 - Grouping for bar plots comes from `comparison_col` in `adata.obs` or `obs_df`.
+
+## Choosing a column renderer
+
+| Renderer | Distribution orientation | Distribution layers | Effect display |
+| --- | --- | --- | --- |
+| `barh_column` | horizontal | bar, box, or violin; optional observations | none |
+| `barh_l2fc_dotplot_column` | horizontal | bar, box, or violin; optional observations | one p-value-encoded effect column |
+| `barh_dotplot_dotplot_column` | horizontal | bar, box, or violin; optional observations | two p-value-encoded effect columns |
+| `barh_dotplot_dotplot_dotplot_column` | horizontal | bar, box, or violin; optional observations | three p-value-encoded effect columns |
+| `barh_4X_dotplot_column` | horizontal | bar, box, or violin; optional observations | four p-value-encoded effect columns |
+| `vbar_l2fc_dotplot_column` | vertical | bar, box, or violin; optional color/shape observations | supplied effect and confidence interval |
+| `l2fc_dotplot_column` | none | none | p-value encoding or supplied confidence interval |
+
+For the distribution column, `distribution_kind="bar"` preserves the historical
+default. Use `"box"` to show quartiles and whiskers or `"violin"` to show a
+kernel-density summary. `include_stripplot` independently controls whether raw
+observations are drawn over the selected summary layer.
 
 ## `barh_column`
 
@@ -64,7 +83,15 @@ def barh_column(
         barh_legend: bool = True,
         barh_legend_bbox_to_anchor: tuple[float, float] | None = (0.5, -.05),
         savefig: bool = False,
-        file_name: str = 'test_plot.png'):
+        file_name: str = 'test_plot.png',
+        distribution_kind: str = "bar",
+        point_color_column: str | None = None,
+        point_shape_column: str | None = None,
+        point_palette: dict | None = None,
+        point_markers: dict | None = None,
+        point_jitter: float | None = None,
+        point_size: float | None = None,
+):
 ```
 
 ```python
@@ -91,6 +118,11 @@ Important behavior:
 - `use_adata_raw=True` switches to `adata.raw.to_adata()`.
 - Sparse matrices are densified before building the plotting `DataFrame`.
 - `comparison_order` fixes category order when provided.
+- `distribution_kind` selects `"bar"`, `"box"`, or `"violin"` without changing
+  the horizontal orientation.
+- `point_color_column` and `point_shape_column` optionally map observation
+  metadata to color and marker shape. When both are omitted, the historical
+  black strip-point overlay is retained.
 - `feature_label_vars_col` is used for display labels when available; otherwise the feature index is used.
 - The function returns `(fig, axes)`.
 
@@ -193,6 +225,11 @@ def l2fc_dotplot_column(
         dotplot_annotate: bool = False,
         dotplot_annotate_xy: tuple[float, float] | None = (0.8, 1.2),
         dotplot_annotate_fontsize: int | None = None,
+        dotplot_ci_low_vars_col_label: str | None = None,
+        dotplot_ci_high_vars_col_label: str | None = None,
+        dotplot_ci_marker_size: float = 5,
+        dotplot_ci_color: str = "black",
+        dotplot_reference_value: float | None = 0,
     ):
 ```
 
@@ -217,6 +254,138 @@ Important behavior:
 - Accepts `adata` or `var_df`.
 - Returns `(fig, ax)` for a single feature and `(fig, axes)` for multiple features.
 - Optional annotation text uses the current feature's log2 fold change and p-value.
+- Supplying both confidence-interval column parameters switches to interval
+  mode: a fixed point and horizontal interval replace the p-value size, color,
+  threshold ring, and legend.
+- Interval mode validates finite numeric values and requires
+  `ci_low <= effect <= ci_high`. It does not estimate intervals from expression
+  observations.
+
+## `vbar_l2fc_dotplot_column`
+
+Use `vbar_l2fc_dotplot_column(...)` for the response-panel layout: vertically
+oriented group distributions on the left and supplied feature effects with
+confidence intervals on the right.
+
+### Full signature
+
+```python
+def vbar_l2fc_dotplot_column(
+        expression_df: pd.DataFrame,
+        effects_df: pd.DataFrame,
+        feature_list: list[str],
+        feature_column: str = "feature",
+        value_column: str = "gtpm",
+        comparison_column: str = "response_group",
+        comparison_order: list[str] | None = None,
+        point_color_column: str | None = None,
+        point_shape_column: str | None = None,
+        effect_column: str = "adjusted_log2fc",
+        ci_low_column: str = "ci_low",
+        ci_high_column: str = "ci_high",
+        distribution_kind: str = "bar",
+        include_stripplot: bool = True,
+        distribution_palette: dict | None = None,
+        point_palette: dict | None = None,
+        point_markers: dict | None = None,
+        point_jitter: float = 0.16,
+        point_size: float = 4,
+        effect_marker_size: float = 5,
+        effect_color: str = "black",
+        effect_reference_value: float | None = 0,
+        effect_xlim: tuple[float, float] | None = None,
+        share_effect_x: bool = False,
+        figsize: tuple[float, float] = (12, 8),
+        width_ratios: tuple[float, float] = (3.0, 1.0),
+        fig_title: str | None = None,
+        fig_title_y: float = 1.04,
+        value_axis_label: str = "Synthetic abundance",
+        effect_axis_label: str = "Adjusted log2FC",
+        legend: bool = True,
+        legend_bbox_to_anchor: tuple[float, float] = (0.5, 0.99),
+        tight_layout_rect_arg: list[float] | None = [0, 0, 1, 0.94],
+        footer: str | None = None,
+        savefig: bool = False,
+        file_name: str = "vbar_l2fc_dotplot.png",
+):
+```
+
+### Parameter semantics
+
+- `expression_df` is a long-form observation table. `feature_column`,
+  `value_column`, and `comparison_column` identify the feature, numeric value,
+  and group fields; `feature_list` fixes the displayed row order.
+- `effects_df` supplies one row per plotted feature. `effect_column`,
+  `ci_low_column`, and `ci_high_column` identify the point estimate and interval
+  limits. The renderer validates finite values and
+  `ci_low <= effect <= ci_high`, but performs no statistical estimation.
+- `comparison_order` fixes the left-panel group order. When omitted, first
+  observed order among the selected feature rows is used.
+- `distribution_kind` selects a bar, box, or violin summary.
+  `include_stripplot` independently controls the observation overlay.
+- `distribution_palette` maps comparison groups to summary-layer colors.
+  `point_color_column` plus `point_palette` map observation colors, while
+  `point_shape_column` plus `point_markers` map marker shapes.
+- `point_jitter` controls displacement along the categorical axis and
+  `point_size` controls observation marker size.
+- `effect_marker_size`, `effect_color`, and `effect_reference_value` style the
+  supplied effect and interval. Set `effect_reference_value=None` to omit the
+  dashed reference line.
+- `effect_xlim` sets the effect-panel limits explicitly. When omitted and
+  `share_effect_x=False`, each row receives a symmetric limit spanning that
+  feature's interval and the reference value. With `share_effect_x=True`, one
+  symmetric limit spanning all selected intervals is applied to every effect
+  row.
+- `share_effect_x=True` links only the effect-panel x axes so they share limits,
+  ticks, and interactive zoom. The categorical expression axes remain
+  independent.
+- `figsize`, `width_ratios`, `fig_title`, `fig_title_y`, `value_axis_label`, and
+  `effect_axis_label` control figure geometry and labels.
+- `legend` controls the shared point-encoding legend;
+  `legend_bbox_to_anchor` positions it. `footer` adds figure-level provenance
+  text, and `tight_layout_rect_arg` reserves space around the panels.
+- `savefig=True` writes the figure to `file_name`; the function returns
+  `(fig, axes)` with an `(n_features, 2)` axes array.
+
+```python
+from pathlib import Path
+
+import pandas as pd
+import adata_science_tools as adtl
+
+fixture_dir = Path("example_plotting_gallery/data")
+expression_df = pd.read_csv(fixture_dir / "synthetic_expression.csv")
+effects_df = pd.read_csv(fixture_dir / "synthetic_effects.csv")
+
+fig, axes = adtl.vbar_l2fc_dotplot_column(
+    expression_df=expression_df,
+    effects_df=effects_df,
+    feature_list=["GENE_A", "GENE_B", "GENE_C"],
+    comparison_order=["NonResponder", "Responder"],
+    distribution_kind="box",
+    include_stripplot=True,
+    point_color_column="subtype",
+    point_shape_column="cohort",
+    effect_column="adjusted_log2fc",
+    ci_low_column="ci_low",
+    ci_high_column="ci_high",
+    effect_axis_label="Adjusted log2FC\nResponder / NonResponder",
+    fig_title="SYNTHETIC EXAMPLE: response-associated expression panel",
+    footer=(
+        "All values, identifiers, groups, and effect estimates are synthetic; "
+        "intervals are supplied independently of the expression table."
+    ),
+)
+```
+
+<img src="assets/plotting_gallery/vbar_l2fc_dotplot_column__synthetic_response_panel.png" alt="Synthetic response-associated expression panel" width="720">
+
+The expression table is long-form with one observation-feature row. The effect
+table has exactly one row per feature. The renderer aligns the tables by feature
+identifier but deliberately performs no statistical estimation. Subtype controls
+point color, cohort controls marker shape, and both mappings share one legend
+above the panels. In the bundled fixture, response group, subtype, and cohort are
+sample-level annotations repeated consistently across every feature row.
 
 ## `barh_l2fc_dotplot_column`
 
@@ -283,6 +452,14 @@ def barh_l2fc_dotplot_column(
         dotplot_annotate_xy: tuple[float, float] | None = (0.8, 1.2),
         dotplot_annotate_labels: tuple[str, str] | None = ('l2fc: ', 'p:'),
         dotplot_annotate_fontsize: int | None = None,
+        distribution_kind: str = "bar",
+        include_stripplot: bool = True,
+        point_color_column: str | None = None,
+        point_shape_column: str | None = None,
+        point_palette: dict | None = None,
+        point_markers: dict | None = None,
+        point_jitter: float | None = None,
+        point_size: float | None = None,
         #
         ):
 ```
@@ -316,6 +493,10 @@ fig, subfigs = adtl.barh_l2fc_dotplot_column(
 - Returns `(fig, subfigs)`.
 - Supports either `adata` or explicit `x_df` plus `obs_df` plus `var_df`.
 - `hue_palette_color_list` overrides the category colors for the bar panel.
+- `distribution_kind="box"` or `"violin"` replaces the horizontal bar layer;
+  `include_stripplot` controls the observation overlay independently.
+- Optional `point_color_column` and `point_shape_column` values are read from
+  `adata.obs` or `obs_df` and apply only to observation points.
 - Dotplots derive marker color and size from `-log10(p)` and draw a red ring at the cutoff.
 - Legends for the bar and dot panels are controlled separately.
 
@@ -404,6 +585,14 @@ def barh_dotplot_dotplot_column(
         dotplot2_annotate_xy: tuple[float, float] | None = (0.8, 1.2),
         dotplot2_annotate_labels: tuple[str, str] | None = ('l2fc: ', 'p:'),
         dotplot2_annotate_fontsize: int | None = None,
+        distribution_kind: str = "bar",
+        include_stripplot: bool = True,
+        point_color_column: str | None = None,
+        point_shape_column: str | None = None,
+        point_palette: dict | None = None,
+        point_markers: dict | None = None,
+        point_jitter: float | None = None,
+        point_size: float | None = None,
         ):
 ```
 
@@ -496,6 +685,14 @@ def barh_dotplot_dotplot_dotplot_column(
         dotplot3_annotate_xy: tuple[float, float] | None = (0.8, 1.2),
         dotplot3_annotate_labels: tuple[str, str] | None = ('l2fc: ', 'p:'),
         dotplot3_annotate_fontsize: int | None = None,
+        distribution_kind: str = "bar",
+        include_stripplot: bool = True,
+        point_color_column: str | None = None,
+        point_shape_column: str | None = None,
+        point_palette: dict | None = None,
+        point_markers: dict | None = None,
+        point_jitter: float | None = None,
+        point_size: float | None = None,
     ):
 ```
 
@@ -606,6 +803,14 @@ def barh_4X_dotplot_column(
         dotplot4_annotate_labels: tuple[str, str] | None = ('l2fc: ', 'p:'),
         dotplot4_annotate_fontsize: int | None = None,
         use_single_dotplot_colormap: bool = False,
+        distribution_kind: str = "bar",
+        include_stripplot: bool = True,
+        point_color_column: str | None = None,
+        point_shape_column: str | None = None,
+        point_palette: dict | None = None,
+        point_markers: dict | None = None,
+        point_jitter: float | None = None,
+        point_size: float | None = None,
     ):
 ```
 
@@ -638,6 +843,9 @@ Each added dotplot column gets its own parameter family:
 Important behavior:
 
 - These functions still return `(fig, subfigs)`.
+- Their left distribution column accepts the same `distribution_kind`,
+  `include_stripplot`, and observation color/shape parameters as
+  `barh_l2fc_dotplot_column`.
 - Every added dotplot panel requires its own `*_pval_vars_col_label` and `*_l2fc_vars_col_label`.
 - `hue_palette_color_list` must provide at least one color per `comparison_col` category when used.
 - These layouts are best treated as configuration-heavy report builders rather than small convenience wrappers.

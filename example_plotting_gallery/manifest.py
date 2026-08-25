@@ -153,6 +153,27 @@ RENDERER_MANIFEST: tuple[RendererSpec, ...] = (
         ),
     ),
     RendererSpec(
+        name="vbar_l2fc_dotplot_column",
+        module="_plotting._column_plots",
+        status="maintained",
+        provenance=(
+            "synthetic_expression.csv plus synthetic_effects.csv; all values, "
+            "identifiers, groups, and supplied intervals are synthetic"
+        ),
+        cases=(
+            GalleryCase(
+                case_id="synthetic_response_panel",
+                title="Synthetic response-associated expression panel",
+                asset="vbar_l2fc_dotplot_column__synthetic_response_panel.png",
+                features=(
+                    "vertical boxplots with observation overlays",
+                    "subtype color and cohort shape",
+                    "supplied effect confidence intervals",
+                ),
+            ),
+        ),
+    ),
+    RendererSpec(
         name="category_composition",
         module="_plotting._tabular_plots",
         status="maintained",
@@ -787,6 +808,7 @@ EXPECTED_RENDERER_NAMES = frozenset(
         "venn_plot_3list",
         "volcano_plot_generic",
         "volcano_plot_sns_single_comparison_generic",
+        "vbar_l2fc_dotplot_column",
     }
 )
 
@@ -804,8 +826,8 @@ MANIFEST_BY_NAME = {spec.name: spec for spec in RENDERER_MANIFEST}
 def validate_manifest() -> None:
     """Raise ``ValueError`` when the gallery coverage contract is inconsistent."""
 
-    if len(RENDERER_MANIFEST) != 43:
-        raise ValueError(f"Expected 43 renderer entries, found {len(RENDERER_MANIFEST)}.")
+    if len(RENDERER_MANIFEST) != 44:
+        raise ValueError(f"Expected 44 renderer entries, found {len(RENDERER_MANIFEST)}.")
     if len(RENDERER_NAMES) != len(RENDERER_MANIFEST):
         raise ValueError("Renderer names must be unique.")
     if RENDERER_NAMES != EXPECTED_RENDERER_NAMES:

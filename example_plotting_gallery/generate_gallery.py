@@ -878,6 +878,38 @@ def _invoke_case(
             savefig=False,
         )
 
+    if case_key == ("vbar_l2fc_dotplot_column", "synthetic_response_panel"):
+        fixture_dir = REPO_ROOT / "example_plotting_gallery" / "data"
+        expression_df = pd.read_csv(fixture_dir / "synthetic_expression.csv")
+        effects_df = pd.read_csv(fixture_dir / "synthetic_effects.csv")
+        return renderer(
+            expression_df=expression_df,
+            effects_df=effects_df,
+            feature_list=["GENE_A", "GENE_B", "GENE_C"],
+            comparison_order=["NonResponder", "Responder"],
+            point_color_column="subtype",
+            point_shape_column="cohort",
+            distribution_kind="box",
+            point_palette={
+                "Subtype A": "#0072B2",
+                "Subtype B": "#E69F00",
+                "Subtype C": "#009E73",
+            },
+            point_markers={"Cohort 1": "o", "Cohort 2": "s"},
+            figsize=(12, 7.5),
+            fig_title="SYNTHETIC EXAMPLE: response-associated expression panel",
+            fig_title_y=0.99,
+            value_axis_label="Synthetic gTPM",
+            effect_axis_label="Adjusted log2FC\nResponder / NonResponder",
+            footer=(
+                "All values, identifiers, groups, and effect estimates are synthetic; "
+                "intervals are supplied independently of the expression table."
+            ),
+            legend_bbox_to_anchor=(0.5, 0.99),
+            tight_layout_rect_arg=[0, 0.03, 1, 0.91],
+            savefig=False,
+        )
+
     if case_key == ("l2fc_dotplot_single", "single_axis"):
         return renderer(
             adata=inputs.column_adata,
@@ -1576,7 +1608,7 @@ def generate_gallery(
     output_dir
         Directory that receives the manifest-declared PNG filenames.
     renderer_names
-        Optional exported renderer names. By default all 43 are invoked.
+        Optional exported renderer names. By default all 44 are invoked.
     case_ids
         Optional manifest case IDs, applied within the selected renderer set.
     """

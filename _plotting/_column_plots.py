@@ -15,6 +15,294 @@ import anndata
 import numpy as np
 from matplotlib.ticker import StrMethodFormatter
 
+
+_DISTRIBUTION_KINDS = {"bar", "box", "violin"}
+
+
+def _resolve_point_encodings(
+        data: pd.DataFrame,
+        point_color_column: str | None,
+        point_shape_column: str | None,
+        point_palette: dict | None,
+        point_markers: dict | None,
+):
+    """Resolve observed point levels to deterministic colors and markers."""
+    color_levels = (
+        list(pd.unique(data[point_color_column]))
+        if point_color_column is not None else [None]
+    )
+    if point_color_column is None:
+        resolved_colors = {None: "black"}
+    else:
+        resolved_colors = point_palette or dict(zip(
+            color_levels,
+            sns.color_palette("tab10", n_colors=len(color_levels)),
+        ))
+
+    shape_levels = (
+        list(pd.unique(data[point_shape_column]))
+        if point_shape_column is not None else [None]
+    )
+    default_markers = ["o", "s", "D", "^", "v", "P", "X"]
+    if point_shape_column is None:
+        resolved_markers = {None: "o"}
+    else:
+        resolved_markers = point_markers or {
+            level: default_markers[index % len(default_markers)]
+            for index, level in enumerate(shape_levels)
+        }
+    return color_levels, shape_levels, resolved_colors, resolved_markers
+
+
+def _point_legend_handles(
+        data: pd.DataFrame,
+        point_color_column: str | None,
+        point_shape_column: str | None,
+        point_palette: dict | None,
+        point_markers: dict | None,
+        point_size: float | None,
+):
+    """Build independent color and shape handles for encoded observations."""
+    from matplotlib.lines import Line2D
+
+    if point_color_column is None and point_shape_column is None:
+        return []
+    color_levels, shape_levels, resolved_colors, resolved_markers = (
+        _resolve_point_encodings(
+            data,
+            point_color_column,
+            point_shape_column,
+            point_palette,
+            point_markers,
+        )
+    )
+    marker_size = 4 if point_size is None else float(point_size)
+    handles = []
+    if point_color_column is not None:
+        handles.extend([
+            Line2D(
+                [0], [0], marker="o", linestyle="", color=resolved_colors[level],
+                label=str(level), markersize=marker_size,
+            )
+            for level in color_levels
+        ])
+    if point_shape_column is not None:
+        handles.extend([
+            Line2D(
+                [0], [0], marker=resolved_markers[level], linestyle="", color="black",
+                label=str(level), markersize=marker_size,
+            )
+            for level in shape_levels
+        ])
+    return handles
+
+
+def _distribution_legend_title(
+        group_column: str,
+        point_color_column: str | None,
+        point_shape_column: str | None,
+):
+    """Describe group, color, and shape semantics in one legend title."""
+    if point_color_column is None and point_shape_column is None:
+        return group_column
+    title_parts = [f"group: {group_column}"]
+    if point_color_column is not None:
+        title_parts.append(f"color: {point_color_column}")
+    if point_shape_column is not None:
+        title_parts.append(f"shape: {point_shape_column}")
+    return "; ".join(title_parts)
+
+
+def _plot_group_distribution(
+        *,
+        data: pd.DataFrame,
+        value_column: str,
+        group_column: str,
+        group_order: list[str],
+        ax,
+        orientation: str,
+        distribution_kind: str,
+        color_map: dict,
+        include_stripplot: bool,
+        point_color_column: str | None = None,
+        point_shape_column: str | None = None,
+        point_palette: dict | None = None,
+        point_markers: dict | None = None,
+        point_jitter: float | None = None,
+        point_size: float | None = None,
+):
+    """Draw one grouped distribution layer and its optional observation overlay."""
+    if distribution_kind not in _DISTRIBUTION_KINDS:
+        raise ValueError(
+            "distribution_kind must be one of 'bar', 'box', or 'violin'."
+        )
+    for column in (point_color_column, point_shape_column):
+        if column is not None and column not in data.columns:
+            raise ValueError(f"Column '{column}' not found in observation data.")
+
+    horizontal = orientation == "horizontal"
+    x_column = value_column if horizontal else group_column
+    y_column = group_column if horizontal else value_column
+    common = {
+        "data": data,
+        "x": x_column,
+        "y": y_column,
+        "order": group_order,
+        "ax": ax,
+    }
+    if distribution_kind == "bar":
+        sns.barplot(
+            **common,
+            hue=group_column,
+            hue_order=group_order,
+            legend=False,
+            palette=color_map,
+            seed=20260727,
+        )
+    elif distribution_kind == "box":
+        sns.boxplot(
+            **common,
+            hue=group_column,
+            hue_order=group_order,
+            legend=False,
+            palette=color_map,
+            fliersize=0,
+        )
+    else:
+        sns.violinplot(
+            **common,
+            hue=group_column,
+            hue_order=group_order,
+            legend=False,
+            palette=color_map,
+            cut=0,
+            inner="box",
+        )
+
+    if not include_stripplot:
+        return
+    if point_color_column is None and point_shape_column is None:
+        stripplot_kwargs = {**common, "color": "black", "legend": False}
+        if point_jitter is not None:
+            stripplot_kwargs["jitter"] = point_jitter
+        if point_size is not None:
+            stripplot_kwargs["size"] = point_size
+        sns.stripplot(**stripplot_kwargs)
+        return
+
+    overlay_columns = list(dict.fromkeys([
+        value_column,
+        group_column,
+        point_color_column,
+        point_shape_column,
+    ]))
+    overlay_columns = [column for column in overlay_columns if column is not None]
+    plot_df = data.loc[
+        data[group_column].isin(group_order), overlay_columns
+    ].copy().reset_index(drop=True)
+    mapped_columns = [
+        column for column in (point_color_column, point_shape_column)
+        if column is not None
+    ]
+    missing_mapped_columns = [
+        column for column in mapped_columns if plot_df[column].isna().any()
+    ]
+    if missing_mapped_columns:
+        raise ValueError(
+            "Mapped observation metadata must not contain missing values: "
+            + ", ".join(f"'{column}'" for column in missing_mapped_columns)
+        )
+
+    group_positions = {group: position for position, group in enumerate(group_order)}
+    plot_df["_distribution_group_position"] = (
+        plot_df[group_column].map(group_positions).astype(float)
+    )
+    jitter_amount = 0.16 if point_jitter is None else float(point_jitter)
+    marker_size = 4 if point_size is None else float(point_size)
+    offsets = np.zeros(len(plot_df), dtype=float)
+    jitter_rng = np.random.default_rng(0)
+    for indices in plot_df.groupby(
+            group_column, observed=True, sort=False
+    ).indices.values():
+        count = len(indices)
+        if count > 1:
+            group_offsets = jitter_rng.permutation(
+                np.linspace(-jitter_amount, jitter_amount, count)
+            )
+            if count > 2 and (
+                    np.all(np.diff(group_offsets) >= 0)
+                    or np.all(np.diff(group_offsets) <= 0)
+            ):
+                group_offsets = np.roll(group_offsets, 1)
+            offsets[indices] = group_offsets
+    plot_df["_distribution_group_position"] += offsets
+
+    color_levels, shape_levels, resolved_colors, resolved_markers = (
+        _resolve_point_encodings(
+            plot_df,
+            point_color_column,
+            point_shape_column,
+            point_palette,
+            point_markers,
+        )
+    )
+    for color_level in color_levels:
+        for shape_level in shape_levels:
+            mask = pd.Series(True, index=plot_df.index)
+            if point_color_column is not None:
+                mask &= plot_df[point_color_column] == color_level
+            if point_shape_column is not None:
+                mask &= plot_df[point_shape_column] == shape_level
+            subset = plot_df.loc[mask]
+            if subset.empty:
+                continue
+            group_position = subset["_distribution_group_position"]
+            values = subset[value_column]
+            ax.scatter(
+                values if horizontal else group_position,
+                group_position if horizontal else values,
+                color=resolved_colors[color_level],
+                marker=resolved_markers[shape_level],
+                s=marker_size ** 2,
+                edgecolors="none",
+                zorder=3,
+            )
+    if horizontal:
+        ax.set_yticks(range(len(group_order)), labels=group_order)
+    else:
+        ax.set_xticks(range(len(group_order)), labels=group_order)
+
+
+def _plot_ci_effect(
+        *,
+        ax,
+        row: pd.Series,
+        effect_column: str,
+        ci_low_column: str,
+        ci_high_column: str,
+        marker_size: float,
+        color: str,
+        reference_value: float | None,
+):
+    """Draw one supplied effect estimate and confidence interval."""
+    effect = float(row[effect_column])
+    ci_low = float(row[ci_low_column])
+    ci_high = float(row[ci_high_column])
+    ax.errorbar(
+        effect,
+        0,
+        xerr=np.array([[effect - ci_low], [ci_high - effect]]),
+        fmt="o",
+        color=color,
+        markersize=marker_size,
+        capsize=3,
+        linewidth=1,
+        zorder=3,
+    )
+    if reference_value is not None:
+        ax.axvline(reference_value, color="black", linestyle="--", linewidth=1)
+    ax.set_yticks([])
+
 def barh_column(
         adata: anndata.AnnData | None = None,
         use_adata_raw: bool = False,
@@ -44,7 +332,15 @@ def barh_column(
         barh_legend: bool = True,
         barh_legend_bbox_to_anchor: tuple[float, float] | None = (0.5, -.05),
         savefig: bool = False,
-        file_name: str = 'test_plot.png'):
+        file_name: str = 'test_plot.png',
+        distribution_kind: str = "bar",
+        point_color_column: str | None = None,
+        point_shape_column: str | None = None,
+        point_palette: dict | None = None,
+        point_markers: dict | None = None,
+        point_jitter: float | None = None,
+        point_size: float | None = None,
+        ):
     """
     adata_science_tools.barh_column()
     #----------
@@ -110,6 +406,14 @@ def barh_column(
         When `True`, save the rendered figure to `file_name`.
     file_name : str, optional
         Output path used when `savefig` is enabled.
+    distribution_kind : {"bar", "box", "violin"}, optional
+        Summary layer drawn for every feature; `"bar"` preserves legacy behavior.
+    point_color_column, point_shape_column : str, optional
+        Observation metadata columns mapped to point color and marker shape.
+    point_palette, point_markers : dict, optional
+        Explicit observation color and marker mappings.
+    point_jitter, point_size : float, optional
+        Overrides for the observation overlay; omitted values preserve Seaborn defaults.
     -------#
     Returns
     #----------
@@ -235,30 +539,26 @@ def barh_column(
     for plot_num, gene in enumerate(feature_list):
         ax = axes[plot_num]
 
-        # Horizontal bars (aggregated by category)
-        sns.barplot(
-            x=gene, y=comparison_col,
+        _plot_group_distribution(
             data=df_obs_x,
-            order=categories,
+            value_column=gene,
+            group_column=comparison_col,
+            group_order=categories,
             ax=ax,
-            hue=comparison_col, # Passing `palette` without assigning `hue` is deprecated and will be removed in v0.14.0. Assign the `y` variable to `hue` and set `legend=False` for the same effect
-            legend=False,
-            palette=[color_map[c] for c in categories]
+            orientation="horizontal",
+            distribution_kind=distribution_kind,
+            color_map=color_map,
+            include_stripplot=include_stripplot,
+            point_color_column=point_color_column,
+            point_shape_column=point_shape_column,
+            point_palette=point_palette,
+            point_markers=point_markers,
+            point_jitter=point_jitter,
+            point_size=point_size,
         )
 
         if barh_remove_yticklabels:
             ax.set_yticklabels([])
-
-        if include_stripplot:
-            # Overlay points (each sample), same order as bars
-            sns.stripplot(
-                x=gene, y=comparison_col,
-                data=df_obs_x,
-                order=categories,
-            ax=ax,
-            color='black',
-            legend=False
-            )
         # set x-axis limits
         if barh_set_xaxis_lims is not None:
             ax.set_xlim(barh_set_xaxis_lims)
@@ -280,12 +580,23 @@ def barh_column(
     # Figure-level legend at bottom with the same bar colors
     if barh_legend:
         handles = [Patch(facecolor=color_map[c], edgecolor='none', label=str(c)) for c in categories]
+        if include_stripplot:
+            handles.extend(_point_legend_handles(
+                df_obs_x,
+                point_color_column,
+                point_shape_column,
+                point_palette,
+                point_markers,
+                point_size,
+            ))
         fig.legend(
             handles=handles,
-            labels=[str(c) for c in categories],
+            labels=[handle.get_label() for handle in handles],
             loc='lower center',
-            ncol=min(len(categories), 6),
-            title=comparison_col,
+            ncol=min(len(handles), 6),
+            title=_distribution_legend_title(
+                comparison_col, point_color_column, point_shape_column
+            ),
             bbox_to_anchor=barh_legend_bbox_to_anchor,
             fontsize=legend_fontsize,
             title_fontsize=legend_fontsize,
@@ -518,6 +829,11 @@ def l2fc_dotplot_column(
         dotplot_annotate: bool = False,
         dotplot_annotate_xy: tuple[float, float] | None = (0.8, 1.2),
         dotplot_annotate_fontsize: int | None = None,
+        dotplot_ci_low_vars_col_label: str | None = None,
+        dotplot_ci_high_vars_col_label: str | None = None,
+        dotplot_ci_marker_size: float = 5,
+        dotplot_ci_color: str = "black",
+        dotplot_reference_value: float | None = 0,
     ):
     """
     adata_science_tools.l2fc_dotplot_column()
@@ -588,6 +904,15 @@ def l2fc_dotplot_column(
         Axes-relative coordinates used for the optional annotation text.
     dotplot_annotate_fontsize : int, optional
         Font size for annotation text; defaults to `tick_label_fontsize` when `None`.
+    dotplot_ci_low_vars_col_label, dotplot_ci_high_vars_col_label : str, optional
+        Feature-table columns containing supplied confidence limits. Providing
+        both switches from p-value encoding to point-and-interval rendering.
+    dotplot_ci_marker_size : float, optional
+        Marker size used for supplied effect estimates in interval mode.
+    dotplot_ci_color : str, optional
+        Color used for supplied effect estimates and intervals.
+    dotplot_reference_value : float | None, optional
+        Location of the dashed interval-mode reference line; `None` omits it.
     -------#
     Returns
     #----------
@@ -642,8 +967,25 @@ def l2fc_dotplot_column(
             raise ValueError("Provide either `adata` or `var_df`.")
         _var_df = adata.var.copy()
 
-    # Ensure required columns exist
-    for col in (dotplot_pval_vars_col_label, dotplot_l2fc_vars_col_label):
+    interval_mode = (
+        dotplot_ci_low_vars_col_label is not None
+        or dotplot_ci_high_vars_col_label is not None
+    )
+    if interval_mode and (
+        dotplot_ci_low_vars_col_label is None
+        or dotplot_ci_high_vars_col_label is None
+    ):
+        raise ValueError("Both confidence-interval columns must be provided together.")
+
+    required_columns = [dotplot_l2fc_vars_col_label]
+    if interval_mode:
+        required_columns.extend([
+            dotplot_ci_low_vars_col_label,
+            dotplot_ci_high_vars_col_label,
+        ])
+    else:
+        required_columns.append(dotplot_pval_vars_col_label)
+    for col in required_columns:
         if col not in _var_df.columns:
             raise ValueError(f"Column '{col}' not found in var_df.")
 
@@ -652,28 +994,50 @@ def l2fc_dotplot_column(
     if missing:
         raise KeyError(f"Features not found in var_df index: {missing[:5]}" + (" ..." if len(missing) > 5 else ""))
 
-    # Prepare -log10(p) and size metric
-    log10pval_label = f'-log10({pval_label})'
-    _pvals = pd.to_numeric(_var_df[dotplot_pval_vars_col_label], errors='coerce')
-    _pvals = _pvals.clip(lower=1e-300, upper=1.0)
-    _var_df[log10pval_label] = -np.log10(_pvals)
+    if interval_mode:
+        numeric_columns = required_columns
+        numeric = _var_df.loc[feature_list, numeric_columns].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        if not np.isfinite(numeric.to_numpy(dtype=float)).all():
+            raise ValueError("Effect estimates and confidence intervals must be finite numeric values.")
+        invalid_intervals = (
+            (numeric[dotplot_ci_low_vars_col_label] > numeric[dotplot_l2fc_vars_col_label])
+            | (numeric[dotplot_l2fc_vars_col_label] > numeric[dotplot_ci_high_vars_col_label])
+        )
+        if invalid_intervals.any():
+            raise ValueError("Each confidence interval must satisfy ci_low <= effect <= ci_high.")
+        _var_df.loc[feature_list, numeric_columns] = numeric
+        interval_limit = numeric[[
+            dotplot_ci_low_vars_col_label,
+            dotplot_ci_high_vars_col_label,
+        ]].abs().to_numpy().max()
+        if dotplot_reference_value is not None:
+            interval_limit = max(interval_limit, abs(float(dotplot_reference_value)))
+        l2fc_x_limit = max(float(interval_limit), 1e-6)
+        log10pval_label = None
+        size_metric_col = ring_col = None
+        size_min = size_max = log10_thresh = None
+        _cmap = _color_norm = None
+    else:
+        # Prepare -log10(p) and size metric
+        log10pval_label = f'-log10({pval_label})'
+        _pvals = pd.to_numeric(_var_df[dotplot_pval_vars_col_label], errors='coerce')
+        _pvals = _pvals.clip(lower=1e-300, upper=1.0)
+        _var_df[log10pval_label] = -np.log10(_pvals)
 
-    size_metric_col = 'dotplot_size_metric'
-    _var_df[size_metric_col] = np.where(_pvals > 0.5, 0.0, _var_df[log10pval_label])
-    size_min = 0.0
-    _size_vals = pd.to_numeric(_var_df.loc[feature_list, size_metric_col], errors='coerce').replace([np.inf, -np.inf], np.nan)
-    size_max = float(_size_vals.max()) if np.isfinite(_size_vals.max()) else 0.0
-
-    # x-limits from |log2FC| for plotted features
-    l2fc_x_limit = _var_df.loc[feature_list, dotplot_l2fc_vars_col_label].abs().max()
-
-    # Ring cutoff in -log10 space and normalization for colors >= threshold
-    ring_col = 'ring_cutoff'
-    log10_thresh = float(-np.log10(pvalue_cutoff_ring))
-    _var_df[ring_col] = np.round(log10_thresh, 2)
-    size_max = float(max(size_max, log10_thresh, 1e-6))
-    _cmap = plt.get_cmap('viridis_r')
-    _color_norm = plt.Normalize(vmin=log10_thresh, vmax=max(size_max, log10_thresh), clip=True)
+        size_metric_col = 'dotplot_size_metric'
+        _var_df[size_metric_col] = np.where(_pvals > 0.5, 0.0, _var_df[log10pval_label])
+        size_min = 0.0
+        _size_vals = pd.to_numeric(_var_df.loc[feature_list, size_metric_col], errors='coerce').replace([np.inf, -np.inf], np.nan)
+        size_max = float(_size_vals.max()) if np.isfinite(_size_vals.max()) else 0.0
+        l2fc_x_limit = _var_df.loc[feature_list, dotplot_l2fc_vars_col_label].abs().max()
+        ring_col = 'ring_cutoff'
+        log10_thresh = float(-np.log10(pvalue_cutoff_ring))
+        _var_df[ring_col] = np.round(log10_thresh, 2)
+        size_max = float(max(size_max, log10_thresh, 1e-6))
+        _cmap = plt.get_cmap('viridis_r')
+        _color_norm = plt.Normalize(vmin=log10_thresh, vmax=max(size_max, log10_thresh), clip=True)
 
     # Feature labels
     if (feature_label_vars_col is not None) and (feature_label_vars_col in _var_df.columns):
@@ -713,50 +1077,68 @@ def l2fc_dotplot_column(
     for plot_num, gene in enumerate(feature_list):
         ax = axes_list[plot_num]
 
-        # A) Red ring at the cutoff
-        sns.scatterplot(
-            data=_var_df.loc[[gene]],
-            x=dotplot_l2fc_vars_col_label,
-            y='dotplot_feature_name',
-            size=ring_col,
-            size_norm=(size_min, size_max),
-            sizes=sizes,
-            facecolors="none",
-            edgecolors="red",
-            linewidths=1,
-            zorder=4,
-            legend=False,
-            ax=ax,
-        )
-
-        # B) Main dot colored by -log10(p) (grey if below threshold)
-        _val = float(_var_df.loc[gene, log10pval_label]) if gene in _var_df.index else np.nan
-        if np.isfinite(_val) and (_val >= log10_thresh):
-            _dot_color = _cmap(_color_norm(_val))
+        if interval_mode:
+            _plot_ci_effect(
+                ax=ax,
+                row=_var_df.loc[gene],
+                effect_column=dotplot_l2fc_vars_col_label,
+                ci_low_column=dotplot_ci_low_vars_col_label,
+                ci_high_column=dotplot_ci_high_vars_col_label,
+                marker_size=dotplot_ci_marker_size,
+                color=dotplot_ci_color,
+                reference_value=dotplot_reference_value,
+            )
         else:
-            _dot_color = 'grey'
-        sns.scatterplot(
-            data=_var_df.loc[[gene]],
-            x=dotplot_l2fc_vars_col_label,
-            y='dotplot_feature_name',
-            size=size_metric_col,
-            size_norm=(size_min, size_max),
-            sizes=sizes,
-            color=_dot_color,
-            edgecolors="black",
-            linewidths=.5,
-            zorder=3,
-            legend=False,
-            ax=ax,
-        )
+            sns.scatterplot(
+                data=_var_df.loc[[gene]],
+                x=dotplot_l2fc_vars_col_label,
+                y='dotplot_feature_name',
+                size=ring_col,
+                size_norm=(size_min, size_max),
+                sizes=sizes,
+                facecolors="none",
+                edgecolors="red",
+                linewidths=1,
+                zorder=4,
+                legend=False,
+                ax=ax,
+            )
+            _val = float(_var_df.loc[gene, log10pval_label])
+            _dot_color = (
+                _cmap(_color_norm(_val))
+                if np.isfinite(_val) and _val >= log10_thresh else 'grey'
+            )
+            sns.scatterplot(
+                data=_var_df.loc[[gene]],
+                x=dotplot_l2fc_vars_col_label,
+                y='dotplot_feature_name',
+                size=size_metric_col,
+                size_norm=(size_min, size_max),
+                sizes=sizes,
+                color=_dot_color,
+                edgecolors="black",
+                linewidths=.5,
+                zorder=3,
+                legend=False,
+                ax=ax,
+            )
 
         # Optional annotation
         if dotplot_annotate and (gene in _var_df.index):
             try:
                 _l2fc_val = _var_df.loc[gene, dotplot_l2fc_vars_col_label]
-                _pval_val = _var_df.loc[gene, dotplot_pval_vars_col_label]
-                if np.isfinite(_l2fc_val) and np.isfinite(_pval_val):
+                if interval_mode:
+                    _ci_low = _var_df.loc[gene, dotplot_ci_low_vars_col_label]
+                    _ci_high = _var_df.loc[gene, dotplot_ci_high_vars_col_label]
+                    _ann_text = f"l2fc: {_l2fc_val:.2g} | CI: [{_ci_low:.2g}, {_ci_high:.2g}]"
+                    _annotation_is_finite = np.isfinite(_l2fc_val)
+                else:
+                    _pval_val = _var_df.loc[gene, dotplot_pval_vars_col_label]
                     _ann_text = f"l2fc: {_l2fc_val:.2g} | p:{_pval_val:.2g}"
+                    _annotation_is_finite = (
+                        np.isfinite(_l2fc_val) and np.isfinite(_pval_val)
+                    )
+                if _annotation_is_finite:
                     _ann_fs = dotplot_annotate_fontsize or max(8, int(tick_label_fontsize))
                     _xy = dotplot_annotate_xy or (0.8, 1.2)
                     ax.text(_xy[0], _xy[1], _ann_text, transform=ax.transAxes,
@@ -772,7 +1154,8 @@ def l2fc_dotplot_column(
             ax.set_xlim((-l2fc_x_limit * l2fc_xaxis_pad), (l2fc_x_limit * l2fc_xaxis_pad))
         ax.tick_params(axis='x', labelsize=tick_label_fontsize)
         ax.xaxis.set_major_formatter(StrMethodFormatter('{x:g}'))
-        ax.axvline(x=0, color="red", linestyle="--")
+        if not interval_mode:
+            ax.axvline(x=0, color="red", linestyle="--")
 
         # X label only on the last subplot if sharing x
         if dotplot_sharex and plot_num < (n - 1):
@@ -788,7 +1171,7 @@ def l2fc_dotplot_column(
         ax.yaxis.set_label_coords(feature_label_x, 0.5)
 
     # Figure-level legend for -log10(p): ring + grey + colored bins
-    if dotplot_legend:
+    if dotplot_legend and not interval_mode:
         from matplotlib.lines import Line2D
         cmap_min = float(-np.log10(pvalue_cutoff_ring))
         cmap = plt.get_cmap('viridis_r')
@@ -871,7 +1254,7 @@ def l2fc_dotplot_column(
         )
 
     # Layout with extra bottom margin if legend added
-    rect_used = (np.array(tight_layout_rect_arg) + np.array([0, 0.0, 0, 0])).tolist() if dotplot_legend else tight_layout_rect_arg
+    rect_used = (np.array(tight_layout_rect_arg) + np.array([0, 0.0, 0, 0])).tolist() if dotplot_legend and not interval_mode else tight_layout_rect_arg
     plt.tight_layout(rect=rect_used)
 
     if savefig:
@@ -950,6 +1333,14 @@ def barh_l2fc_dotplot_column(
         dotplot_annotate_xy: tuple[float, float] | None = (0.8, 1.2),
         dotplot_annotate_labels: tuple[str, str] | None = ('l2fc: ', 'p:'),
         dotplot_annotate_fontsize: int | None = None,
+        distribution_kind: str = "bar",
+        include_stripplot: bool = True,
+        point_color_column: str | None = None,
+        point_shape_column: str | None = None,
+        point_palette: dict | None = None,
+        point_markers: dict | None = None,
+        point_jitter: float | None = None,
+        point_size: float | None = None,
         # 
         ):
     """
@@ -1278,29 +1669,26 @@ def barh_l2fc_dotplot_column(
         else:
             ax0 = axes0[plot_num]
             ax1 = axes1[plot_num]
-        ############ barh plots ############
-        # Horizontal bars (aggregated by category)
-        sns.barplot(
-            x=gene, y=comparison_col,
+        ############ distribution plots ############
+        _plot_group_distribution(
             data=df_obs_x,
-            order=categories,
+            value_column=gene,
+            group_column=comparison_col,
+            group_order=categories,
             ax=ax0,
-            hue=comparison_col,
-            hue_order=categories,
-            legend=False,
-            palette=color_map,
+            orientation="horizontal",
+            distribution_kind=distribution_kind,
+            color_map=color_map,
+            include_stripplot=include_stripplot,
+            point_color_column=point_color_column,
+            point_shape_column=point_shape_column,
+            point_palette=point_palette,
+            point_markers=point_markers,
+            point_jitter=point_jitter,
+            point_size=point_size,
         )
         if barh_remove_yticklabels:
             ax0.set_yticklabels([])
-        # Overlay points (each sample), same order as bars
-        sns.stripplot(
-            x=gene, y=comparison_col,
-            data=df_obs_x,
-            order=categories,
-            ax=ax0,
-            color='black',
-            legend=False
-        )
         # set x-axis limits
         if barh_set_xaxis_lims is not None:
             ax0.set_xlim(barh_set_xaxis_lims)
@@ -1396,12 +1784,23 @@ def barh_l2fc_dotplot_column(
     # subfigs[0] Figure-level legend at bottom with the same bar colors
     if barh_legend:
         handles = [Patch(facecolor=color_map[c], edgecolor='none', label=str(c)) for c in categories]
+        if include_stripplot:
+            handles.extend(_point_legend_handles(
+                df_obs_x,
+                point_color_column,
+                point_shape_column,
+                point_palette,
+                point_markers,
+                point_size,
+            ))
         subfigs[0].legend(
             handles=handles,
-            labels=[str(c) for c in categories],
+            labels=[handle.get_label() for handle in handles],
             loc='lower center',
-            ncol=min(len(categories), 6),
-            title=comparison_col,
+            ncol=min(len(handles), 6),
+            title=_distribution_legend_title(
+                comparison_col, point_color_column, point_shape_column
+            ),
             bbox_to_anchor=barh_legend_bbox_to_anchor,
             fontsize=legend_fontsize,
             title_fontsize=legend_fontsize,
@@ -1524,6 +1923,261 @@ def barh_l2fc_dotplot_column(
     return fig, subfigs
 
 
+def vbar_l2fc_dotplot_column(
+        expression_df: pd.DataFrame,
+        effects_df: pd.DataFrame,
+        feature_list: list[str],
+        feature_column: str = "feature",
+        value_column: str = "gtpm",
+        comparison_column: str = "response_group",
+        comparison_order: list[str] | None = None,
+        point_color_column: str | None = None,
+        point_shape_column: str | None = None,
+        effect_column: str = "adjusted_log2fc",
+        ci_low_column: str = "ci_low",
+        ci_high_column: str = "ci_high",
+        distribution_kind: str = "bar",
+        include_stripplot: bool = True,
+        distribution_palette: dict | None = None,
+        point_palette: dict | None = None,
+        point_markers: dict | None = None,
+        point_jitter: float = 0.16,
+        point_size: float = 4,
+        effect_marker_size: float = 5,
+        effect_color: str = "black",
+        effect_reference_value: float | None = 0,
+        effect_xlim: tuple[float, float] | None = None,
+        share_effect_x: bool = False,
+        figsize: tuple[float, float] = (12, 8),
+        width_ratios: tuple[float, float] = (3.0, 1.0),
+        fig_title: str | None = None,
+        fig_title_y: float = 1.04,
+        value_axis_label: str = "Synthetic abundance",
+        effect_axis_label: str = "Adjusted log2FC",
+        legend: bool = True,
+        legend_bbox_to_anchor: tuple[float, float] = (0.5, 0.99),
+        tight_layout_rect_arg: list[float] | None = [0, 0, 1, 0.94],
+        footer: str | None = None,
+        savefig: bool = False,
+        file_name: str = "vbar_l2fc_dotplot.png",
+):
+    """Plot vertical grouped distributions beside supplied effects and intervals.
+
+    Parameters
+    ----------
+    expression_df
+        Long-form observation table containing feature, value, comparison, and
+        optional point color/shape columns.
+    effects_df
+        One-row-per-feature table containing the effect and confidence limits.
+    feature_list
+        Ordered features used to construct figure rows.
+    distribution_kind
+        Left-panel summary layer: ``"bar"``, ``"box"``, or ``"violin"``.
+    include_stripplot
+        Whether to overlay individual observations on the summary layer.
+
+    Returns
+    -------
+    tuple[matplotlib.figure.Figure, numpy.ndarray]
+        Figure and an ``(n_features, 2)`` array of expression/effect axes.
+
+    Notes
+    -----
+    Confidence intervals are read from ``effects_df`` and are never estimated
+    from ``expression_df``.
+    """
+    if not feature_list:
+        raise ValueError("feature_list must be provided and non-empty.")
+    expression_columns = [
+        feature_column,
+        value_column,
+        comparison_column,
+        point_color_column,
+        point_shape_column,
+    ]
+    for column in (column for column in expression_columns if column is not None):
+        if column not in expression_df.columns:
+            raise ValueError(f"Column '{column}' not found in expression_df.")
+    if feature_column in effects_df.columns:
+        if effects_df[feature_column].duplicated().any():
+            raise ValueError("effects_df must contain exactly one row per feature.")
+        indexed_effects = effects_df.set_index(feature_column, drop=False)
+    else:
+        if effects_df.index.has_duplicates:
+            raise ValueError("effects_df must contain exactly one row per feature.")
+        indexed_effects = effects_df.copy()
+    for column in (effect_column, ci_low_column, ci_high_column):
+        if column not in indexed_effects.columns:
+            raise ValueError(f"Column '{column}' not found in effects_df.")
+
+    missing_expression = [
+        feature for feature in feature_list
+        if feature not in set(expression_df[feature_column])
+    ]
+    missing_effects = [
+        feature for feature in feature_list if feature not in indexed_effects.index
+    ]
+    if missing_expression:
+        raise KeyError(f"Features not found in expression_df: {missing_expression}")
+    if missing_effects:
+        raise KeyError(f"Features not found in effects_df: {missing_effects}")
+    plotted_expression_df = expression_df.loc[
+        expression_df[feature_column].isin(feature_list)
+    ].copy()
+
+    numeric_effects = indexed_effects.loc[
+        feature_list, [effect_column, ci_low_column, ci_high_column]
+    ].apply(pd.to_numeric, errors="coerce")
+    if not np.isfinite(numeric_effects.to_numpy(dtype=float)).all():
+        raise ValueError("Effect estimates and confidence intervals must be finite numeric values.")
+    invalid_intervals = (
+        (numeric_effects[ci_low_column] > numeric_effects[effect_column])
+        | (numeric_effects[effect_column] > numeric_effects[ci_high_column])
+    )
+    if invalid_intervals.any():
+        raise ValueError("Each confidence interval must satisfy ci_low <= effect <= ci_high.")
+    indexed_effects.loc[feature_list, [effect_column, ci_low_column, ci_high_column]] = numeric_effects
+
+    if comparison_order is None:
+        comparison_order = list(pd.unique(plotted_expression_df[comparison_column]))
+    distribution_color_map = distribution_palette or {
+        group: "#eeeeee" for group in comparison_order
+    }
+    color_levels, shape_levels, resolved_point_palette, resolved_point_markers = (
+        _resolve_point_encodings(
+            plotted_expression_df,
+            point_color_column,
+            point_shape_column,
+            point_palette,
+            point_markers,
+        )
+    )
+
+    fig, axes = plt.subplots(
+        len(feature_list),
+        2,
+        figsize=figsize,
+        sharex=False,
+        gridspec_kw={"width_ratios": width_ratios},
+        squeeze=False,
+    )
+    if share_effect_x:
+        for effect_ax in axes[1:, 1]:
+            effect_ax.sharex(axes[0, 1])
+    if fig_title is not None:
+        fig.suptitle(fig_title, y=fig_title_y)
+
+    resolved_effect_xlim = effect_xlim
+    if share_effect_x and resolved_effect_xlim is None:
+        effect_limit = float(
+            numeric_effects[[ci_low_column, ci_high_column]].abs().to_numpy().max()
+        )
+        if effect_reference_value is not None:
+            effect_limit = max(effect_limit, abs(float(effect_reference_value)))
+        effect_limit = max(effect_limit, 1e-6)
+        resolved_effect_xlim = (-1.05 * effect_limit, 1.05 * effect_limit)
+
+    for row_index, feature in enumerate(feature_list):
+        expression_ax, effect_ax = axes[row_index]
+        feature_expression = plotted_expression_df.loc[
+            plotted_expression_df[feature_column] == feature
+        ]
+        _plot_group_distribution(
+            data=feature_expression,
+            value_column=value_column,
+            group_column=comparison_column,
+            group_order=comparison_order,
+            ax=expression_ax,
+            orientation="vertical",
+            distribution_kind=distribution_kind,
+            color_map=distribution_color_map,
+            include_stripplot=include_stripplot,
+            point_color_column=point_color_column,
+            point_shape_column=point_shape_column,
+            point_palette=resolved_point_palette,
+            point_markers=resolved_point_markers,
+            point_jitter=point_jitter,
+            point_size=point_size,
+        )
+        expression_ax.set_title(str(feature), loc="left", fontweight="bold")
+        expression_ax.set_xlabel("")
+        expression_ax.set_ylabel(value_axis_label)
+
+        _plot_ci_effect(
+            ax=effect_ax,
+            row=indexed_effects.loc[feature],
+            effect_column=effect_column,
+            ci_low_column=ci_low_column,
+            ci_high_column=ci_high_column,
+            marker_size=effect_marker_size,
+            color=effect_color,
+            reference_value=effect_reference_value,
+        )
+        row_effect_xlim = resolved_effect_xlim
+        if row_effect_xlim is None:
+            row_effect_limit = float(
+                numeric_effects.loc[
+                    [feature], [ci_low_column, ci_high_column]
+                ].abs().to_numpy().max()
+            )
+            if effect_reference_value is not None:
+                row_effect_limit = max(
+                    row_effect_limit, abs(float(effect_reference_value))
+                )
+            row_effect_limit = max(row_effect_limit, 1e-6)
+            row_effect_xlim = (-1.05 * row_effect_limit, 1.05 * row_effect_limit)
+        effect_ax.set_xlim(row_effect_xlim)
+        if share_effect_x and row_index < len(feature_list) - 1:
+            effect_ax.tick_params(axis="x", labelbottom=False)
+        effect_ax.set_xlabel(effect_axis_label)
+
+    if legend and include_stripplot and (
+        point_color_column is not None or point_shape_column is not None
+    ):
+        from matplotlib.lines import Line2D
+        handles = []
+        if point_color_column is not None:
+            handles.extend([
+                Line2D(
+                    [0], [0], marker="o", linestyle="",
+                    color=resolved_point_palette[level],
+                    label=str(level), markersize=point_size,
+                )
+                for level in color_levels
+            ])
+        if point_shape_column is not None:
+            handles.extend([
+                Line2D(
+                    [0], [0], marker=resolved_point_markers[level],
+                    linestyle="", color="black",
+                    label=str(level), markersize=point_size,
+                )
+                for level in shape_levels
+            ])
+        legend_title_parts = []
+        if point_color_column is not None:
+            legend_title_parts.append(f"color: {point_color_column}")
+        if point_shape_column is not None:
+            legend_title_parts.append(f"shape: {point_shape_column}")
+        fig.legend(
+            handles=handles,
+            loc="upper center",
+            ncol=min(len(handles), 8),
+            bbox_to_anchor=legend_bbox_to_anchor,
+            title="; ".join(legend_title_parts),
+            frameon=False,
+        )
+    if footer is not None:
+        fig.text(0.5, 0.005, footer, ha="center", va="bottom", fontsize=8)
+    plt.tight_layout(rect=tight_layout_rect_arg)
+    if savefig:
+        plt.savefig(file_name, dpi=300, bbox_inches="tight")
+        print(f"Saved plot to {file_name}")
+    plt.show()
+    return fig, axes
+
+
  
 
 def barh_dotplot_dotplot_column(
@@ -1598,6 +2252,14 @@ def barh_dotplot_dotplot_column(
         dotplot2_annotate_xy: tuple[float, float] | None = (0.8, 1.2),
         dotplot2_annotate_labels: tuple[str, str] | None = ('l2fc: ', 'p:'),
         dotplot2_annotate_fontsize: int | None = None,
+        distribution_kind: str = "bar",
+        include_stripplot: bool = True,
+        point_color_column: str | None = None,
+        point_shape_column: str | None = None,
+        point_palette: dict | None = None,
+        point_markers: dict | None = None,
+        point_jitter: float | None = None,
+        point_size: float | None = None,
         ):
     """
     barh_dotplot_dotplot_column()
@@ -1846,26 +2508,25 @@ def barh_dotplot_dotplot_column(
         ax1 = axes1_list[plot_num]
         ax2 = axes2_list[plot_num]
 
-        sns.barplot(
-            x=gene, y=comparison_col,
+        _plot_group_distribution(
             data=df_obs_x,
-            order=categories,
+            value_column=gene,
+            group_column=comparison_col,
+            group_order=categories,
             ax=ax0,
-            hue=comparison_col,
-            hue_order=categories,
-            legend=False,
-            palette=color_map,
+            orientation="horizontal",
+            distribution_kind=distribution_kind,
+            color_map=color_map,
+            include_stripplot=include_stripplot,
+            point_color_column=point_color_column,
+            point_shape_column=point_shape_column,
+            point_palette=point_palette,
+            point_markers=point_markers,
+            point_jitter=point_jitter,
+            point_size=point_size,
         )
         if barh_remove_yticklabels:
             ax0.set_yticklabels([])
-        sns.stripplot(
-            x=gene, y=comparison_col,
-            data=df_obs_x,
-            order=categories,
-            ax=ax0,
-            color='black',
-            legend=False
-        )
         if barh_set_xaxis_lims is not None:
             ax0.set_xlim(barh_set_xaxis_lims)
         ax0.tick_params(axis='x', labelsize=tick_label_fontsize)
@@ -1909,12 +2570,23 @@ def barh_dotplot_dotplot_column(
 
     if barh_legend:
         handles = [Patch(facecolor=color_map[c], edgecolor='none', label=str(c)) for c in categories]
+        if include_stripplot:
+            handles.extend(_point_legend_handles(
+                df_obs_x,
+                point_color_column,
+                point_shape_column,
+                point_palette,
+                point_markers,
+                point_size,
+            ))
         subfigs[0].legend(
             handles=handles,
-            labels=[str(c) for c in categories],
+            labels=[handle.get_label() for handle in handles],
             loc='lower center',
-            ncol=min(len(categories), 6),
-            title=comparison_col,
+            ncol=min(len(handles), 6),
+            title=_distribution_legend_title(
+                comparison_col, point_color_column, point_shape_column
+            ),
             bbox_to_anchor=barh_legend_bbox_to_anchor,
             fontsize=legend_fontsize,
             title_fontsize=legend_fontsize,
@@ -2191,6 +2863,14 @@ def barh_dotplot_dotplot_dotplot_column(
         dotplot3_annotate_xy: tuple[float, float] | None = (0.8, 1.2),
         dotplot3_annotate_labels: tuple[str, str] | None = ('l2fc: ', 'p:'),
         dotplot3_annotate_fontsize: int | None = None,
+        distribution_kind: str = "bar",
+        include_stripplot: bool = True,
+        point_color_column: str | None = None,
+        point_shape_column: str | None = None,
+        point_palette: dict | None = None,
+        point_markers: dict | None = None,
+        point_jitter: float | None = None,
+        point_size: float | None = None,
     ):
     """Four-column layout: bar column + three dotplot columns.
     Use `hue_palette_color_list` to override bar colors when provided.
@@ -2391,26 +3071,25 @@ def barh_dotplot_dotplot_dotplot_column(
         ax2 = axes2_list[plot_num]
         ax3 = axes3_list[plot_num]
 
-        sns.barplot(
-            x=gene, y=comparison_col,
+        _plot_group_distribution(
             data=df_obs_x,
-            order=categories,
+            value_column=gene,
+            group_column=comparison_col,
+            group_order=categories,
             ax=ax0,
-            hue=comparison_col,
-            hue_order=categories,
-            legend=False,
-            palette=color_map,
+            orientation="horizontal",
+            distribution_kind=distribution_kind,
+            color_map=color_map,
+            include_stripplot=include_stripplot,
+            point_color_column=point_color_column,
+            point_shape_column=point_shape_column,
+            point_palette=point_palette,
+            point_markers=point_markers,
+            point_jitter=point_jitter,
+            point_size=point_size,
         )
         if barh_remove_yticklabels:
             ax0.set_yticklabels([])
-        sns.stripplot(
-            x=gene, y=comparison_col,
-            data=df_obs_x,
-            order=categories,
-            ax=ax0,
-            color='black',
-            legend=False
-        )
         if barh_set_xaxis_lims is not None:
             ax0.set_xlim(barh_set_xaxis_lims)
         ax0.tick_params(axis='x', labelsize=tick_label_fontsize)
@@ -2444,12 +3123,23 @@ def barh_dotplot_dotplot_dotplot_column(
 
     if barh_legend:
         handles = [Patch(facecolor=color_map[c], edgecolor='none', label=str(c)) for c in categories]
+        if include_stripplot:
+            handles.extend(_point_legend_handles(
+                df_obs_x,
+                point_color_column,
+                point_shape_column,
+                point_palette,
+                point_markers,
+                point_size,
+            ))
         subfigs[0].legend(
             handles=handles,
-            labels=[str(c) for c in categories],
+            labels=[handle.get_label() for handle in handles],
             loc='lower center',
-            ncol=min(len(categories), 6),
-            title=comparison_col,
+            ncol=min(len(handles), 6),
+            title=_distribution_legend_title(
+                comparison_col, point_color_column, point_shape_column
+            ),
             bbox_to_anchor=barh_legend_bbox_to_anchor,
             fontsize=legend_fontsize,
             title_fontsize=legend_fontsize,
@@ -2651,6 +3341,14 @@ def barh_4X_dotplot_column(
         dotplot4_annotate_labels: tuple[str, str] | None = ('l2fc: ', 'p:'),
         dotplot4_annotate_fontsize: int | None = None,
         use_single_dotplot_colormap: bool = False,
+        distribution_kind: str = "bar",
+        include_stripplot: bool = True,
+        point_color_column: str | None = None,
+        point_shape_column: str | None = None,
+        point_palette: dict | None = None,
+        point_markers: dict | None = None,
+        point_jitter: float | None = None,
+        point_size: float | None = None,
     ):
     """Five-column layout: bar column + four dotplot columns.
     Use `hue_palette_color_list` to override bar colors when provided.
@@ -2874,26 +3572,25 @@ def barh_4X_dotplot_column(
         ax3 = axes3_list[plot_num]
         ax4 = axes4_list[plot_num]
 
-        sns.barplot(
-            x=gene, y=comparison_col,
+        _plot_group_distribution(
             data=df_obs_x,
-            order=categories,
+            value_column=gene,
+            group_column=comparison_col,
+            group_order=categories,
             ax=ax0,
-            hue=comparison_col,
-            hue_order=categories,
-            legend=False,
-            palette=color_map,
+            orientation="horizontal",
+            distribution_kind=distribution_kind,
+            color_map=color_map,
+            include_stripplot=include_stripplot,
+            point_color_column=point_color_column,
+            point_shape_column=point_shape_column,
+            point_palette=point_palette,
+            point_markers=point_markers,
+            point_jitter=point_jitter,
+            point_size=point_size,
         )
         if barh_remove_yticklabels:
             ax0.set_yticklabels([])
-        sns.stripplot(
-            x=gene, y=comparison_col,
-            data=df_obs_x,
-            order=categories,
-            ax=ax0,
-            color='black',
-            legend=False
-        )
         if barh_set_xaxis_lims is not None:
             ax0.set_xlim(barh_set_xaxis_lims)
         ax0.tick_params(axis='x', labelsize=tick_label_fontsize)
@@ -2933,12 +3630,23 @@ def barh_4X_dotplot_column(
 
     if barh_legend:
         handles = [Patch(facecolor=color_map[c], edgecolor='none', label=str(c)) for c in categories]
+        if include_stripplot:
+            handles.extend(_point_legend_handles(
+                df_obs_x,
+                point_color_column,
+                point_shape_column,
+                point_palette,
+                point_markers,
+                point_size,
+            ))
         subfigs[0].legend(
             handles=handles,
-            labels=[str(c) for c in categories],
+            labels=[handle.get_label() for handle in handles],
             loc='lower center',
-            ncol=min(len(categories), 6),
-            title=comparison_col,
+            ncol=min(len(handles), 6),
+            title=_distribution_legend_title(
+                comparison_col, point_color_column, point_shape_column
+            ),
             bbox_to_anchor=barh_legend_bbox_to_anchor,
             fontsize=legend_fontsize,
             title_fontsize=legend_fontsize,
