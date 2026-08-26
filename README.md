@@ -50,6 +50,21 @@ Example outputs: [baseline.h5ad](example_simulated_data/results/simulate_1_var_c
 
 ![baseline simulated dotplot](example_simulated_data/results/plot_dotplot_simulate_1_var_covar_age/baseline/baseline.png)
 
+## Paired datapoints examples
+
+[`adtl.paired_datapoints()`](docs/_paired_datapoints.md) can add a third x-axis
+position for either the signed post-baseline difference or
+`log2(post / baseline)`. The secondary y-axis is symmetric around zero in both
+modes.
+
+### Raw post-baseline difference
+
+![Paired datapoints with raw post-baseline differences](docs/assets/plotting_gallery/paired_datapoints__difference_axis.png)
+
+### Post-over-baseline log2 fold change
+
+![Paired datapoints with post-over-baseline log2 fold changes](docs/assets/plotting_gallery/paired_datapoints__log2fc_axis.png)
+
 
 # Some example plots from example_PMID_33969320
 

@@ -1114,7 +1114,6 @@ class PairedDatapointsTests(unittest.TestCase):
             "var_names": ["feature"],
             "pair_by_key": "Subject_ID",
             "show_paired_difference": True,
-            "connect_lines": False,
             "jitter_amount": 0,
             "show": False,
         }
@@ -1122,6 +1121,7 @@ class PairedDatapointsTests(unittest.TestCase):
         box_fig, box_axes, _ = adtl.paired_datapoints(**plot_kwargs)
         disabled_fig, disabled_axes, _ = adtl.paired_datapoints(
             boxplot=False,
+            connect_lines=False,
             **plot_kwargs,
         )
         self.addCleanup(plt.close, box_fig)
@@ -1144,6 +1144,25 @@ class PairedDatapointsTests(unittest.TestCase):
         ]
         np.testing.assert_allclose(primary_box_centers, [1.0, 2.0])
         np.testing.assert_allclose(difference_box_centers, [3.0])
+        connector_lines = [
+            line
+            for line in box_axes["feature"].lines
+            if len(line.get_xdata()) == 2
+            and np.allclose(np.asarray(line.get_xdata(), dtype=float), [1.0, 2.0])
+        ]
+        box_lines = [
+            line
+            for line in box_axes["feature"].lines
+            if len(line.get_xdata()) == 5
+        ]
+        self.assertTrue(connector_lines)
+        self.assertTrue(
+            all(
+                box_line.get_zorder() > connector_line.get_zorder()
+                for box_line in box_lines
+                for connector_line in connector_lines
+            )
+        )
 
         disabled_difference_ax = next(
             ax
@@ -1248,6 +1267,37 @@ class PairedDatapointsTests(unittest.TestCase):
         )
         self.assertGreater(len(combined_axes["feature"].lines), 0)
         self.assertGreater(len(combined_difference_ax.lines), 0)
+
+    def test_paired_violin_ignores_nonfinite_values_without_mutating_plot_data(self):
+        paired_df = pd.DataFrame(
+            {
+                "Pre_or_Post_obs_col": ["Pre", "Post"] * 3,
+                "Subject_ID": ["S1", "S1", "S2", "S2", "S3", "S3"],
+                "feature": [1.0, 2.0, 2.0, 3.0, np.inf, 4.0],
+            }
+        )
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            fig, axes, plot_df = adtl.paired_datapoints(
+                df=paired_df,
+                var_names=["feature"],
+                pair_by_key="Subject_ID",
+                connect_lines=False,
+                violinplot=True,
+                boxplot=False,
+                show=False,
+            )
+        self.addCleanup(plt.close, fig)
+
+        violin_bodies = [
+            collection
+            for collection in axes["feature"].collections
+            if isinstance(collection, PolyCollection)
+        ]
+        self.assertEqual(len(violin_bodies), 2)
+        self.assertTrue(all(body.get_paths() for body in violin_bodies))
+        self.assertTrue(np.isinf(plot_df["value"]).any())
 
     def test_paired_difference_does_not_use_delimited_line_ids_as_keys(self):
         paired_df = pd.DataFrame(

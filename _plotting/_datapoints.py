@@ -2454,10 +2454,18 @@ def paired_datapoints(
             ]
             nonempty_values = [values for _x_order, values in nonempty_groups]
 
-            if violinplot and nonempty_values:
+            finite_violin_groups = []
+            if violinplot:
+                for x_order, values in nonempty_groups:
+                    finite_values = values[np.isfinite(values)]
+                    if len(finite_values):
+                        finite_violin_groups.append((x_order, finite_values))
+            if finite_violin_groups:
                 violin_parts = distribution_ax.violinplot(
-                    nonempty_values,
-                    positions=nonempty_positions,
+                    [values for _x_order, values in finite_violin_groups],
+                    positions=[
+                        x_order for x_order, _values in finite_violin_groups
+                    ],
                     widths=violin_width,
                     showmeans=False,
                     showmedians=False,
@@ -2479,7 +2487,7 @@ def paired_datapoints(
                 )
                 for element in ("boxes", "medians", "whiskers"):
                     for item in boxplot_artists[element]:
-                        item.set(color="black", linewidth=0.75, zorder=1)
+                        item.set(color="black", linewidth=0.75)
                 for cap in boxplot_artists["caps"]:
                     cap.set_visible(False)
 
