@@ -1329,6 +1329,86 @@ class PairedDatapointsTests(unittest.TestCase):
         self.assertLess(difference_axes[0].get_ylim()[0], -200.0)
         self.assertGreater(difference_axes[0].get_ylim()[1], 200.0)
 
+    def test_paired_difference_secondary_axes_can_autoscale_independently(self):
+        paired_df = pd.DataFrame(
+            {
+                "Pre_or_Post_obs_col": ["Pre", "Post"] * 2,
+                "Subject_ID": ["S1", "S1", "S2", "S2"],
+                "small_change": [1.0, 2.0, 3.0, 4.0],
+                "large_change": [10.0, 110.0, 20.0, 220.0],
+            }
+        )
+
+        fig, axes, _ = adtl.paired_datapoints(
+            df=paired_df,
+            var_names=["small_change", "large_change"],
+            pair_by_key="Subject_ID",
+            show_paired_difference=True,
+            paired_difference_sharey=False,
+            sharey=True,
+            boxplot=False,
+            ncols=2,
+            show=False,
+        )
+        self.addCleanup(plt.close, fig)
+
+        primary_axes = list(axes.values())
+        difference_axes = [
+            next(
+                ax
+                for ax in fig.axes
+                if ax.get_label() == f"{panel_name}__paired_difference"
+            )
+            for panel_name in axes
+        ]
+        self.assertTrue(primary_axes[0].get_shared_y_axes().joined(*primary_axes))
+        self.assertFalse(
+            difference_axes[0].get_shared_y_axes().joined(*difference_axes)
+        )
+        self.assertNotEqual(
+            difference_axes[0].get_ylim(), difference_axes[1].get_ylim()
+        )
+        for difference_ax in difference_axes:
+            self.assertAlmostEqual(
+                difference_ax.get_ylim()[0],
+                -difference_ax.get_ylim()[1],
+            )
+        self.assertLess(
+            difference_axes[0].get_ylim()[1],
+            difference_axes[1].get_ylim()[1],
+        )
+        self.assertGreater(difference_axes[0].get_ylim()[1], 1.0)
+        self.assertGreater(difference_axes[1].get_ylim()[1], 200.0)
+
+    def test_paired_difference_explicit_limits_override_independent_autoscale(self):
+        fig, axes, _ = adtl.paired_datapoints(
+            adata=self.make_adata(),
+            var_names=["A_v1", "A_v2"],
+            pair_by_key="Subject_ID",
+            show_paired_difference=True,
+            paired_difference_ylims=(-25, 25),
+            paired_difference_sharey=False,
+            sharey=True,
+            boxplot=False,
+            ncols=2,
+            show=False,
+        )
+        self.addCleanup(plt.close, fig)
+
+        difference_axes = [
+            next(
+                ax
+                for ax in fig.axes
+                if ax.get_label() == f"{panel_name}__paired_difference"
+            )
+            for panel_name in axes
+        ]
+        self.assertFalse(
+            difference_axes[0].get_shared_y_axes().joined(*difference_axes)
+        )
+        for difference_ax in difference_axes:
+            self.assertEqual(difference_ax.get_ylim(), (-25.0, 25.0))
+
     def test_paired_difference_autoscale_ignores_axes_without_finite_differences(self):
         paired_df = pd.DataFrame(
             {
@@ -1364,6 +1444,48 @@ class PairedDatapointsTests(unittest.TestCase):
             difference_axes[0].get_ylim()[0],
             -difference_axes[0].get_ylim()[1],
         )
+        self.assertGreater(difference_axes[0].get_ylim()[1], 0.01)
+        self.assertLess(difference_axes[0].get_ylim()[1], 0.1)
+
+    def test_paired_difference_independent_autoscale_handles_empty_axis(self):
+        paired_df = pd.DataFrame(
+            {
+                "Pre_or_Post_obs_col": ["Pre", "Post"] * 2,
+                "Subject_ID": ["S1", "S1", "S2", "S2"],
+                "small_change": [1.0, 1.01, 2.0, 2.01],
+                "missing_change": [1.0, np.nan, 2.0, np.nan],
+            }
+        )
+
+        fig, axes, _ = adtl.paired_datapoints(
+            df=paired_df,
+            var_names=["small_change", "missing_change"],
+            pair_by_key="Subject_ID",
+            show_paired_difference=True,
+            paired_difference_sharey=False,
+            dropna=True,
+            boxplot=False,
+            ncols=2,
+            show=False,
+        )
+        self.addCleanup(plt.close, fig)
+
+        difference_axes = [
+            next(
+                ax
+                for ax in fig.axes
+                if ax.get_label() == f"{panel_name}__paired_difference"
+            )
+            for panel_name in axes
+        ]
+        self.assertNotEqual(
+            difference_axes[0].get_ylim(), difference_axes[1].get_ylim()
+        )
+        for difference_ax in difference_axes:
+            self.assertAlmostEqual(
+                difference_ax.get_ylim()[0],
+                -difference_ax.get_ylim()[1],
+            )
         self.assertGreater(difference_axes[0].get_ylim()[1], 0.01)
         self.assertLess(difference_axes[0].get_ylim()[1], 0.1)
 

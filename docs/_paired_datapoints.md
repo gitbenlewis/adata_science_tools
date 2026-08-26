@@ -73,6 +73,7 @@ def paired_datapoints(
     paired_difference_label: str | None = None,
     paired_difference_ylabel: str | None = None,
     paired_difference_ylims: Sequence[float] | None = None,
+    paired_difference_sharey: bool = True,
     line_width: float = 0.9,
     line_style: str = "--",
     jitter_amount: float = 0.2,
@@ -337,10 +338,13 @@ mode uses `log2(<target label> / <reference label>)` and
 `Paired log2FC (<target label> / <reference label>)`. Explicit strings,
 including empty strings, override those labels. `paired_difference_ylims` sets
 explicit right-axis limits and must contain finite, increasing bounds symmetric
-around zero. Every populated panel uses the same secondary limits; without
-explicit limits, that shared scale is resolved symmetrically around zero to
-span all displayed changes. Existing `ylims` continues to control only the
-primary reference/target axis.
+around zero. By default, every populated panel uses the same secondary limits;
+without explicit limits, that shared scale is resolved symmetrically around
+zero to span all displayed changes. Set `paired_difference_sharey=False` to
+scale each panel's secondary axis independently while keeping every range
+symmetric around zero. Explicit `paired_difference_ylims` takes precedence over
+either automatic scaling mode. This option is independent of `sharey`, and
+existing `ylims` continues to control only the primary reference/target axis.
 
 Derived-change dots reuse the same point and subset-hue styling as the reference
 and target dots. Slope colors remain connector-only: line color represents the

@@ -1512,6 +1512,7 @@ def paired_datapoints(
     paired_difference_label: str | None = None,
     paired_difference_ylabel: str | None = None,
     paired_difference_ylims: Sequence[float] | None = None,
+    paired_difference_sharey: bool = True,
     line_width: float = 0.9,
     line_style: str = "--",
     jitter_amount: float = 0.2,
@@ -2420,9 +2421,9 @@ def paired_datapoints(
                 difference_panel_df["value"].to_numpy(dtype=float)
             ).any():
                 finite_difference_axes.append(difference_ax)
-            if sharey and shared_difference_ax is not None:
+            if sharey and paired_difference_sharey and shared_difference_ax is not None:
                 difference_ax.sharey(shared_difference_ax)
-            elif sharey:
+            elif sharey and paired_difference_sharey:
                 shared_difference_ax = difference_ax
 
         if boxplot:
@@ -2576,17 +2577,24 @@ def paired_datapoints(
             ax.legend(**legend_kwargs)
 
     if difference_axes:
-        if paired_difference_ylims_tuple is None:
+        if paired_difference_ylims_tuple is not None:
+            for difference_ax in difference_axes:
+                difference_ax.set_ylim(paired_difference_ylims_tuple)
+        elif paired_difference_sharey:
             autoscaled_difference_axes = finite_difference_axes or difference_axes[:1]
             difference_limit = max(
                 max(abs(bound) for bound in difference_ax.get_ylim())
                 for difference_ax in autoscaled_difference_axes
             )
             resolved_difference_ylims = (-difference_limit, difference_limit)
+            for difference_ax in difference_axes:
+                difference_ax.set_ylim(resolved_difference_ylims)
         else:
-            resolved_difference_ylims = paired_difference_ylims_tuple
-        for difference_ax in difference_axes:
-            difference_ax.set_ylim(resolved_difference_ylims)
+            for difference_ax in difference_axes:
+                difference_limit = max(
+                    abs(bound) for bound in difference_ax.get_ylim()
+                )
+                difference_ax.set_ylim(-difference_limit, difference_limit)
 
     for ax in axes_flat[len(plot_panel_names):]:
         ax.set_visible(False)
