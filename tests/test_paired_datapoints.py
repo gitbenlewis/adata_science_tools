@@ -13,6 +13,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.collections import PolyCollection
 from matplotlib.colors import to_rgba
+from matplotlib.figure import Figure
 
 
 REPO_PARENT = Path(__file__).resolve().parents[2]
@@ -2235,6 +2236,63 @@ class PairedDatapointsTests(unittest.TestCase):
             ],
         )
 
+    def test_legend_summary_prefix_defaults_and_overrides(self):
+        for prefix_kwargs, expected_summaries in (
+            (
+                {},
+                ["Overall Pre (mean=3)", "Overall Post (mean=4)"],
+            ),
+            ({"legend_summary_prefix": None}, ["Pre (mean=3)", "Post (mean=4)"]),
+            ({"legend_summary_prefix": ""}, ["Pre (mean=3)", "Post (mean=4)"]),
+            (
+                {"legend_summary_prefix": "All samples"},
+                ["All samples Pre (mean=3)", "All samples Post (mean=4)"],
+            ),
+        ):
+            with self.subTest(prefix_kwargs=prefix_kwargs):
+                fig, axes, _ = adtl.paired_datapoints(
+                    adata=self.make_adata(),
+                    var_names=["A_v1"],
+                    pair_by_key="Subject_ID",
+                    subset_obs_key="cohort",
+                    subset_order=["B", "A"],
+                    legend=True,
+                    legend_metrics=("mean",),
+                    boxplot=False,
+                    show=False,
+                    **prefix_kwargs,
+                )
+                self.addCleanup(plt.close, fig)
+
+                self.assertEqual(
+                    [
+                        text.get_text()
+                        for text in axes["A_v1"].get_legend().get_texts()
+                    ],
+                    ["cohort=B", "cohort=A", *expected_summaries],
+                )
+
+    def test_legend_metric_separator_supports_multiline_metrics(self):
+        fig, axes, _ = adtl.paired_datapoints(
+            adata=self.make_adata(),
+            var_names=["A_v1"],
+            pair_by_key="Subject_ID",
+            legend=True,
+            legend_metrics=("mean", "count"),
+            legend_metric_separator="\n",
+            boxplot=False,
+            show=False,
+        )
+        self.addCleanup(plt.close, fig)
+
+        self.assertEqual(
+            [text.get_text() for text in axes["A_v1"].get_legend().get_texts()],
+            [
+                "Overall Pre (mean=3\ncount=3)",
+                "Overall Post (mean=4\ncount=3)",
+            ],
+        )
+
     def test_legend_metrics_keep_subset_rows_first_and_axis_summaries_panel_local(self):
         fig, axes, _ = adtl.paired_datapoints(
             adata=self.make_adata(),
@@ -2507,6 +2565,136 @@ class PairedDatapointsTests(unittest.TestCase):
         finally:
             if fig is not None:
                 plt.close(fig)
+
+    def test_layout_spacing_is_forwarded_after_tight_layout(self):
+        layout_events = []
+
+        def record_tight_layout():
+            layout_events.append(("tight_layout", {}))
+
+        def record_subplots_adjust(_fig, **kwargs):
+            layout_events.append(("subplots_adjust", kwargs))
+
+        with (
+            mock.patch.object(plt, "tight_layout", side_effect=record_tight_layout),
+            mock.patch.object(
+                Figure,
+                "subplots_adjust",
+                autospec=True,
+                side_effect=record_subplots_adjust,
+            ),
+        ):
+            fig, _, _ = adtl.paired_datapoints(
+                adata=self.make_adata(),
+                var_names=["A_v1", "A_v2", "B_v1"],
+                pair_by_key="Subject_ID",
+                ncols=2,
+                figsize=(8.25, 6.5),
+                title="Paired values",
+                title_axes_top=0.76,
+                wspace=0.42,
+                hspace=0.31,
+                show=False,
+            )
+        self.addCleanup(plt.close, fig)
+
+        self.assertEqual(
+            layout_events,
+            [
+                ("tight_layout", {}),
+                (
+                    "subplots_adjust",
+                    {"top": 0.76, "wspace": 0.42, "hspace": 0.31},
+                ),
+            ],
+        )
+        np.testing.assert_allclose(fig.get_size_inches(), [8.25, 6.5])
+
+    def test_subplot_title_fontsize_is_independent_from_main_title(self):
+        fig, axes, _ = adtl.paired_datapoints(
+            adata=self.make_adata(),
+            var_names=["A_v1"],
+            pair_by_key="Subject_ID",
+            title="Paired values",
+            title_fontsize=19,
+            subplot_title_fontsize=7,
+            show=False,
+        )
+        self.addCleanup(plt.close, fig)
+
+        self.assertEqual(fig._suptitle.get_fontsize(), 19)
+        self.assertEqual(axes["A_v1"].title.get_fontsize(), 7)
+
+    def test_new_api_defaults_match_omitted_arguments_without_layout_adjustment(self):
+        plot_kwargs = {
+            "adata": self.make_adata(),
+            "var_names": ["A_v1"],
+            "pair_by_key": "Subject_ID",
+            "title": "Paired values",
+            "legend": True,
+            "legend_metrics": ("mean", "count"),
+            "jitter_amount": 0,
+            "boxplot": False,
+            "show": False,
+        }
+
+        with (
+            mock.patch.object(plt, "tight_layout") as tight_layout,
+            mock.patch.object(Figure, "subplots_adjust", autospec=True) as adjust,
+        ):
+            omitted_fig, omitted_axes, omitted_df = adtl.paired_datapoints(
+                **plot_kwargs,
+            )
+            explicit_fig, explicit_axes, explicit_df = adtl.paired_datapoints(
+                wspace=None,
+                hspace=None,
+                subplot_title_fontsize=None,
+                legend_summary_prefix="Overall",
+                legend_metric_separator=", ",
+                **plot_kwargs,
+            )
+        self.addCleanup(plt.close, omitted_fig)
+        self.addCleanup(plt.close, explicit_fig)
+
+        self.assertEqual(tight_layout.call_count, 2)
+        adjust.assert_not_called()
+        pd.testing.assert_frame_equal(explicit_df, omitted_df)
+        np.testing.assert_allclose(
+            explicit_fig.get_size_inches(),
+            omitted_fig.get_size_inches(),
+        )
+        self.assertEqual(
+            explicit_axes["A_v1"].get_position().bounds,
+            omitted_axes["A_v1"].get_position().bounds,
+        )
+        self.assertEqual(
+            [
+                text.get_text()
+                for text in explicit_axes["A_v1"].get_legend().get_texts()
+            ],
+            [
+                text.get_text()
+                for text in omitted_axes["A_v1"].get_legend().get_texts()
+            ],
+        )
+        self.assertEqual(
+            [
+                text.get_text()
+                for text in omitted_axes["A_v1"].get_legend().get_texts()
+            ],
+            [
+                "Overall Pre (mean=3, count=3)",
+                "Overall Post (mean=4, count=3)",
+            ],
+        )
+        self.assertEqual(
+            explicit_axes["A_v1"].title.get_fontsize(),
+            omitted_axes["A_v1"].title.get_fontsize(),
+        )
+        self.assertEqual(
+            explicit_fig._suptitle.get_fontsize(),
+            omitted_fig._suptitle.get_fontsize(),
+        )
 
     def test_invalid_legend_scope_raises(self):
         with self.assertRaisesRegex(ValueError, "'legend_scope' must be one of 'axis' or 'figure'"):

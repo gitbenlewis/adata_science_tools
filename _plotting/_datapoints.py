@@ -126,6 +126,7 @@ def _legend_metric_label(
     values: pd.Series,
     metric_names: Sequence[str],
     metric_formats: Mapping[str, str],
+    metric_separator: str = ", ",
 ) -> str:
     if not metric_names:
         return label
@@ -146,7 +147,7 @@ def _legend_metric_label(
             metric_parts.append(f"count={int(metric_value)}")
         else:
             metric_parts.append(f"{metric_name}={metric_value:.3g}")
-    return f"{label} ({', '.join(metric_parts)})"
+    return f"{label} ({metric_separator.join(metric_parts)})"
 
 ####### START ############. datapoint plots ###################.###################.###################.###################.
 
@@ -1564,8 +1565,12 @@ def paired_datapoints(
         Literal["mean", "median", "count", "std", "sem"],
         str,
     ] | None = None,
+    legend_summary_prefix: str | None = "Overall",
+    legend_metric_separator: str = ", ",
     ncols: int = 3,
     figsize: tuple[float, float] | None = None,
+    wspace: float | None = None,
+    hspace: float | None = None,
     sharey: bool = False,
     ylims: Sequence[float] | None = None,
     ylabel: str | None = None,
@@ -1574,6 +1579,7 @@ def paired_datapoints(
     title_axes_top: float | None = None,
     subplot_title_var_col: str | None = None,
     subplot_title_y: float | None = None,
+    subplot_title_fontsize: int | None = None,
     title_fontsize: int = 14,
     title_y: float | None = None,
     axis_label_fontsize: int = 12,
@@ -2094,6 +2100,9 @@ def paired_datapoints(
         else str(paired_difference_ylabel)
     )
     active_subset_key = subset_obs_key or subset_var_key
+    resolved_legend_summary_prefix = (
+        "" if legend_summary_prefix is None else legend_summary_prefix
+    )
     active_subset_metadata_df = filtered_obs_df if subset_obs_key is not None else var_metadata_df
     var_subset_values_by_name = var_metadata_df[subset_var_key] if subset_var_key is not None else None
 
@@ -2663,6 +2672,8 @@ def paired_datapoints(
         subplot_title_kwargs = {}
         if subplot_title_y is not None:
             subplot_title_kwargs["y"] = subplot_title_y
+        if subplot_title_fontsize is not None:
+            subplot_title_kwargs["fontsize"] = subplot_title_fontsize
         ax.set_title(panel_title, **subplot_title_kwargs)
         if show_paired_difference:
             ax.set_xticks([1, 2, 3])
@@ -2722,10 +2733,15 @@ def paired_datapoints(
                             alpha=point_alpha,
                         ),
                         _legend_metric_label(
-                            f"Overall {x_label}",
+                            (
+                                f"{resolved_legend_summary_prefix} {x_label}"
+                                if resolved_legend_summary_prefix
+                                else x_label
+                            ),
                             finite_values,
                             metric_names,
                             normalized_metric_formats,
+                            metric_separator=legend_metric_separator,
                         ),
                     )
                 )
@@ -2818,8 +2834,15 @@ def paired_datapoints(
             )
 
     plt.tight_layout()
+    subplot_adjust_kwargs: dict[str, float] = {}
     if title_axes_top is not None:
-        fig.subplots_adjust(top=title_axes_top)
+        subplot_adjust_kwargs["top"] = title_axes_top
+    if wspace is not None:
+        subplot_adjust_kwargs["wspace"] = wspace
+    if hspace is not None:
+        subplot_adjust_kwargs["hspace"] = hspace
+    if subplot_adjust_kwargs:
+        fig.subplots_adjust(**subplot_adjust_kwargs)
     if savefig:
         fig.savefig(file_name, dpi=300, bbox_inches="tight")
     if show:

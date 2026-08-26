@@ -94,8 +94,12 @@ def paired_datapoints(
         Literal["mean", "median", "count", "std", "sem"],
         str,
     ] | None = None,
+    legend_summary_prefix: str | None = "Overall",
+    legend_metric_separator: str = ", ",
     ncols: int = 3,
     figsize: tuple[float, float] | None = None,
+    wspace: float | None = None,
+    hspace: float | None = None,
     sharey: bool = False,
     ylims: Sequence[float] | None = None,
     ylabel: str | None = None,
@@ -104,6 +108,7 @@ def paired_datapoints(
     title_axes_top: float | None = None,
     subplot_title_var_col: str | None = None,
     subplot_title_y: float | None = None,
+    subplot_title_fontsize: int | None = None,
     title_fontsize: int = 14,
     title_y: float | None = None,
     axis_label_fontsize: int = 12,
@@ -153,14 +158,20 @@ fig, axes, plot_df = adtl.paired_datapoints(
 `title` sets the overall figure title and does not replace the selected feature
 or variable-group subplot titles. `subplot_title_var_col` can instead source
 single-variable subplot titles from variable metadata. Use `title_y` and
-`subplot_title_y` to move the figure title or subplot titles vertically. Use
+`subplot_title_y` to move the figure title or subplot titles vertically.
+`title_fontsize` controls only the overall figure title, while
+`subplot_title_fontsize` independently controls the subplot titles. Leaving
+`subplot_title_fontsize=None` preserves the existing subplot title sizing. Use
 `xlabel=""` to suppress the x-axis label below the Pre/Post tick labels.
 
 Set `title_axes_top` to the normalized figure coordinate for the top edge of the
-subplot area. It is applied as `fig.subplots_adjust(top=title_axes_top)` after
-`tight_layout()`; decreasing the value moves subplot titles farther below the
-figure title. When omitted, `paired_datapoints()` retains its existing
-`tight_layout()` result.
+subplot area. Set `wspace` or `hspace` to reserve horizontal or vertical space
+between subplots, including space for subplot-level external legends. After
+`tight_layout()`, supplied values are applied together through
+`fig.subplots_adjust()`; only the supplied `top`, `wspace`, or `hspace`
+dimensions are overridden. These spacing controls do not change the requested
+`figsize` or the figure aspect ratio. When all three are omitted,
+`paired_datapoints()` retains its existing `tight_layout()` result.
 
 ```python
 fig, axes, plot_df = adtl.paired_datapoints(
@@ -170,7 +181,11 @@ fig, axes, plot_df = adtl.paired_datapoints(
     title="Paired IL6",
     title_y=1.03,
     subplot_title_y=1.05,
+    subplot_title_fontsize=11,
+    title_fontsize=14,
     title_axes_top=0.76,
+    wspace=0.35,
+    hspace=0.4,
     xlabel="",
     show=False,
 )
@@ -439,15 +454,25 @@ errors are supplied as floats. Metrics without an override use `count=N` or
 `<metric>=<three-significant-digit value>`. Invalid metric names, format keys,
 placeholders, or format specifications raise before drawing.
 
+`legend_metric_separator` joins the rendered metrics within each summary row.
+Its default `", "` preserves comma-separated labels. Set it to `"\n"` to place
+each metric on its own line without adding newline characters to the individual
+`legend_metric_formats` strings.
+
 When a subset hue is active, its entries remain first and the overall
 per-position summaries follow them. With metrics enabled, subset entries are
 self-identifying, such as `cohort=A`, and the combined legend omits a subset
 title so the following overall rows are not visually grouped under that title.
 With metrics disabled, existing subset labels and the subset legend title are
-unchanged. `legend_scope="axis"` reports each panel on its own axis;
+unchanged. By default, `legend_summary_prefix="Overall"` prefixes every summary
+row, including when all samples are represented without a subset hue. Set
+`legend_summary_prefix=None` or `legend_summary_prefix=""` to suppress the
+prefix, or provide custom text such as `"All samples"` to replace it.
+`legend_scope="axis"` reports each panel on its own axis;
 `legend_scope="figure"` creates one shared legend. In a multi-panel figure,
-overall summary labels are prefixed with the panel name, for example
-`IL6 — Overall Post (...)`, rather than pooling measurements across panels.
+summary labels are prefixed with the panel name rather than pooling
+measurements across panels, for example `IL6 — Overall Post (...)` with the
+default prefix or `IL6 — Post (...)` when the prefix is suppressed.
 
 ### Raw pairwise-difference summaries
 
