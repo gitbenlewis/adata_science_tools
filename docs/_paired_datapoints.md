@@ -87,6 +87,13 @@ def paired_datapoints(
     violinplot: bool = False,
     violin_width: float = 0.8,
     violin_alpha: float = 0.25,
+    legend_metrics: Sequence[
+        Literal["mean", "median", "count", "std", "sem"]
+    ] | None = None,
+    legend_metric_formats: Mapping[
+        Literal["mean", "median", "count", "std", "sem"],
+        str,
+    ] | None = None,
     ncols: int = 3,
     figsize: tuple[float, float] | None = None,
     sharey: bool = False,
@@ -409,6 +416,103 @@ fig, axes, plot_df = adtl.paired_datapoints(
 <img src="assets/plotting_gallery/paired_datapoints__log2fc_axis.png" alt="Varied paired slopes with a combined-direction panel and post-over-baseline log2 fold changes" width="960">
 
 *`log2fc_axis` — The same varied positive, negative, and approximately-flat slopes are shown separately and together, with sign-colored `log2(post / baseline)` values and violin overlays on zero-centered symmetric secondary axes. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+
+## Per-position summary legends
+
+Set `legend=True` and provide `legend_metrics` to add overall summary rows for
+each displayed x-axis position. This feature is opt-in: the default
+`legend_metrics=None` preserves the existing subset-only legend. Supported
+metrics are `mean`, `median`, `count`, `std`, and `sem`. They appear in the
+requested order, while the summary rows follow the displayed x order:
+reference, target, then the optional paired difference or log2FC.
+
+Each summary uses the finite `value` rows that remain in its panel and x
+position after bounds, missing-value handling, `dropna`, and `dropzeros` have
+been applied. `count` is therefore the number of finite post-filter rows at
+that position. These are overall summaries across subset hues, not separate
+statistics for each subset.
+
+`legend_metric_formats` optionally replaces the text for individual selected
+metrics. Each format string may use only `{metric}` and `{value}`. Count values
+are supplied as integers; means, medians, standard deviations, and standard
+errors are supplied as floats. Metrics without an override use `count=N` or
+`<metric>=<three-significant-digit value>`. Invalid metric names, format keys,
+placeholders, or format specifications raise before drawing.
+
+When a subset hue is active, its entries remain first and the overall
+per-position summaries follow them. With metrics enabled, subset entries are
+self-identifying, such as `cohort=A`, and the combined legend omits a subset
+title so the following overall rows are not visually grouped under that title.
+With metrics disabled, existing subset labels and the subset legend title are
+unchanged. `legend_scope="axis"` reports each panel on its own axis;
+`legend_scope="figure"` creates one shared legend. In a multi-panel figure,
+overall summary labels are prefixed with the panel name, for example
+`IL6 — Overall Post (...)`, rather than pooling measurements across panels.
+
+### Raw pairwise-difference summaries
+
+In `paired_difference_mode="difference"`, the third summary describes the
+finite row-wise paired values `post - baseline`. It is not calculated by
+subtracting the two independently summarized endpoint distributions.
+
+```python
+fig, axes, plot_df = adtl.paired_datapoints(
+    adata=adata,
+    var_names=["IL6"],
+    pair_by_key="Subject_ID",
+    subset_obs_key="cohort",
+    show_paired_difference=True,
+    paired_difference_mode="difference",
+    paired_difference_label="post - pre",
+    legend=True,
+    legend_metrics=("count", "mean", "sem"),
+    legend_metric_formats={
+        "count": "n={value:d}",
+        "mean": "mean={value:.2f}",
+        "sem": "SEM={value:.2f}",
+    },
+    title="Baseline, post, and raw-difference summaries",
+    show=False,
+)
+```
+
+<img src="assets/plotting_gallery/paired_datapoints__difference_summary_legend.png" alt="Paired baseline, post, and raw-difference values with overall per-position legend summaries" width="960">
+
+*`difference_summary_legend` — Subset hue entries followed by finite, post-filter summaries for baseline, post, and each raw pairwise `post - baseline` difference. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+
+### Pairwise log2 fold-change summaries
+
+In `paired_difference_mode="log2fc"`, the third summary describes the finite
+row-wise values `log2(post) - log2(baseline)`, equivalently
+`log2(post / baseline)`. It is not `log2(mean(post) / mean(baseline))`. A pair
+contributes to this derived summary only when both endpoints are finite and
+strictly positive; zero, negative, missing, or nonfinite endpoints do not
+receive a pseudocount and do not contribute a derived log2FC value.
+
+```python
+fig, axes, plot_df = adtl.paired_datapoints(
+    adata=adata,
+    var_names=["IL6"],
+    pair_by_key="Subject_ID",
+    subset_obs_key="cohort",
+    show_paired_difference=True,
+    paired_difference_mode="log2fc",
+    paired_difference_label="log2(post / pre)",
+    legend=True,
+    legend_metrics=("count", "mean", "sem"),
+    legend_metric_formats={
+        "count": "n={value:d}",
+        "mean": "mean={value:.2f}",
+        "sem": "SEM={value:.2f}",
+    },
+    title="Baseline, post, and log2FC summaries",
+    show=False,
+)
+```
+
+<img src="assets/plotting_gallery/paired_datapoints__log2fc_summary_legend.png" alt="Paired baseline, post, and log2 fold-change values with overall per-position legend summaries" width="960">
+
+*`log2fc_summary_legend` — Subset hue entries followed by finite, post-filter summaries for baseline, post, and valid pairwise `log2(post / baseline)` values. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
 
 ## Bounds
 

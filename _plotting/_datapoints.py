@@ -24,6 +24,130 @@ from ._utils import _draw_reference_lines, _normalize_reference_lines
 
 LOGGER = logging.getLogger(__name__)
 
+
+_ALLOWED_LEGEND_METRICS = {"mean", "median", "count", "std", "sem"}
+
+
+def _normalize_legend_metrics(
+    legend_metrics: Sequence[str] | None,
+    legend_metric_formats: Mapping[str, str] | None,
+) -> tuple[tuple[str, ...], dict[str, str]]:
+    """Validate shared datapoint legend-metric configuration."""
+
+    metric_names = tuple(legend_metrics or ())
+    invalid_metric_names = sorted(
+        set(metric_names).difference(_ALLOWED_LEGEND_METRICS)
+    )
+    if invalid_metric_names:
+        raise ValueError(f"Unsupported legend metric(s): {invalid_metric_names}.")
+
+    if legend_metric_formats is None:
+        return metric_names, {}
+    if not isinstance(legend_metric_formats, Mapping):
+        raise ValueError("'legend_metric_formats' must be a mapping.")
+
+    invalid_format_metric_names = [
+        metric_name
+        for metric_name in legend_metric_formats
+        if metric_name not in _ALLOWED_LEGEND_METRICS
+    ]
+    if invalid_format_metric_names:
+        invalid_names = sorted(
+            repr(metric_name) for metric_name in invalid_format_metric_names
+        )
+        raise ValueError(
+            f"Unsupported legend metric format key(s): {invalid_names}."
+        )
+
+    normalized_metric_formats: dict[str, str] = {}
+    formatter = _Formatter()
+    for metric_name, metric_format in legend_metric_formats.items():
+        if not isinstance(metric_format, str):
+            raise ValueError(
+                f"'legend_metric_formats[{metric_name!r}]' must be a string."
+            )
+        try:
+            parsed_fields: list[str] = []
+            formats_to_parse = [metric_format]
+            while formats_to_parse:
+                parsed_parts = list(formatter.parse(formats_to_parse.pop()))
+                parsed_fields.extend(
+                    field_name
+                    for _literal, field_name, _format_spec, _conversion in parsed_parts
+                    if field_name is not None
+                )
+                formats_to_parse.extend(
+                    format_spec
+                    for _literal, _field_name, format_spec, _conversion in parsed_parts
+                    if format_spec
+                )
+        except ValueError as exc:
+            raise ValueError(
+                f"Invalid 'legend_metric_formats[{metric_name!r}]': {exc}."
+            ) from exc
+        invalid_fields = [
+            field_name
+            for field_name in parsed_fields
+            if field_name not in {"metric", "value"}
+        ]
+        if invalid_fields:
+            raise ValueError(
+                f"Invalid placeholder(s) in 'legend_metric_formats[{metric_name!r}]': "
+                f"{invalid_fields}. Only 'metric' and 'value' are supported."
+            )
+        sample_value: int | float = 1 if metric_name == "count" else 1.0
+        try:
+            metric_format.format(metric=metric_name, value=sample_value)
+        except (AttributeError, IndexError, KeyError, TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Invalid 'legend_metric_formats[{metric_name!r}]': {exc}."
+            ) from exc
+        normalized_metric_formats[metric_name] = metric_format
+    return metric_names, normalized_metric_formats
+
+
+def _legend_metric_value(metric_name: str, values: pd.Series) -> float:
+    clean_values = values.dropna()
+    if metric_name == "count":
+        return float(len(clean_values))
+    if clean_values.empty:
+        return float("nan")
+    if metric_name == "mean":
+        return float(clean_values.mean())
+    if metric_name == "median":
+        return float(clean_values.median())
+    if metric_name == "std":
+        return float(clean_values.std())
+    return float(clean_values.sem())
+
+
+def _legend_metric_label(
+    label: str,
+    values: pd.Series,
+    metric_names: Sequence[str],
+    metric_formats: Mapping[str, str],
+) -> str:
+    if not metric_names:
+        return label
+    metric_parts: list[str] = []
+    for metric_name in metric_names:
+        metric_value = _legend_metric_value(metric_name, values)
+        if metric_name in metric_formats:
+            format_value: int | float = (
+                int(metric_value) if metric_name == "count" else float(metric_value)
+            )
+            metric_parts.append(
+                metric_formats[metric_name].format(
+                    metric=metric_name,
+                    value=format_value,
+                )
+            )
+        elif metric_name == "count":
+            metric_parts.append(f"count={int(metric_value)}")
+        else:
+            metric_parts.append(f"{metric_name}={metric_value:.3g}")
+    return f"{label} ({', '.join(metric_parts)})"
+
 ####### START ############. datapoint plots ###################.###################.###################.###################.
 
 def datapoints(
@@ -188,74 +312,10 @@ def datapoints(
         if any(line["value"] <= 0 for line in normalized_reference_lines):
             raise ValueError("Reference-line values must be positive when yscale='log'.")
 
-    allowed_metric_names = {"mean", "median", "count", "std", "sem"}
-    metric_names: tuple[str, ...] = tuple(legend_metrics or ())
-    invalid_metric_names = sorted(set(metric_names).difference(allowed_metric_names))
-    if invalid_metric_names:
-        raise ValueError(f"Unsupported legend metric(s): {invalid_metric_names}.")
-
-    if legend_metric_formats is None:
-        normalized_metric_formats: dict[str, str] = {}
-    else:
-        if not isinstance(legend_metric_formats, Mapping):
-            raise ValueError("'legend_metric_formats' must be a mapping.")
-        invalid_format_metric_names = [
-            metric_name
-            for metric_name in legend_metric_formats
-            if metric_name not in allowed_metric_names
-        ]
-        if invalid_format_metric_names:
-            invalid_names = sorted(
-                (repr(metric_name) for metric_name in invalid_format_metric_names)
-            )
-            raise ValueError(
-                f"Unsupported legend metric format key(s): {invalid_names}."
-            )
-
-        normalized_metric_formats = {}
-        formatter = _Formatter()
-        for metric_name, metric_format in legend_metric_formats.items():
-            if not isinstance(metric_format, str):
-                raise ValueError(
-                    f"'legend_metric_formats[{metric_name!r}]' must be a string."
-                )
-            try:
-                parsed_fields: list[str] = []
-                formats_to_parse = [metric_format]
-                while formats_to_parse:
-                    parsed_parts = list(formatter.parse(formats_to_parse.pop()))
-                    parsed_fields.extend(
-                        field_name
-                        for _literal, field_name, _format_spec, _conversion in parsed_parts
-                        if field_name is not None
-                    )
-                    formats_to_parse.extend(
-                        format_spec
-                        for _literal, _field_name, format_spec, _conversion in parsed_parts
-                        if format_spec
-                    )
-            except ValueError as exc:
-                raise ValueError(
-                    f"Invalid 'legend_metric_formats[{metric_name!r}]': {exc}."
-                ) from exc
-            invalid_fields = [
-                field_name
-                for field_name in parsed_fields
-                if field_name not in {"metric", "value"}
-            ]
-            if invalid_fields:
-                raise ValueError(
-                    f"Invalid placeholder(s) in 'legend_metric_formats[{metric_name!r}]': "
-                    f"{invalid_fields}. Only 'metric' and 'value' are supported."
-                )
-            sample_value: int | float = 1 if metric_name == "count" else 1.0
-            try:
-                metric_format.format(metric=metric_name, value=sample_value)
-            except (AttributeError, IndexError, KeyError, TypeError, ValueError) as exc:
-                raise ValueError(
-                    f"Invalid 'legend_metric_formats[{metric_name!r}]': {exc}."
-                ) from exc
-            normalized_metric_formats[metric_name] = metric_format
+    metric_names, normalized_metric_formats = _normalize_legend_metrics(
+        legend_metrics,
+        legend_metric_formats,
+    )
 
     normalized_annotations: list[dict[str, Any]] = []
     annotation_keys = {"metric", "position", "label", "format", "text_kwargs"}
@@ -1009,44 +1069,6 @@ def datapoints(
     plot_df["resolved_marker_size"] = resolved_sizes
     plot_df["resolved_marker_alpha"] = resolved_alphas
 
-    def _metric_value(metric_name: str, values: pd.Series) -> float:
-        clean_values = values.dropna()
-        if metric_name == "count":
-            return float(len(clean_values))
-        if clean_values.empty:
-            return float("nan")
-        if metric_name == "mean":
-            return float(clean_values.mean())
-        if metric_name == "median":
-            return float(clean_values.median())
-        if metric_name == "std":
-            return float(clean_values.std())
-        return float(clean_values.sem())
-
-    def _metric_label(label: str, values: pd.Series) -> str:
-        if not metric_names:
-            return label
-        metric_parts: list[str] = []
-        for metric_name in metric_names:
-            metric_value = _metric_value(metric_name, values)
-            if metric_name in normalized_metric_formats:
-                format_value: int | float = (
-                    int(metric_value)
-                    if metric_name == "count"
-                    else float(metric_value)
-                )
-                metric_parts.append(
-                    normalized_metric_formats[metric_name].format(
-                        metric=metric_name,
-                        value=format_value,
-                    )
-                )
-            elif metric_name == "count":
-                metric_parts.append(f"count={int(metric_value)}")
-            else:
-                metric_parts.append(f"{metric_name}={metric_value:.3g}")
-        return f"{label} ({', '.join(metric_parts)})"
-
     def _has_negative_mean(values: pd.Series) -> bool:
         clean_values = values.dropna()
         return not clean_values.empty and clean_values.mean() < 0
@@ -1090,7 +1112,7 @@ def datapoints(
                             (annotation["metric"], annotation_values)
                         )
             for metric_name, metric_values in rendered_metrics:
-                metric_value = _metric_value(metric_name, metric_values)
+                metric_value = _legend_metric_value(metric_name, metric_values)
                 if np.isfinite(metric_value) and metric_value <= 0:
                     raise ValueError(
                         f"Rendered summary metric '{metric_name}' must be positive "
@@ -1188,9 +1210,11 @@ def datapoints(
                     summary_subset_df = summary_panel_df.loc[
                         summary_panel_df[subset_obs_key] == subset_value
                     ]
-                    label = _metric_label(
+                    label = _legend_metric_label(
                         subset_label_by_value[subset_value],
                         summary_subset_df["value"],
+                        metric_names,
+                        normalized_metric_formats,
                     )
                     if "mean" in metric_names and _has_negative_mean(summary_subset_df["value"]):
                         negative_mean_legend_labels.add(label)
@@ -1235,9 +1259,11 @@ def datapoints(
                     summary_subset_df = summary_panel_df.loc[
                         summary_panel_df[subset_obs_key] == subset_value
                     ]
-                    subset_label = _metric_label(
+                    subset_label = _legend_metric_label(
                         subset_label_by_value[subset_value],
                         summary_subset_df["value"],
+                        metric_names,
+                        normalized_metric_formats,
                     )
                     if "mean" in metric_names and _has_negative_mean(summary_subset_df["value"]):
                         negative_mean_legend_labels.add(subset_label)
@@ -1275,7 +1301,12 @@ def datapoints(
                         zorder=2,
                     )
 
-        all_data_label = _metric_label("All data", summary_panel_df["value"])
+        all_data_label = _legend_metric_label(
+            "All data",
+            summary_panel_df["value"],
+            metric_names,
+            normalized_metric_formats,
+        )
         if legend and show_all_data_metrics and metric_names:
             if "mean" in metric_names and _has_negative_mean(summary_panel_df["value"]):
                 negative_mean_legend_labels.add(all_data_label)
@@ -1322,7 +1353,7 @@ def datapoints(
                 ]
                 if annotation_df.empty:
                     continue
-                annotation_value = _metric_value(
+                annotation_value = _legend_metric_value(
                     annotation["metric"],
                     annotation_df["value"],
                 )
@@ -1526,6 +1557,13 @@ def paired_datapoints(
     violinplot: bool = False,
     violin_width: float = 0.8,
     violin_alpha: float = 0.25,
+    legend_metrics: Sequence[
+        Literal["mean", "median", "count", "std", "sem"]
+    ] | None = None,
+    legend_metric_formats: Mapping[
+        Literal["mean", "median", "count", "std", "sem"],
+        str,
+    ] | None = None,
     ncols: int = 3,
     figsize: tuple[float, float] | None = None,
     sharey: bool = False,
@@ -1604,6 +1642,10 @@ def paired_datapoints(
         raise ValueError("'ncols' must be at least 1.")
     if legend_scope not in {"axis", "figure"}:
         raise ValueError("'legend_scope' must be one of 'axis' or 'figure'.")
+    metric_names, normalized_metric_formats = _normalize_legend_metrics(
+        legend_metrics,
+        legend_metric_formats,
+    )
     if paired_difference_mode not in {"difference", "log2fc"}:
         raise ValueError(
             "'paired_difference_mode' must be one of 'difference' or 'log2fc'."
@@ -2403,6 +2445,13 @@ def paired_datapoints(
             title_kwargs["y"] = title_y
         fig.suptitle(title, **title_kwargs)
 
+    summary_legend_enabled = legend and bool(metric_names)
+    subset_legend_entries_by_panel: dict[
+        str, list[tuple[Any, str]]
+    ] = {}
+    summary_legend_entries_by_panel: dict[
+        str, list[tuple[Any, str]]
+    ] = {}
     for plot_idx, panel_name in enumerate(plot_panel_names):
         ax = axes_flat[plot_idx]
         axes_by_panel[panel_name] = ax
@@ -2585,7 +2634,13 @@ def paired_datapoints(
                         color=color,
                         s=point_size,
                         alpha=point_alpha,
-                        label=str(subset_value) if add_legend_labels else None,
+                        label=(
+                            f"{active_subset_key}={subset_value}"
+                            if add_legend_labels and summary_legend_enabled
+                            else str(subset_value)
+                            if add_legend_labels
+                            else None
+                        ),
                         zorder=2,
                     )
                 missing_subset_df = scatter_df.loc[
@@ -2632,13 +2687,64 @@ def paired_datapoints(
                 resolved_difference_ylabel,
                 fontsize=axis_label_fontsize,
             )
-        if legend and legend_scope == "axis" and active_subset_key is not None and subset_hue_order:
-            legend_kwargs: dict[str, Any] = {"title": active_subset_key, "fontsize": legend_fontsize}
+
+        subset_handles, subset_labels = ax.get_legend_handles_labels()
+        subset_legend_entries = list(zip(subset_handles, subset_labels))
+        subset_legend_entries_by_panel[panel_name] = subset_legend_entries
+        summary_legend_entries: list[tuple[Any, str]] = []
+        if summary_legend_enabled:
+            summary_categories = [("ref", ref_label), ("target", target_label)]
+            if show_paired_difference:
+                summary_categories.append(
+                    ("difference", resolved_difference_label)
+                )
+            for side, x_label in summary_categories:
+                category_values = panel_df.loc[
+                    panel_df["side"] == side,
+                    "value",
+                ]
+                finite_values = category_values.loc[
+                    np.isfinite(category_values.to_numpy(dtype=float))
+                ]
+                if finite_values.empty:
+                    continue
+                summary_legend_entries.append(
+                    (
+                        _Line2D(
+                            [],
+                            [],
+                            color="0.35",
+                            marker="o",
+                            markerfacecolor="0.75",
+                            markeredgecolor="0.35",
+                            linestyle="none",
+                            markersize=math.sqrt(point_size),
+                            alpha=point_alpha,
+                        ),
+                        _legend_metric_label(
+                            f"Overall {x_label}",
+                            finite_values,
+                            metric_names,
+                            normalized_metric_formats,
+                        ),
+                    )
+                )
+        summary_legend_entries_by_panel[panel_name] = summary_legend_entries
+
+        axis_legend_entries = subset_legend_entries + summary_legend_entries
+        if legend and legend_scope == "axis" and axis_legend_entries:
+            legend_kwargs: dict[str, Any] = {"fontsize": legend_fontsize}
+            if active_subset_key is not None and not summary_legend_enabled:
+                legend_kwargs["title"] = active_subset_key
             if legend_loc is not None:
                 legend_kwargs["loc"] = legend_loc
             if legend_bbox_to_anchor is not None:
                 legend_kwargs["bbox_to_anchor"] = legend_bbox_to_anchor
-            ax.legend(**legend_kwargs)
+            ax.legend(
+                [handle for handle, _label in axis_legend_entries],
+                [label for _handle, label in axis_legend_entries],
+                **legend_kwargs,
+            )
 
     if difference_axes:
         if paired_difference_ylims_tuple is not None:
@@ -2663,23 +2769,53 @@ def paired_datapoints(
     for ax in axes_flat[len(plot_panel_names):]:
         ax.set_visible(False)
 
-    if legend and legend_scope == "figure" and active_subset_key is not None and subset_hue_order:
-        ordered_labels = [str(subset_value) for subset_value in subset_hue_order]
-        handles_by_label = {}
-        for ax in axes_by_panel.values():
-            handles, labels = ax.get_legend_handles_labels()
-            for handle, label in zip(handles, labels):
-                if label in ordered_labels and label not in handles_by_label:
-                    handles_by_label[label] = handle
-        legend_labels = [label for label in ordered_labels if label in handles_by_label]
-        legend_handles = [handles_by_label[label] for label in legend_labels]
-        if legend_handles:
-            legend_kwargs = {"title": active_subset_key, "fontsize": legend_fontsize}
+    if legend and legend_scope == "figure":
+        figure_legend_entries: list[tuple[Any, str]] = []
+        if active_subset_key is not None and subset_hue_order:
+            ordered_subset_labels = [
+                f"{active_subset_key}={subset_value}"
+                if summary_legend_enabled
+                else str(subset_value)
+                for subset_value in subset_hue_order
+            ]
+            subset_handles_by_label: dict[str, Any] = {}
+            for panel_name in plot_panel_names:
+                for handle, label in subset_legend_entries_by_panel.get(
+                    panel_name, []
+                ):
+                    if (
+                        label in ordered_subset_labels
+                        and label not in subset_handles_by_label
+                    ):
+                        subset_handles_by_label[label] = handle
+            figure_legend_entries.extend(
+                (subset_handles_by_label[label], label)
+                for label in ordered_subset_labels
+                if label in subset_handles_by_label
+            )
+        if summary_legend_enabled:
+            prefix_panel = len(plot_panel_names) > 1
+            for panel_name in plot_panel_names:
+                for handle, label in summary_legend_entries_by_panel.get(
+                    panel_name, []
+                ):
+                    figure_label = (
+                        f"{panel_name} — {label}" if prefix_panel else label
+                    )
+                    figure_legend_entries.append((handle, figure_label))
+        if figure_legend_entries:
+            legend_kwargs = {"fontsize": legend_fontsize}
+            if active_subset_key is not None and not summary_legend_enabled:
+                legend_kwargs["title"] = active_subset_key
             if legend_loc is not None:
                 legend_kwargs["loc"] = legend_loc
             if legend_bbox_to_anchor is not None:
                 legend_kwargs["bbox_to_anchor"] = legend_bbox_to_anchor
-            fig.legend(legend_handles, legend_labels, **legend_kwargs)
+            fig.legend(
+                [handle for handle, _label in figure_legend_entries],
+                [label for _handle, label in figure_legend_entries],
+                **legend_kwargs,
+            )
 
     plt.tight_layout()
     if title_axes_top is not None:

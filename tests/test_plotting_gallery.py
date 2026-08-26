@@ -63,7 +63,7 @@ class PlottingGalleryTests(unittest.TestCase):
         self.assertEqual(len(RENDERER_MANIFEST), 45)
         self.assertEqual(
             sum(len(spec.cases) for spec in RENDERER_MANIFEST),
-            61,
+            63,
         )
         for spec in RENDERER_MANIFEST:
             renderer = getattr(adtl.pl, spec.name)
@@ -356,6 +356,71 @@ class PlottingGalleryTests(unittest.TestCase):
         self.assertFalse(log2fc_kwargs["boxplot"])
         self.assertTrue(log2fc_kwargs["violinplot"])
 
+    def test_paired_summary_legend_gallery_cases_reuse_deterministic_fixture(self):
+        spec = next(
+            spec for spec in RENDERER_MANIFEST if spec.name == "paired_datapoints"
+        )
+        cases = {case.case_id: case for case in spec.cases}
+        inputs = gallery_module.GalleryInputs()
+        rendered_kwargs = {}
+
+        with mock.patch.object(
+            gallery_module.adtl,
+            "paired_datapoints",
+            return_value=plt.figure(),
+        ) as renderer:
+            for case_id in (
+                "difference_summary_legend",
+                "log2fc_summary_legend",
+            ):
+                gallery_module._invoke_case(
+                    spec,
+                    cases[case_id],
+                    inputs,
+                    Path("unused.png"),
+                )
+                rendered_kwargs[case_id] = renderer.call_args.kwargs
+
+        for case_id, kwargs in rendered_kwargs.items():
+            with self.subTest(case=case_id):
+                self.assertIs(kwargs["adata"], inputs.paired)
+                self.assertEqual(kwargs["var_names"], ["paired_decrease"])
+                self.assertTrue(kwargs["show_paired_difference"])
+                self.assertTrue(kwargs["legend"])
+                self.assertEqual(
+                    kwargs["legend_metrics"],
+                    ("count", "mean", "sem"),
+                )
+                self.assertEqual(
+                    kwargs["legend_metric_formats"],
+                    {
+                        "count": "n={value:d}",
+                        "mean": "mean={value:.2f}",
+                        "sem": "SEM={value:.2f}",
+                    },
+                )
+                self.assertEqual(kwargs["legend_scope"], "figure")
+                self.assertEqual(kwargs["ncols"], 1)
+                self.assertEqual(kwargs["subset_obs_key"], "cohort")
+                self.assertEqual(kwargs["subset_order"], ["cohort_a", "cohort_b"])
+                self.assertEqual(
+                    kwargs["subset_palette"],
+                    ["#4477AA", "#CC6677"],
+                )
+
+        difference_kwargs = rendered_kwargs["difference_summary_legend"]
+        self.assertEqual(difference_kwargs["paired_difference_mode"], "difference")
+        self.assertEqual(difference_kwargs["paired_difference_label"], "post - pre")
+        self.assertEqual(difference_kwargs["paired_difference_ylims"], (-3.0, 3.0))
+
+        log2fc_kwargs = rendered_kwargs["log2fc_summary_legend"]
+        self.assertEqual(log2fc_kwargs["paired_difference_mode"], "log2fc")
+        self.assertEqual(
+            log2fc_kwargs["paired_difference_label"],
+            "log2(post / pre)",
+        )
+        self.assertEqual(log2fc_kwargs["paired_difference_ylims"], (-0.45, 0.45))
+
     def test_committed_assets_exactly_match_manifest_cases(self):
         declared_assets = {
             case.asset
@@ -528,7 +593,9 @@ class PlottingGalleryTests(unittest.TestCase):
                     "geneset_enrichemnt_ol_ven_M_n_N_x__replacement_smoke.png",
                     "geneset_enrichment_venn__universe_filtered.png",
                     "paired_datapoints__difference_axis.png",
+                    "paired_datapoints__difference_summary_legend.png",
                     "paired_datapoints__log2fc_axis.png",
+                    "paired_datapoints__log2fc_summary_legend.png",
                     "paired_datapoints__paired_groups.png",
                     "paired_datapoints__precomputed_pair_values.png",
                     "paired_datapoints__slope_colored_lines.png",
@@ -624,7 +691,9 @@ class PlottingGalleryTests(unittest.TestCase):
                 for renderer_name, case_id in (
                     ("barh_column", "grouped_expression"),
                     ("paired_datapoints", "difference_axis"),
+                    ("paired_datapoints", "difference_summary_legend"),
                     ("paired_datapoints", "log2fc_axis"),
+                    ("paired_datapoints", "log2fc_summary_legend"),
                 ):
                     with self.subTest(renderer=renderer_name, case=case_id):
                         first = generate_gallery(

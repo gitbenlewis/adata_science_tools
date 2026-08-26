@@ -1386,6 +1386,60 @@ def _invoke_case(
             **derived_axis_options,
         )
 
+    if case_key in {
+        ("paired_datapoints", "difference_summary_legend"),
+        ("paired_datapoints", "log2fc_summary_legend"),
+    }:
+        if case_key[1] == "difference_summary_legend":
+            summary_options = {
+                "paired_difference_mode": "difference",
+                "paired_difference_label": "post - pre",
+                "paired_difference_ylabel": "Paired difference",
+                "paired_difference_ylims": (-3.0, 3.0),
+                "title": "Baseline, post, and raw-difference summaries",
+                "xlabel": "Condition and raw paired difference",
+            }
+        else:
+            summary_options = {
+                "paired_difference_mode": "log2fc",
+                "paired_difference_label": "log2(post / pre)",
+                "paired_difference_ylabel": "Paired log2FC (post / pre)",
+                "paired_difference_ylims": (-0.45, 0.45),
+                "title": "Baseline, post, and log2FC summaries",
+                "xlabel": "Condition and paired log2 fold change",
+            }
+        return renderer(
+            adata=inputs.paired,
+            var_names=["paired_decrease"],
+            groupby_key="condition",
+            groupby_key_ref_value="pre",
+            groupby_key_target_value="post",
+            pair_by_key="subject_id",
+            subset_obs_key="cohort",
+            subset_order=["cohort_a", "cohort_b"],
+            subset_palette=["#4477AA", "#CC6677"],
+            show_paired_difference=True,
+            legend=True,
+            legend_metrics=("count", "mean", "sem"),
+            legend_metric_formats={
+                "count": "n={value:d}",
+                "mean": "mean={value:.2f}",
+                "sem": "SEM={value:.2f}",
+            },
+            legend_scope="figure",
+            legend_loc="center left",
+            legend_bbox_to_anchor=(1.01, 0.5),
+            random_seed=2026,
+            point_size=42,
+            jitter_amount=0.08,
+            subplot_title_var_col="feature_label",
+            ylabel="Simulated abundance",
+            ncols=1,
+            figsize=(7.5, 4.5),
+            show=False,
+            **summary_options,
+        )
+
     if case_key == ("paired_datapoints", "precomputed_pair_values"):
         return renderer(
             adata=inputs.paired_source_summary,

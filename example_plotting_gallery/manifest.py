@@ -572,6 +572,28 @@ RENDERER_MANIFEST: tuple[RendererSpec, ...] = (
                 ),
             ),
             GalleryCase(
+                case_id="difference_summary_legend",
+                title="Baseline, post, and raw-difference summaries",
+                asset="paired_datapoints__difference_summary_legend.png",
+                features=(
+                    "baseline and post summary statistics",
+                    "raw paired-difference summary statistics",
+                    "subset hue entries before overall summaries",
+                    "custom-formatted count, mean, and SEM legend",
+                ),
+            ),
+            GalleryCase(
+                case_id="log2fc_summary_legend",
+                title="Baseline, post, and log2FC summaries",
+                asset="paired_datapoints__log2fc_summary_legend.png",
+                features=(
+                    "baseline and post summary statistics",
+                    "paired log2 fold-change summary statistics",
+                    "subset hue entries before overall summaries",
+                    "custom-formatted count, mean, and SEM legend",
+                ),
+            ),
+            GalleryCase(
                 case_id="precomputed_pair_values",
                 title="Paired values from preserved source matrices",
                 asset="paired_datapoints__precomputed_pair_values.png",

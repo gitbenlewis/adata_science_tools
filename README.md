@@ -61,9 +61,19 @@ modes.
 
 ![Paired datapoints with raw post-baseline differences](docs/assets/plotting_gallery/paired_datapoints__difference_axis.png)
 
+Opt-in legend metrics can summarize the finite post-filter values at baseline,
+post, and the raw pairwise `post - baseline` position.
+
+![Paired datapoints with raw post-baseline differences and per-position summary legend](docs/assets/plotting_gallery/paired_datapoints__difference_summary_legend.png)
+
 ### Post-over-baseline log2 fold change
 
 ![Paired datapoints with post-over-baseline log2 fold changes](docs/assets/plotting_gallery/paired_datapoints__log2fc_axis.png)
+
+The log2FC summary uses valid pairwise `log2(post / baseline)` values rather
+than a fold change calculated from the endpoint means.
+
+![Paired datapoints with post-over-baseline log2 fold changes and per-position summary legend](docs/assets/plotting_gallery/paired_datapoints__log2fc_summary_legend.png)
 
 
 # Some example plots from example_PMID_33969320

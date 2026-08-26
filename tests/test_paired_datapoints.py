@@ -2117,6 +2117,372 @@ class PairedDatapointsTests(unittest.TestCase):
             if fig is not None:
                 plt.close(fig)
 
+    def test_legend_metrics_default_off_preserves_existing_legend_behavior(self):
+        no_subset_fig = None
+        default_subset_fig = None
+        explicit_subset_fig = None
+        try:
+            no_subset_fig, no_subset_axes, _ = adtl.paired_datapoints(
+                adata=self.make_adata(),
+                var_names=["A_v1"],
+                pair_by_key="Subject_ID",
+                legend=True,
+                boxplot=False,
+                show=False,
+            )
+            default_subset_fig, default_subset_axes, _ = adtl.paired_datapoints(
+                adata=self.make_adata(),
+                var_names=["A_v1"],
+                pair_by_key="Subject_ID",
+                subset_obs_key="cohort",
+                subset_order=["B", "A"],
+                legend=True,
+                boxplot=False,
+                show=False,
+            )
+            explicit_subset_fig, explicit_subset_axes, _ = adtl.paired_datapoints(
+                adata=self.make_adata(),
+                var_names=["A_v1"],
+                pair_by_key="Subject_ID",
+                subset_obs_key="cohort",
+                subset_order=["B", "A"],
+                legend=True,
+                legend_metrics=None,
+                boxplot=False,
+                show=False,
+            )
+
+            self.assertIsNone(no_subset_axes["A_v1"].get_legend())
+            default_labels = [
+                text.get_text()
+                for text in default_subset_axes["A_v1"].get_legend().get_texts()
+            ]
+            explicit_labels = [
+                text.get_text()
+                for text in explicit_subset_axes["A_v1"].get_legend().get_texts()
+            ]
+            self.assertEqual(default_labels, ["B", "A"])
+            self.assertEqual(explicit_labels, default_labels)
+        finally:
+            for fig in (no_subset_fig, default_subset_fig, explicit_subset_fig):
+                if fig is not None:
+                    plt.close(fig)
+
+    def test_legend_metrics_summarize_raw_positions_with_ordered_formats(self):
+        metric_formats = {
+            "count": "n={value:d}",
+            "mean": "average={value:.1f}",
+            "std": "sd={value:.2f}",
+            "sem": "se={value:.2f}",
+        }
+        original_formats = metric_formats.copy()
+
+        fig, axes, _ = adtl.paired_datapoints(
+            adata=self.make_adata(),
+            var_names=["A_v1"],
+            pair_by_key="Subject_ID",
+            show_paired_difference=True,
+            legend=True,
+            legend_metrics=("count", "median", "mean", "std", "sem"),
+            legend_metric_formats=metric_formats,
+            jitter_amount=0,
+            boxplot=False,
+            show=False,
+        )
+        self.addCleanup(plt.close, fig)
+
+        self.assertEqual(
+            [text.get_text() for text in axes["A_v1"].get_legend().get_texts()],
+            [
+                "Overall Pre (n=3, median=3, average=3.0, sd=2.00, se=1.15)",
+                "Overall Post (n=3, median=4, average=4.0, sd=2.00, se=1.15)",
+                "Overall Post - Pre (n=3, median=1, average=1.0, sd=0.00, se=0.00)",
+            ],
+        )
+        difference_ax = next(
+            ax for ax in fig.axes if ax.get_label() == "A_v1__paired_difference"
+        )
+        self.assertIsNone(difference_ax.get_legend())
+        self.assertEqual(metric_formats, original_formats)
+
+    def test_legend_metrics_use_post_over_pre_log2fc_in_single_panel_figure_legend(self):
+        fig, axes, _ = adtl.paired_datapoints(
+            adata=self.make_adata(),
+            var_names=["A_v1"],
+            pair_by_key="Subject_ID",
+            show_paired_difference=True,
+            paired_difference_mode="log2fc",
+            legend=True,
+            legend_scope="figure",
+            legend_metrics=("mean",),
+            boxplot=False,
+            show=False,
+        )
+        self.addCleanup(plt.close, fig)
+
+        self.assertEqual(len(fig.legends), 1)
+        self.assertIsNone(axes["A_v1"].get_legend())
+        difference_ax = next(
+            ax for ax in fig.axes if ax.get_label() == "A_v1__paired_difference"
+        )
+        self.assertIsNone(difference_ax.get_legend())
+        self.assertEqual(
+            [text.get_text() for text in fig.legends[0].get_texts()],
+            [
+                "Overall Pre (mean=3)",
+                "Overall Post (mean=4)",
+                "Overall log2(Post / Pre) (mean=0.559)",
+            ],
+        )
+
+    def test_legend_metrics_keep_subset_rows_first_and_axis_summaries_panel_local(self):
+        fig, axes, _ = adtl.paired_datapoints(
+            adata=self.make_adata(),
+            var_names=["A_v1", "A_v2"],
+            pair_by_key="Subject_ID",
+            subset_obs_key="cohort",
+            subset_order=["B", "A"],
+            show_paired_difference=True,
+            legend=True,
+            legend_metrics=("mean",),
+            boxplot=False,
+            ncols=2,
+            show=False,
+        )
+        self.addCleanup(plt.close, fig)
+
+        expected_labels = {
+            "A_v1": [
+                "cohort=B",
+                "cohort=A",
+                "Overall Pre (mean=3)",
+                "Overall Post (mean=4)",
+                "Overall Post - Pre (mean=1)",
+            ],
+            "A_v2": [
+                "cohort=B",
+                "cohort=A",
+                "Overall Pre (mean=30)",
+                "Overall Post (mean=40)",
+                "Overall Post - Pre (mean=10)",
+            ],
+        }
+        for panel_name, ax in axes.items():
+            with self.subTest(panel=panel_name):
+                self.assertEqual(
+                    [text.get_text() for text in ax.get_legend().get_texts()],
+                    expected_labels[panel_name],
+                )
+                difference_ax = next(
+                    candidate
+                    for candidate in fig.axes
+                    if candidate.get_label() == f"{panel_name}__paired_difference"
+                )
+                self.assertIsNone(difference_ax.get_legend())
+
+    def test_legend_metrics_prefix_multi_panel_figure_summaries(self):
+        fig, axes, _ = adtl.paired_datapoints(
+            adata=self.make_adata(),
+            var_names=["A_v1", "A_v2"],
+            pair_by_key="Subject_ID",
+            subset_obs_key="cohort",
+            subset_order=["B", "A"],
+            show_paired_difference=True,
+            legend=True,
+            legend_scope="figure",
+            legend_metrics=("mean",),
+            boxplot=False,
+            ncols=2,
+            show=False,
+        )
+        self.addCleanup(plt.close, fig)
+
+        self.assertEqual(len(fig.legends), 1)
+        self.assertTrue(all(ax.get_legend() is None for ax in fig.axes))
+        self.assertEqual(
+            [text.get_text() for text in fig.legends[0].get_texts()],
+            [
+                "cohort=B",
+                "cohort=A",
+                "A_v1 — Overall Pre (mean=3)",
+                "A_v1 — Overall Post (mean=4)",
+                "A_v1 — Overall Post - Pre (mean=1)",
+                "A_v2 — Overall Pre (mean=30)",
+                "A_v2 — Overall Post (mean=40)",
+                "A_v2 — Overall Post - Pre (mean=10)",
+            ],
+        )
+
+    def test_legend_metrics_use_finite_values_after_final_row_filtering(self):
+        paired_df = pd.DataFrame(
+            {
+                "Pre_or_Post_obs_col": ["Pre", "Post"] * 4,
+                "Subject_ID": ["S1", "S1", "S2", "S2", "S3", "S3", "S4", "S4"],
+                "feature": [0.0, 2.0, 2.0, 2.0, 4.0, np.nan, np.inf, 8.0],
+            }
+        )
+
+        for dropna in (True, False):
+            with self.subTest(dropna=dropna):
+                fig = None
+                try:
+                    fig, axes, plot_df = adtl.paired_datapoints(
+                        df=paired_df,
+                        var_names=["feature"],
+                        pair_by_key="Subject_ID",
+                        show_paired_difference=True,
+                        connect_lines=False,
+                        legend=True,
+                        legend_metrics=("count", "mean"),
+                        dropna=dropna,
+                        dropzeros=True,
+                        jitter_amount=0,
+                        boxplot=False,
+                        show=False,
+                    )
+
+                    self.assertEqual(
+                        [
+                            text.get_text()
+                            for text in axes["feature"].get_legend().get_texts()
+                        ],
+                        [
+                            "Overall Pre (count=2, mean=3)",
+                            "Overall Post (count=3, mean=4)",
+                            "Overall Post - Pre (count=1, mean=2)",
+                        ],
+                    )
+                    self.assertTrue(np.isinf(plot_df["value"]).any())
+                    if dropna:
+                        self.assertFalse(plot_df["value"].isna().any())
+                    else:
+                        self.assertTrue(plot_df["value"].isna().any())
+                finally:
+                    if fig is not None:
+                        plt.close(fig)
+
+    def test_invalid_legend_metrics_and_formats_raise_before_drawing(self):
+        invalid_params = [
+            {"legend_metrics": ("variance",)},
+            {"legend_metric_formats": [("mean", "{value:.2f}")]},
+            {"legend_metric_formats": {"variance": "{value:.2f}"}},
+            {"legend_metric_formats": {"mean": 3}},
+            {"legend_metric_formats": {"mean": "{unknown}"}},
+            {"legend_metric_formats": {"mean": "{0}"}},
+            {"legend_metric_formats": {"mean": "{value.real}"}},
+            {"legend_metric_formats": {"count": "{metric:{value.real}}"}},
+            {"legend_metric_formats": {"mean": "{value:d}"}},
+            {"legend_metric_formats": {"mean": "{"}},
+        ]
+
+        for params in invalid_params:
+            with self.subTest(params=params):
+                existing_figures = plt.get_fignums()
+                with self.assertRaises(ValueError):
+                    adtl.paired_datapoints(
+                        adata=self.make_adata(),
+                        var_names=["A_v1"],
+                        pair_by_key="Subject_ID",
+                        legend=True,
+                        show=False,
+                        **params,
+                    )
+                self.assertEqual(plt.get_fignums(), existing_figures)
+
+    def test_legend_metrics_change_only_legend_not_plot_data_or_data_artists(self):
+        adata = self.make_adata()
+        original_obs = adata.obs.copy(deep=True)
+        original_x = np.array(adata.X, copy=True)
+        plot_kwargs = {
+            "adata": adata,
+            "var_names": ["A_v1"],
+            "pair_by_key": "Subject_ID",
+            "show_paired_difference": True,
+            "legend": True,
+            "jitter_amount": 0.1,
+            "random_seed": 19,
+            "boxplot": False,
+            "show": False,
+        }
+
+        baseline_fig, baseline_axes, baseline_df = adtl.paired_datapoints(
+            legend_metrics=None,
+            **plot_kwargs,
+        )
+        metrics_fig, metrics_axes, metrics_df = adtl.paired_datapoints(
+            legend_metrics=("mean", "count"),
+            legend_metric_formats={"mean": "average={value:.2f}"},
+            **plot_kwargs,
+        )
+        self.addCleanup(plt.close, baseline_fig)
+        self.addCleanup(plt.close, metrics_fig)
+
+        pd.testing.assert_frame_equal(metrics_df, baseline_df)
+        pd.testing.assert_frame_equal(adata.obs, original_obs)
+        np.testing.assert_array_equal(adata.X, original_x)
+
+        baseline_primary = baseline_axes["A_v1"]
+        metrics_primary = metrics_axes["A_v1"]
+        self.assertEqual(baseline_primary.get_xlim(), metrics_primary.get_xlim())
+        self.assertEqual(baseline_primary.get_ylim(), metrics_primary.get_ylim())
+        self.assertEqual(len(baseline_primary.lines), len(metrics_primary.lines))
+        for baseline_line, metrics_line in zip(
+            baseline_primary.lines,
+            metrics_primary.lines,
+        ):
+            np.testing.assert_allclose(
+                baseline_line.get_xdata(),
+                metrics_line.get_xdata(),
+            )
+            np.testing.assert_allclose(
+                baseline_line.get_ydata(),
+                metrics_line.get_ydata(),
+            )
+            self.assertEqual(
+                to_rgba(baseline_line.get_color()),
+                to_rgba(metrics_line.get_color()),
+            )
+
+        baseline_primary_offsets = [
+            collection.get_offsets()
+            for collection in baseline_primary.collections
+            if len(collection.get_offsets())
+        ]
+        metrics_primary_offsets = [
+            collection.get_offsets()
+            for collection in metrics_primary.collections
+            if len(collection.get_offsets())
+        ]
+        self.assertEqual(len(baseline_primary_offsets), len(metrics_primary_offsets))
+        for baseline_offsets, metrics_offsets in zip(
+            baseline_primary_offsets,
+            metrics_primary_offsets,
+        ):
+            np.testing.assert_allclose(baseline_offsets, metrics_offsets)
+
+        baseline_difference_ax = next(
+            ax
+            for ax in baseline_fig.axes
+            if ax.get_label() == "A_v1__paired_difference"
+        )
+        metrics_difference_ax = next(
+            ax
+            for ax in metrics_fig.axes
+            if ax.get_label() == "A_v1__paired_difference"
+        )
+        self.assertEqual(
+            baseline_difference_ax.get_ylim(),
+            metrics_difference_ax.get_ylim(),
+        )
+        np.testing.assert_allclose(
+            baseline_difference_ax.collections[0].get_offsets(),
+            metrics_difference_ax.collections[0].get_offsets(),
+        )
+        np.testing.assert_allclose(
+            baseline_difference_ax.collections[0].get_facecolors(),
+            metrics_difference_ax.collections[0].get_facecolors(),
+        )
+
     def test_title_y_positions_and_xlabel_override(self):
         fig = None
         try:
