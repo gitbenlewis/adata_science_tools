@@ -11,6 +11,7 @@ import pandas as pd
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.collections import PolyCollection
 from matplotlib.colors import to_rgba
 
 
@@ -586,6 +587,8 @@ class PairedDatapointsTests(unittest.TestCase):
             negative_slope_color="#112233",
             positive_slope_color="#445566",
             flat_slope_color="#778899",
+            show_paired_difference=True,
+            jitter_amount=0,
             boxplot=False,
             show=False,
         )
@@ -598,6 +601,17 @@ class PairedDatapointsTests(unittest.TestCase):
         self.assertCountEqual(
             [to_rgba(line.get_color()) for line in axes["feature"].lines],
             [to_rgba("#778899"), to_rgba("#445566"), to_rgba("#112233")],
+        )
+        difference_ax = next(
+            ax for ax in fig.axes if ax.get_label() == "feature__paired_difference"
+        )
+        np.testing.assert_allclose(
+            difference_ax.collections[0].get_facecolors(),
+            [
+                to_rgba("#445566", 0.85),
+                to_rgba("#445566", 0.85),
+                to_rgba("#112233", 0.85),
+            ],
         )
 
     def test_uniform_line_color_remains_default_and_connect_lines_false_draws_no_lines(self):
@@ -802,6 +816,14 @@ class PairedDatapointsTests(unittest.TestCase):
         self.assertAlmostEqual(lower, -upper)
         self.assertLessEqual(lower, -2.0)
         self.assertGreaterEqual(upper, 2.0)
+        np.testing.assert_allclose(
+            difference_ax.collections[0].get_facecolors(),
+            [
+                to_rgba("green", 0.85),
+                to_rgba("red", 0.85),
+                to_rgba("gray", 0.85),
+            ],
+        )
 
     def test_paired_difference_mode_rejects_unknown_value(self):
         with self.assertRaisesRegex(
@@ -958,6 +980,7 @@ class PairedDatapointsTests(unittest.TestCase):
             jitter_amount=0,
             point_size=37,
             point_alpha=0.7,
+            boxplot=False,
             show=False,
         )
         self.addCleanup(plt.close, fig)
@@ -1001,12 +1024,14 @@ class PairedDatapointsTests(unittest.TestCase):
                 for collection in difference_ax.collections
             )
         )
-        self.assertTrue(
-            all(
-                to_rgba(collection.get_facecolor()[0])
-                == to_rgba(primary_ax.collections[0].get_facecolor()[0])
-                for collection in difference_ax.collections
-            )
+        self.assertEqual(len(difference_ax.collections), 1)
+        np.testing.assert_allclose(
+            difference_ax.collections[0].get_facecolors(),
+            [
+                to_rgba("green", 0.7),
+                to_rgba("red", 0.7),
+                to_rgba("gray", 0.7),
+            ],
         )
 
         connector_lines = [
@@ -1029,6 +1054,200 @@ class PairedDatapointsTests(unittest.TestCase):
         self.assertTrue(
             all(collection.get_clip_on() for collection in difference_ax.collections)
         )
+
+    def test_paired_difference_sign_colors_override_only_derived_subset_hues(self):
+        paired_df = pd.DataFrame(
+            {
+                "Pre_or_Post_obs_col": ["Pre", "Post"] * 3,
+                "Subject_ID": ["S1", "S1", "S2", "S2", "S3", "S3"],
+                "cohort": ["A", "A", "B", "B", "C", "C"],
+                "feature": [1.0, 4.0, 5.0, 2.0, -2.0, -2.0],
+            }
+        )
+
+        fig, axes, _ = adtl.paired_datapoints(
+            df=paired_df,
+            var_names=["feature"],
+            pair_by_key="Subject_ID",
+            subset_obs_key="cohort",
+            subset_order=["A", "B", "C"],
+            subset_palette=["#112233", "#445566", "#778899"],
+            show_paired_difference=True,
+            connect_lines=False,
+            jitter_amount=0,
+            point_alpha=1,
+            boxplot=False,
+            legend=True,
+            show=False,
+        )
+        self.addCleanup(plt.close, fig)
+
+        primary_ax = axes["feature"]
+        difference_ax = next(
+            ax for ax in fig.axes if ax.get_label() == "feature__paired_difference"
+        )
+        self.assertEqual(
+            [to_rgba(collection.get_facecolor()[0]) for collection in primary_ax.collections],
+            [to_rgba("#112233"), to_rgba("#445566"), to_rgba("#778899")],
+        )
+        self.assertEqual(len(difference_ax.collections), 1)
+        np.testing.assert_allclose(
+            difference_ax.collections[0].get_facecolors(),
+            [to_rgba("green"), to_rgba("red"), to_rgba("gray")],
+        )
+        self.assertEqual(
+            [text.get_text() for text in primary_ax.get_legend().get_texts()],
+            ["A", "B", "C"],
+        )
+        self.assertIsNone(difference_ax.get_legend())
+
+    def test_paired_difference_boxplot_covers_all_positions_and_can_be_disabled(self):
+        paired_df = pd.DataFrame(
+            {
+                "Pre_or_Post_obs_col": ["Pre", "Post"] * 3,
+                "Subject_ID": ["S1", "S1", "S2", "S2", "S3", "S3"],
+                "feature": [1.0, 4.0, 5.0, 2.0, -2.0, -2.0],
+            }
+        )
+        plot_kwargs = {
+            "df": paired_df,
+            "var_names": ["feature"],
+            "pair_by_key": "Subject_ID",
+            "show_paired_difference": True,
+            "connect_lines": False,
+            "jitter_amount": 0,
+            "show": False,
+        }
+
+        box_fig, box_axes, _ = adtl.paired_datapoints(**plot_kwargs)
+        disabled_fig, disabled_axes, _ = adtl.paired_datapoints(
+            boxplot=False,
+            **plot_kwargs,
+        )
+        self.addCleanup(plt.close, box_fig)
+        self.addCleanup(plt.close, disabled_fig)
+
+        box_difference_ax = next(
+            ax
+            for ax in box_fig.axes
+            if ax.get_label() == "feature__paired_difference"
+        )
+        primary_box_centers = sorted(
+            (float(np.min(line.get_xdata())) + float(np.max(line.get_xdata()))) / 2
+            for line in box_axes["feature"].lines
+            if len(line.get_xdata()) == 5
+        )
+        difference_box_centers = [
+            (float(np.min(line.get_xdata())) + float(np.max(line.get_xdata()))) / 2
+            for line in box_difference_ax.lines
+            if len(line.get_xdata()) == 5
+        ]
+        np.testing.assert_allclose(primary_box_centers, [1.0, 2.0])
+        np.testing.assert_allclose(difference_box_centers, [3.0])
+
+        disabled_difference_ax = next(
+            ax
+            for ax in disabled_fig.axes
+            if ax.get_label() == "feature__paired_difference"
+        )
+        self.assertEqual(len(disabled_axes["feature"].lines), 0)
+        self.assertEqual(len(disabled_difference_ax.lines), 0)
+
+    def test_paired_difference_violin_overlay_supports_violin_only_and_box_composition(self):
+        paired_df = pd.DataFrame(
+            {
+                "Pre_or_Post_obs_col": ["Pre", "Post"] * 3,
+                "Subject_ID": ["S1", "S1", "S2", "S2", "S3", "S3"],
+                "feature": [1.0, 4.0, 5.0, 2.0, -2.0, -2.0],
+            }
+        )
+        plot_kwargs = {
+            "df": paired_df,
+            "var_names": ["feature"],
+            "pair_by_key": "Subject_ID",
+            "show_paired_difference": True,
+            "connect_lines": False,
+            "jitter_amount": 0,
+            "violinplot": True,
+            "violin_width": 0.6,
+            "violin_alpha": 0.4,
+            "show": False,
+        }
+
+        violin_fig, violin_axes, _ = adtl.paired_datapoints(
+            boxplot=False,
+            **plot_kwargs,
+        )
+        combined_fig, combined_axes, _ = adtl.paired_datapoints(**plot_kwargs)
+        self.addCleanup(plt.close, violin_fig)
+        self.addCleanup(plt.close, combined_fig)
+
+        violin_difference_ax = next(
+            ax
+            for ax in violin_fig.axes
+            if ax.get_label() == "feature__paired_difference"
+        )
+        primary_bodies = [
+            collection
+            for collection in violin_axes["feature"].collections
+            if isinstance(collection, PolyCollection)
+        ]
+        difference_bodies = [
+            collection
+            for collection in violin_difference_ax.collections
+            if isinstance(collection, PolyCollection)
+        ]
+        self.assertEqual(len(primary_bodies), 2)
+        self.assertEqual(len(difference_bodies), 1)
+        self.assertTrue(
+            all(body.get_alpha() == 0.4 for body in primary_bodies + difference_bodies)
+        )
+        np.testing.assert_allclose(
+            sorted(
+                (
+                    float(body.get_paths()[0].vertices[:, 0].min())
+                    + float(body.get_paths()[0].vertices[:, 0].max())
+                )
+                / 2
+                for body in primary_bodies
+            ),
+            [1.0, 2.0],
+        )
+        np.testing.assert_allclose(
+            [
+                float(np.ptp(body.get_paths()[0].vertices[:, 0]))
+                for body in primary_bodies + difference_bodies
+            ],
+            [0.6, 0.6, 0.6],
+        )
+        self.assertAlmostEqual(
+            (
+                float(difference_bodies[0].get_paths()[0].vertices[:, 0].min())
+                + float(difference_bodies[0].get_paths()[0].vertices[:, 0].max())
+            )
+            / 2,
+            3.0,
+        )
+        self.assertEqual(len(violin_axes["feature"].lines), 0)
+        self.assertEqual(len(violin_difference_ax.lines), 0)
+        self.assertAlmostEqual(
+            violin_difference_ax.get_ylim()[0],
+            -violin_difference_ax.get_ylim()[1],
+        )
+
+        combined_difference_ax = next(
+            ax
+            for ax in combined_fig.axes
+            if ax.get_label() == "feature__paired_difference"
+        )
+        self.assertTrue(
+            any(
+                isinstance(collection, PolyCollection)
+                for collection in combined_axes["feature"].collections
+            )
+        )
+        self.assertGreater(len(combined_axes["feature"].lines), 0)
+        self.assertGreater(len(combined_difference_ax.lines), 0)
 
     def test_paired_difference_does_not_use_delimited_line_ids_as_keys(self):
         paired_df = pd.DataFrame(
@@ -1179,6 +1398,7 @@ class PairedDatapointsTests(unittest.TestCase):
             subset_order=["B", "A"],
             subset_palette=["#112233", "#445566"],
             show_paired_difference=True,
+            paired_difference_color_by_sign=False,
             connect_lines=False,
             boxplot=False,
             jitter_amount=0,
@@ -1507,6 +1727,7 @@ class PairedDatapointsTests(unittest.TestCase):
             subset_order=["A", "B"],
             palette=None,
             show_paired_difference=True,
+            paired_difference_color_by_sign=False,
             dropzeros=True,
             jitter_amount=0,
             boxplot=False,

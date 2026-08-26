@@ -1333,6 +1333,7 @@ def _invoke_case(
                 "paired_difference_label": "post - pre",
                 "paired_difference_ylabel": "Paired difference",
                 "paired_difference_ylims": (-3.0, 3.0),
+                "boxplot": True,
                 "title": "Varied paired slopes and signed differences",
                 "xlabel": "Condition and derived change",
             }
@@ -1342,6 +1343,8 @@ def _invoke_case(
                 "paired_difference_label": "log2(post / pre)",
                 "paired_difference_ylabel": "Paired log2FC (post / pre)",
                 "paired_difference_ylims": (-0.4, 0.4),
+                "boxplot": False,
+                "violinplot": True,
                 "title": "Varied paired slopes and log2 fold changes",
                 "xlabel": "Condition and derived log2 fold change",
             }
@@ -1372,7 +1375,6 @@ def _invoke_case(
             random_seed=2026,
             point_size=26,
             point_alpha=0.7,
-            boxplot=False,
             legend=True,
             legend_scope="figure",
             legend_loc="center left",

@@ -1509,6 +1509,7 @@ def paired_datapoints(
     flat_slope_color: Any = "gray",
     show_paired_difference: bool = False,
     paired_difference_mode: Literal["difference", "log2fc"] = "difference",
+    paired_difference_color_by_sign: bool = True,
     paired_difference_label: str | None = None,
     paired_difference_ylabel: str | None = None,
     paired_difference_ylims: Sequence[float] | None = None,
@@ -1522,6 +1523,9 @@ def paired_datapoints(
     boxplot: bool = True,
     boxplot_width: float = 0.55,
     boxplot_showfliers: bool = False,
+    violinplot: bool = False,
+    violin_width: float = 0.8,
+    violin_alpha: float = 0.25,
     ncols: int = 3,
     figsize: tuple[float, float] | None = None,
     sharey: bool = False,
@@ -2426,24 +2430,56 @@ def paired_datapoints(
             elif sharey and paired_difference_sharey:
                 shared_difference_ax = difference_ax
 
-        if boxplot:
-            box_values = [
-                endpoint_panel_df.loc[
-                    endpoint_panel_df["x_order"] == x_order, "value"
+        distribution_targets = []
+        if boxplot or violinplot:
+            distribution_targets.append((ax, endpoint_panel_df, (1, 2)))
+        if difference_ax is not None and (boxplot or violinplot):
+            distribution_targets.append(
+                (difference_ax, difference_panel_df, (3,))
+            )
+        for distribution_ax, distribution_df, x_orders in distribution_targets:
+            grouped_values = [
+                distribution_df.loc[
+                    distribution_df["x_order"] == x_order, "value"
                 ].dropna().to_numpy()
-                for x_order in (1, 2)
+                for x_order in x_orders
             ]
-            if any(len(values) for values in box_values):
-                boxplot_artists = ax.boxplot(
-                    box_values,
-                    positions=[1, 2],
+            nonempty_groups = [
+                (x_order, values)
+                for x_order, values in zip(x_orders, grouped_values)
+                if len(values)
+            ]
+            nonempty_positions = [
+                x_order for x_order, _values in nonempty_groups
+            ]
+            nonempty_values = [values for _x_order, values in nonempty_groups]
+
+            if violinplot and nonempty_values:
+                violin_parts = distribution_ax.violinplot(
+                    nonempty_values,
+                    positions=nonempty_positions,
+                    widths=violin_width,
+                    showmeans=False,
+                    showmedians=False,
+                    showextrema=False,
+                )
+                for body in violin_parts["bodies"]:
+                    body.set_facecolor("0.75")
+                    body.set_edgecolor("0.45")
+                    body.set_alpha(violin_alpha)
+                    body.set_zorder(0)
+
+            if boxplot and nonempty_values:
+                boxplot_artists = distribution_ax.boxplot(
+                    nonempty_values,
+                    positions=nonempty_positions,
                     patch_artist=False,
                     showfliers=boxplot_showfliers,
                     widths=boxplot_width,
                 )
                 for element in ("boxes", "medians", "whiskers"):
                     for item in boxplot_artists[element]:
-                        item.set(color="black", linewidth=0.75)
+                        item.set(color="black", linewidth=0.75, zorder=1)
                 for cap in boxplot_artists["caps"]:
                     cap.set_visible(False)
 
@@ -2494,7 +2530,27 @@ def paired_datapoints(
         for scatter_ax, scatter_df, add_legend_labels in scatter_targets:
             if scatter_df.empty:
                 continue
-            if active_subset_key is None:
+            if not add_legend_labels and paired_difference_color_by_sign:
+                difference_values = scatter_df["value"].to_numpy(dtype=float)
+                point_colors = np.tile(
+                    _mcolors.to_rgba(flat_slope_color),
+                    (len(scatter_df), 1),
+                )
+                point_colors[difference_values < 0] = _mcolors.to_rgba(
+                    negative_slope_color
+                )
+                point_colors[difference_values > 0] = _mcolors.to_rgba(
+                    positive_slope_color
+                )
+                scatter_ax.scatter(
+                    scatter_df["_jittered_x"],
+                    scatter_df["value"],
+                    color=point_colors,
+                    s=point_size,
+                    alpha=point_alpha,
+                    zorder=2,
+                )
+            elif active_subset_key is None:
                 scatter_ax.scatter(
                     scatter_df["_jittered_x"],
                     scatter_df["value"],

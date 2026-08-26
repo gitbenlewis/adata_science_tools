@@ -70,6 +70,7 @@ def paired_datapoints(
     flat_slope_color: Any = "gray",
     show_paired_difference: bool = False,
     paired_difference_mode: Literal["difference", "log2fc"] = "difference",
+    paired_difference_color_by_sign: bool = True,
     paired_difference_label: str | None = None,
     paired_difference_ylabel: str | None = None,
     paired_difference_ylims: Sequence[float] | None = None,
@@ -83,6 +84,9 @@ def paired_datapoints(
     boxplot: bool = True,
     boxplot_width: float = 0.55,
     boxplot_showfliers: bool = False,
+    violinplot: bool = False,
+    violin_width: float = 0.8,
+    violin_alpha: float = 0.25,
     ncols: int = 3,
     figsize: tuple[float, float] | None = None,
     sharey: bool = False,
@@ -346,12 +350,24 @@ symmetric around zero. Explicit `paired_difference_ylims` takes precedence over
 either automatic scaling mode. This option is independent of `sharey`, and
 existing `ylims` continues to control only the primary reference/target axis.
 
-Derived-change dots reuse the same point and subset-hue styling as the reference
-and target dots. Slope colors remain connector-only: line color represents the
-signed normalized relative change, while the third dot represents the selected
-signed paired change. Derived-change dots are not included in the endpoint
-boxplots and are not connected to the target point because their y coordinates
-belong to the right axis.
+By default, derived-change dots are colored by the exact sign of the displayed
+value: `negative_slope_color` for values below zero, `positive_slope_color` for
+values above zero, and `flat_slope_color` for exact zero. With the default
+colors, these are red, green, and gray. This classification is independent of
+`slope_color_threshold`, which applies only to connector lines; a small nonzero
+change can therefore have an approximately-flat gray connector and a red or
+green derived dot. Set `paired_difference_color_by_sign=False` to restore the
+ordinary point or subset-hue styling for the third position. Endpoint colors
+and subset legends are unchanged, and no separate sign legend is added.
+
+Distribution overlays use the axis that owns each value. Boxplots are enabled
+by default at the reference, target, and derived positions. Set
+`violinplot=True` to add a violin behind each box and its points, or combine
+`boxplot=False` with `violinplot=True` for violin-only output. The derived
+boxplot or violin is drawn at x=3 against the secondary y-axis and uses the same
+filtered difference or log2FC values as the dots. These overlays are not
+connected to the target point because their y coordinates belong to the right
+axis.
 
 ```python
 fig, axes, plot_df = adtl.paired_datapoints(
@@ -363,13 +379,14 @@ fig, axes, plot_df = adtl.paired_datapoints(
     paired_difference_label="Post - Pre",
     paired_difference_ylabel="Paired IL6 difference",
     line_color_by_slope=True,
+    boxplot=True,
     show=False,
 )
 ```
 
 <img src="assets/plotting_gallery/paired_datapoints__difference_axis.png" alt="Varied paired slopes with a combined-direction panel and signed secondary difference axes" width="960">
 
-*`difference_axis` — Varied positive, negative, and approximately-flat slopes are shown separately and together, with raw signed paired differences on zero-centered symmetric secondary axes. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+*`difference_axis` — Varied positive, negative, and approximately-flat slopes are shown separately and together, with sign-colored raw differences and boxplots on zero-centered symmetric secondary axes. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
 
 Use log2FC mode when proportional paired changes are more meaningful than raw
 measurement-unit differences:
@@ -383,13 +400,15 @@ fig, axes, plot_df = adtl.paired_datapoints(
     show_paired_difference=True,
     paired_difference_mode="log2fc",
     line_color_by_slope=True,
+    boxplot=False,
+    violinplot=True,
     show=False,
 )
 ```
 
 <img src="assets/plotting_gallery/paired_datapoints__log2fc_axis.png" alt="Varied paired slopes with a combined-direction panel and post-over-baseline log2 fold changes" width="960">
 
-*`log2fc_axis` — The same varied positive, negative, and approximately-flat slopes are shown separately and together, with signed `log2(post / baseline)` values on zero-centered symmetric secondary axes. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
+*`log2fc_axis` — The same varied positive, negative, and approximately-flat slopes are shown separately and together, with sign-colored `log2(post / baseline)` values and violin overlays on zero-centered symmetric secondary axes. [Data and analysis provenance](plotting_gallery.md#data-and-analysis-provenance).*
 
 ## Bounds
 

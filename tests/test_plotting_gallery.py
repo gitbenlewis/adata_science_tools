@@ -305,6 +305,7 @@ class PlottingGalleryTests(unittest.TestCase):
         self.assertEqual(kwargs["paired_difference_label"], "post - pre")
         self.assertEqual(kwargs["paired_difference_ylabel"], "Paired difference")
         self.assertEqual(kwargs["paired_difference_ylims"], (-3.0, 3.0))
+        self.assertTrue(kwargs["boxplot"])
 
     def test_log2fc_gallery_reuses_varied_difference_fixture(self):
         spec = next(
@@ -352,6 +353,8 @@ class PlottingGalleryTests(unittest.TestCase):
             "Paired log2FC (post / pre)",
         )
         self.assertEqual(log2fc_kwargs["paired_difference_ylims"], (-0.4, 0.4))
+        self.assertFalse(log2fc_kwargs["boxplot"])
+        self.assertTrue(log2fc_kwargs["violinplot"])
 
     def test_committed_assets_exactly_match_manifest_cases(self):
         declared_assets = {
