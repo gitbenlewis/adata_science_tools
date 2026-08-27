@@ -2675,10 +2675,11 @@ def paired_datapoints(
                         color=color,
                         s=point_size,
                         alpha=point_alpha,
+                        # str() keeps NumPy scalar hue labels compact.
                         label=(
                             f"{subset_legend_prefix}{active_subset_key}={subset_value}"
                             if add_subset_legend_labels and summary_legend_enabled
-                            else f"{subset_legend_prefix}{subset_value}"
+                            else subset_legend_prefix + str(subset_value)
                             if add_subset_legend_labels
                             else None
                         ),
@@ -2842,7 +2843,7 @@ def paired_datapoints(
             ordered_subset_labels = [
                 f"{subset_legend_prefix}{active_subset_key}={subset_value}"
                 if summary_legend_enabled
-                else f"{subset_legend_prefix}{subset_value}"
+                else subset_legend_prefix + str(subset_value)
                 for subset_value in subset_hue_order
             ]
             subset_handles_by_label: dict[str, Any] = {}

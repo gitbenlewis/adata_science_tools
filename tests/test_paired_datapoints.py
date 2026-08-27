@@ -2118,6 +2118,53 @@ class PairedDatapointsTests(unittest.TestCase):
             if fig is not None:
                 plt.close(fig)
 
+    def test_float32_subset_legend_labels_preserve_string_formatting(self):
+        adata = self.make_adata()
+        adata.obs["dose"] = np.array(
+            [0.1, 0.1, 0.2, 0.2, 0.1, 0.1],
+            dtype=np.float32,
+        )
+        for legend_scope in ("axis", "figure"):
+            for color_kwargs, prefix in (
+                ({}, ""),
+                ({"point_color_by_side": False}, ""),
+                (
+                    {
+                        "point_color_by_side": True,
+                        "show_paired_difference": True,
+                        "paired_difference_color_by_sign": False,
+                    },
+                    "Post - Pre: ",
+                ),
+            ):
+                with self.subTest(scope=legend_scope, colors=color_kwargs):
+                    fig, axes, plot_df = adtl.paired_datapoints(
+                        adata=adata,
+                        var_names=["A_v1", "A_v2"],
+                        pair_by_key="Subject_ID",
+                        subset_obs_key="dose",
+                        legend=True,
+                        legend_scope=legend_scope,
+                        boxplot=False,
+                        ncols=2,
+                        show=False,
+                        **color_kwargs,
+                    )
+                    self.addCleanup(plt.close, fig)
+                    self.assertEqual(plot_df["dose"].dtype, np.dtype("float32"))
+                    legends = (
+                        [ax.get_legend() for ax in axes.values()]
+                        if legend_scope == "axis"
+                        else fig.legends
+                    )
+                    self.assertEqual(len(legends), 2 if legend_scope == "axis" else 1)
+                    for legend in legends:
+                        self.assertIsNotNone(legend)
+                        self.assertEqual(
+                            [text.get_text() for text in legend.get_texts()],
+                            [prefix + "0.1", prefix + "0.2"],
+                        )
+
     def test_side_colors_are_opt_in_and_preserve_plot_data_and_artists(self):
         adata = self.make_adata()
         original_obs = adata.obs.copy(deep=True)
