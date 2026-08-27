@@ -580,6 +580,7 @@ RENDERER_MANIFEST: tuple[RendererSpec, ...] = (
                     "raw paired-difference summary statistics",
                     "subset hue entries before overall summaries",
                     "custom-formatted count, mean, and SEM legend",
+                    "red bold highlighting for negative mean summaries",
                 ),
             ),
             GalleryCase(
@@ -591,6 +592,7 @@ RENDERER_MANIFEST: tuple[RendererSpec, ...] = (
                     "paired log2 fold-change summary statistics",
                     "subset hue entries before overall summaries",
                     "custom-formatted count, mean, and SEM legend",
+                    "red bold highlighting for negative mean summaries",
                 ),
             ),
             GalleryCase(

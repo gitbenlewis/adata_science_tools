@@ -1567,6 +1567,7 @@ def paired_datapoints(
     ] | None = None,
     legend_summary_prefix: str | None = "Overall",
     legend_metric_separator: str = ", ",
+    highlight_negative_summary_legend: bool = True,
     ncols: int = 3,
     figsize: tuple[float, float] | None = None,
     wspace: float | None = None,
@@ -2459,8 +2460,11 @@ def paired_datapoints(
         str, list[tuple[Any, str]]
     ] = {}
     summary_legend_entries_by_panel: dict[
-        str, list[tuple[Any, str]]
+        str, list[tuple[Any, str, bool]]
     ] = {}
+    legend_entries_to_style: list[
+        tuple[Any, list[tuple[Any, str, bool]]]
+    ] = []
     for plot_idx, panel_name in enumerate(plot_panel_names):
         ax = axes_flat[plot_idx]
         axes_by_panel[panel_name] = ax
@@ -2702,7 +2706,7 @@ def paired_datapoints(
         subset_handles, subset_labels = ax.get_legend_handles_labels()
         subset_legend_entries = list(zip(subset_handles, subset_labels))
         subset_legend_entries_by_panel[panel_name] = subset_legend_entries
-        summary_legend_entries: list[tuple[Any, str]] = []
+        summary_legend_entries: list[tuple[Any, str, bool]] = []
         if summary_legend_enabled:
             summary_categories = [("ref", ref_label), ("target", target_label)]
             if show_paired_difference:
@@ -2743,11 +2747,18 @@ def paired_datapoints(
                             normalized_metric_formats,
                             metric_separator=legend_metric_separator,
                         ),
+                        any(
+                            _legend_metric_value(metric_name, finite_values) < 0
+                            for metric_name in metric_names
+                            if metric_name in {"mean", "median"}
+                        ),
                     )
                 )
         summary_legend_entries_by_panel[panel_name] = summary_legend_entries
 
-        axis_legend_entries = subset_legend_entries + summary_legend_entries
+        axis_legend_entries = [
+            (handle, label, False) for handle, label in subset_legend_entries
+        ] + summary_legend_entries
         if legend and legend_scope == "axis" and axis_legend_entries:
             legend_kwargs: dict[str, Any] = {"fontsize": legend_fontsize}
             if active_subset_key is not None and not summary_legend_enabled:
@@ -2756,11 +2767,12 @@ def paired_datapoints(
                 legend_kwargs["loc"] = legend_loc
             if legend_bbox_to_anchor is not None:
                 legend_kwargs["bbox_to_anchor"] = legend_bbox_to_anchor
-            ax.legend(
-                [handle for handle, _label in axis_legend_entries],
-                [label for _handle, label in axis_legend_entries],
+            legend_obj = ax.legend(
+                [handle for handle, _label, _is_negative in axis_legend_entries],
+                [label for _handle, label, _is_negative in axis_legend_entries],
                 **legend_kwargs,
             )
+            legend_entries_to_style.append((legend_obj, axis_legend_entries))
 
     if difference_axes:
         if paired_difference_ylims_tuple is not None:
@@ -2786,7 +2798,7 @@ def paired_datapoints(
         ax.set_visible(False)
 
     if legend and legend_scope == "figure":
-        figure_legend_entries: list[tuple[Any, str]] = []
+        figure_legend_entries: list[tuple[Any, str, bool]] = []
         if active_subset_key is not None and subset_hue_order:
             ordered_subset_labels = [
                 f"{active_subset_key}={subset_value}"
@@ -2805,20 +2817,23 @@ def paired_datapoints(
                     ):
                         subset_handles_by_label[label] = handle
             figure_legend_entries.extend(
-                (subset_handles_by_label[label], label)
+                (subset_handles_by_label[label], label, False)
                 for label in ordered_subset_labels
                 if label in subset_handles_by_label
             )
         if summary_legend_enabled:
             prefix_panel = len(plot_panel_names) > 1
             for panel_name in plot_panel_names:
-                for handle, label in summary_legend_entries_by_panel.get(
+                panel_summary_entries = summary_legend_entries_by_panel.get(
                     panel_name, []
-                ):
+                )
+                for handle, label, is_negative in panel_summary_entries:
                     figure_label = (
                         f"{panel_name} — {label}" if prefix_panel else label
                     )
-                    figure_legend_entries.append((handle, figure_label))
+                    figure_legend_entries.append(
+                        (handle, figure_label, is_negative)
+                    )
         if figure_legend_entries:
             legend_kwargs = {"fontsize": legend_fontsize}
             if active_subset_key is not None and not summary_legend_enabled:
@@ -2827,11 +2842,21 @@ def paired_datapoints(
                 legend_kwargs["loc"] = legend_loc
             if legend_bbox_to_anchor is not None:
                 legend_kwargs["bbox_to_anchor"] = legend_bbox_to_anchor
-            fig.legend(
-                [handle for handle, _label in figure_legend_entries],
-                [label for _handle, label in figure_legend_entries],
+            legend_obj = fig.legend(
+                [handle for handle, _label, _is_negative in figure_legend_entries],
+                [label for _handle, label, _is_negative in figure_legend_entries],
                 **legend_kwargs,
             )
+            legend_entries_to_style.append((legend_obj, figure_legend_entries))
+
+    if highlight_negative_summary_legend:
+        for legend_obj, legend_entries in legend_entries_to_style:
+            for legend_text, (_handle, _label, is_negative) in zip(
+                legend_obj.get_texts(), legend_entries
+            ):
+                if is_negative:
+                    legend_text.set_color("red")
+                    legend_text.set_fontweight("bold")
 
     plt.tight_layout()
     subplot_adjust_kwargs: dict[str, float] = {}

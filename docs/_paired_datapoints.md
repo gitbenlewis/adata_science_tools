@@ -96,6 +96,7 @@ def paired_datapoints(
     ] | None = None,
     legend_summary_prefix: str | None = "Overall",
     legend_metric_separator: str = ", ",
+    highlight_negative_summary_legend: bool = True,
     ncols: int = 3,
     figsize: tuple[float, float] | None = None,
     wspace: float | None = None,
@@ -458,6 +459,14 @@ placeholders, or format specifications raise before drawing.
 Its default `", "` preserves comma-separated labels. Set it to `"\n"` to place
 each metric on its own line without adding newline characters to the individual
 `legend_metric_formats` strings.
+
+By default, `highlight_negative_summary_legend=True` renders an entire summary
+row in red bold text when any displayed `mean` or `median` is less than zero.
+The decision uses the exact finite summary value before label formatting, so a
+custom format or rounded display cannot change the classification. `count`,
+`std`, and `sem` do not trigger highlighting. Set
+`highlight_negative_summary_legend=False` to retain Matplotlib's default legend
+text styling.
 
 When a subset hue is active, its entries remain first and the overall
 per-position summaries follow them. With metrics enabled, subset entries are

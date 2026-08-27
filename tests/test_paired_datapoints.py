@@ -2293,6 +2293,164 @@ class PairedDatapointsTests(unittest.TestCase):
             ],
         )
 
+    def test_negative_mean_summary_legend_is_red_and_bold_and_can_be_disabled(self):
+        paired_df = pd.DataFrame(
+            {
+                "Pre_or_Post_obs_col": ["Pre", "Post"] * 3,
+                "Subject_ID": ["S1", "S1", "S2", "S2", "S3", "S3"],
+                "feature": [10.0, -10.0, 10.0, 11.0, 10.0, 11.0],
+            }
+        )
+        plot_kwargs = {
+            "df": paired_df,
+            "var_names": ["feature"],
+            "pair_by_key": "Subject_ID",
+            "show_paired_difference": True,
+            "legend": True,
+            "legend_metrics": ("mean", "median"),
+            "legend_metric_formats": {
+                "mean": "average={value:.1f}",
+                "median": "middle={value:.1f}",
+            },
+            "legend_summary_prefix": None,
+            "legend_metric_separator": "\n",
+            "boxplot": False,
+            "show": False,
+        }
+
+        default_fig, default_axes, _ = adtl.paired_datapoints(**plot_kwargs)
+        disabled_fig, disabled_axes, _ = adtl.paired_datapoints(
+            highlight_negative_summary_legend=False,
+            **plot_kwargs,
+        )
+        count_fig, count_axes, _ = adtl.paired_datapoints(
+            **{
+                **plot_kwargs,
+                "legend_metrics": ("count",),
+                "legend_metric_formats": None,
+            }
+        )
+        for fig in (default_fig, disabled_fig, count_fig):
+            self.addCleanup(plt.close, fig)
+
+        default_texts = default_axes["feature"].get_legend().get_texts()
+        self.assertEqual(
+            [text.get_text() for text in default_texts],
+            [
+                "Pre (average=10.0\nmiddle=10.0)",
+                "Post (average=4.0\nmiddle=11.0)",
+                "Post - Pre (average=-6.0\nmiddle=1.0)",
+            ],
+        )
+        for text in default_texts[:2]:
+            self.assertNotEqual(text.get_color(), "red")
+            self.assertNotEqual(text.get_fontweight(), "bold")
+        self.assertEqual(default_texts[2].get_color(), "red")
+        self.assertEqual(default_texts[2].get_fontweight(), "bold")
+
+        for text in disabled_axes["feature"].get_legend().get_texts():
+            self.assertNotEqual(text.get_color(), "red")
+            self.assertNotEqual(text.get_fontweight(), "bold")
+        for text in count_axes["feature"].get_legend().get_texts():
+            self.assertNotEqual(text.get_color(), "red")
+            self.assertNotEqual(text.get_fontweight(), "bold")
+
+    def test_negative_median_summary_legend_is_red_and_bold_in_figure_scope(self):
+        paired_df = pd.DataFrame(
+            {
+                "Pre_or_Post_obs_col": ["Pre", "Post"] * 3,
+                "Subject_ID": ["S1", "S1", "S2", "S2", "S3", "S3"],
+                "median_trigger": [10.0, 9.0, 10.0, 9.0, 10.0, 30.0],
+                "positive": [10.0, 11.0, 10.0, 12.0, 10.0, 13.0],
+            }
+        )
+
+        fig, axes, plot_df = adtl.paired_datapoints(
+            df=paired_df,
+            var_names=["median_trigger", "positive"],
+            pair_by_key="Subject_ID",
+            show_paired_difference=True,
+            paired_difference_mode="log2fc",
+            legend=True,
+            legend_scope="figure",
+            legend_metrics=("mean", "median"),
+            boxplot=False,
+            ncols=2,
+            show=False,
+        )
+        self.addCleanup(plt.close, fig)
+
+        derived_values = plot_df.loc[
+            (plot_df["panel"] == "median_trigger")
+            & (plot_df["side"] == "difference"),
+            "value",
+        ]
+        self.assertGreater(derived_values.mean(), 0)
+        self.assertLess(derived_values.median(), 0)
+        self.assertTrue(all(ax.get_legend() is None for ax in axes.values()))
+        self.assertEqual(len(fig.legends), 1)
+
+        legend_texts = fig.legends[0].get_texts()
+        negative_texts = [
+            text
+            for text in legend_texts
+            if text.get_text().startswith(
+                "median_trigger — Overall log2(Post / Pre)"
+            )
+        ]
+        self.assertEqual(len(negative_texts), 1)
+        self.assertEqual(negative_texts[0].get_color(), "red")
+        self.assertEqual(negative_texts[0].get_fontweight(), "bold")
+        for text in legend_texts:
+            if text is negative_texts[0]:
+                continue
+            self.assertNotEqual(text.get_color(), "red")
+            self.assertNotEqual(text.get_fontweight(), "bold")
+
+    def test_negative_endpoint_highlights_and_zero_summary_stays_neutral(self):
+        paired_df = pd.DataFrame(
+            {
+                "Pre_or_Post_obs_col": ["Pre", "Post"] * 3,
+                "Subject_ID": ["S1", "S1", "S2", "S2", "S3", "S3"],
+                "negative_endpoint": [-3.0, 1.0, -2.0, 2.0, -1.0, 3.0],
+                "zero_summary": [-1.0, -1.0, 0.0, 0.0, 1.0, 1.0],
+            }
+        )
+
+        fig, axes, _ = adtl.paired_datapoints(
+            df=paired_df,
+            var_names=["negative_endpoint", "zero_summary"],
+            pair_by_key="Subject_ID",
+            legend=True,
+            legend_metrics=("mean", "median"),
+            boxplot=False,
+            ncols=2,
+            show=False,
+        )
+        self.addCleanup(plt.close, fig)
+
+        endpoint_texts = axes["negative_endpoint"].get_legend().get_texts()
+        self.assertEqual(
+            endpoint_texts[0].get_text(),
+            "Overall Pre (mean=-2, median=-2)",
+        )
+        self.assertEqual(endpoint_texts[0].get_color(), "red")
+        self.assertEqual(endpoint_texts[0].get_fontweight(), "bold")
+        self.assertNotEqual(endpoint_texts[1].get_color(), "red")
+        self.assertNotEqual(endpoint_texts[1].get_fontweight(), "bold")
+
+        zero_texts = axes["zero_summary"].get_legend().get_texts()
+        self.assertEqual(
+            [text.get_text() for text in zero_texts],
+            [
+                "Overall Pre (mean=0, median=0)",
+                "Overall Post (mean=0, median=0)",
+            ],
+        )
+        for text in zero_texts:
+            self.assertNotEqual(text.get_color(), "red")
+            self.assertNotEqual(text.get_fontweight(), "bold")
+
     def test_legend_metrics_keep_subset_rows_first_and_axis_summaries_panel_local(self):
         fig, axes, _ = adtl.paired_datapoints(
             adata=self.make_adata(),
@@ -2651,6 +2809,7 @@ class PairedDatapointsTests(unittest.TestCase):
                 subplot_title_fontsize=None,
                 legend_summary_prefix="Overall",
                 legend_metric_separator=", ",
+                highlight_negative_summary_legend=True,
                 **plot_kwargs,
             )
         self.addCleanup(plt.close, omitted_fig)
