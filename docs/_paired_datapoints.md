@@ -60,6 +60,9 @@ def paired_datapoints(
     subset_order: Sequence[Any] | None = None,
     palette: Sequence[Any] | str | None = palettes.tol_colors,
     subset_palette: Sequence[Any] | str | None = None,
+    point_color_by_side: bool = False,
+    ref_point_color: Any = "tab:blue",
+    target_point_color: Any = "tab:orange",
     connect_lines: bool = True,
     line_alpha: float = 0.55,
     line_color: Any = "0.55",
@@ -290,6 +293,43 @@ fig, axes, plot_df = adtl.paired_datapoints(
 
 5. If no complete pairs remain, the function raises `ValueError`.
 
+## Endpoint colors by side
+
+The default `point_color_by_side=False` preserves the existing `palette` and
+subset-hue coloring. Set `point_color_by_side=True` to color reference dots with
+`ref_point_color` (default `"tab:blue"`) and target dots with `target_point_color`
+(default `"tab:orange"`). Both accept Matplotlib color-like values, including
+color names, hex strings, and RGB/RGBA tuples. The color arguments take effect
+only in side mode; this switch does not enable legends.
+
+Side colors override endpoint subset hues while preserving subset selection and
+returned metadata. They are independent of connector colors and the sign colors
+of paired-difference or log2FC dots. Obsolete endpoint subset legend entries are
+suppressed. If `show_paired_difference=True` and
+`paired_difference_color_by_sign=False`, subset-colored third-position dots
+retain their hue entries, prefixed with the resolved difference/log2FC label.
+
+This example combines side-colored endpoints, per-position summaries, and
+sign-colored log2FC dots:
+
+```python
+fig, axes, plot_df = adtl.paired_datapoints(
+    adata=adata,
+    var_names=["IL6"],
+    pair_by_key="Subject_ID",
+    subset_obs_key="Treatment",
+    point_color_by_side=True,
+    ref_point_color="tab:blue",
+    target_point_color="tab:orange",
+    show_paired_difference=True,
+    paired_difference_mode="log2fc",
+    paired_difference_color_by_sign=True,
+    legend=True,
+    legend_metrics=("count", "mean", "median"),
+    show=False,
+)
+```
+
 ## Slope-colored connecting lines
 
 Set `line_color_by_slope=True` to color each complete connecting line with
@@ -380,8 +420,8 @@ colors, these are red, green, and gray. This classification is independent of
 `slope_color_threshold`, which applies only to connector lines; a small nonzero
 change can therefore have an approximately-flat gray connector and a red or
 green derived dot. Set `paired_difference_color_by_sign=False` to restore the
-ordinary point or subset-hue styling for the third position. Endpoint colors
-and subset legends are unchanged, and no separate sign legend is added.
+ordinary point or subset-hue styling for the third position. Endpoint color
+settings are independent, and no separate sign legend is added.
 
 Distribution overlays use the axis that owns each value. Boxplots are enabled
 by default at the reference, target, and derived positions. Set
@@ -437,9 +477,9 @@ fig, axes, plot_df = adtl.paired_datapoints(
 
 Set `legend=True` and provide `legend_metrics` to add overall summary rows for
 each displayed x-axis position. This feature is opt-in: the default
-`legend_metrics=None` preserves the existing subset-only legend. Supported
-metrics are `mean`, `median`, `count`, `std`, and `sem`. They appear in the
-requested order, while the summary rows follow the displayed x order:
+`legend_metrics=None` adds no summary rows. Supported metrics are `mean`,
+`median`, `count`, `std`, and `sem`. They appear in the requested order, while
+the summary rows follow the displayed x order:
 reference, target, then the optional paired difference or log2FC.
 
 Each summary uses the finite `value` rows that remain in its panel and x
@@ -447,6 +487,11 @@ position after bounds, missing-value handling, `dropna`, and `dropzeros` have
 been applied. `count` is therefore the number of finite post-filter rows at
 that position. These are overall summaries across subset hues, not separate
 statistics for each subset.
+
+Summary markers remain neutral by default. With `point_color_by_side=True`,
+reference and target summary marker faces and edges match their respective side
+colors. The difference/log2FC summary marker remains neutral. Marker colors do
+not alter the negative-summary text highlighting described below.
 
 `legend_metric_formats` optionally replaces the text for individual selected
 metrics. Each format string may use only `{metric}` and `{value}`. Count values
@@ -468,13 +513,14 @@ custom format or rounded display cannot change the classification. `count`,
 `highlight_negative_summary_legend=False` to retain Matplotlib's default legend
 text styling.
 
-When a subset hue is active, its entries remain first and the overall
+When a subset hue is displayed, its entries remain first and the overall
 per-position summaries follow them. With metrics enabled, subset entries are
 self-identifying, such as `cohort=A`, and the combined legend omits a subset
 title so the following overall rows are not visually grouped under that title.
-With metrics disabled, existing subset labels and the subset legend title are
-unchanged. By default, `legend_summary_prefix="Overall"` prefixes every summary
-row, including when all samples are represented without a subset hue. Set
+With metrics disabled and `point_color_by_side=False`, existing subset labels
+and the subset legend title are unchanged. By default,
+`legend_summary_prefix="Overall"` prefixes every summary row, including when all
+samples are represented without a subset hue. Set
 `legend_summary_prefix=None` or `legend_summary_prefix=""` to suppress the
 prefix, or provide custom text such as `"All samples"` to replace it.
 `legend_scope="axis"` reports each panel on its own axis;
@@ -666,7 +712,8 @@ fig, axes, plot_df = adtl.paired_datapoints(
 
 4. `subset_obs_key="column"` colors points by observation metadata group within
    each panel. `subset_var_key="column"` colors points by variable metadata
-   when plotted records map to one `source_variable`.
+   when plotted records map to one `source_variable`. `point_color_by_side=True`
+   overrides endpoint hues without discarding subset metadata.
 
 5. `subset_order` controls hue order; otherwise categorical order or first
    appearance is used.

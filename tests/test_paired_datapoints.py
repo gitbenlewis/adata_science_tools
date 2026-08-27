@@ -11,7 +11,7 @@ import pandas as pd
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.collections import PolyCollection
+from matplotlib.collections import PathCollection, PolyCollection
 from matplotlib.colors import to_rgba
 from matplotlib.figure import Figure
 
@@ -2118,6 +2118,323 @@ class PairedDatapointsTests(unittest.TestCase):
             if fig is not None:
                 plt.close(fig)
 
+    def test_side_colors_are_opt_in_and_preserve_plot_data_and_artists(self):
+        adata = self.make_adata()
+        original_obs = adata.obs.copy(deep=True)
+        original_var = adata.var.copy(deep=True)
+        original_x = np.array(adata.X, copy=True)
+        results = []
+        for color_kwargs in (
+            {},
+            {
+                "point_color_by_side": False,
+                "ref_point_color": "purple",
+                "target_point_color": "cyan",
+            },
+            {
+                "point_color_by_side": True,
+                "ref_point_color": "purple",
+                "target_point_color": "cyan",
+            },
+        ):
+            result = adtl.paired_datapoints(
+                adata=adata,
+                var_names=["A_v1", "A_v2"],
+                pair_by_key="Subject_ID",
+                show_paired_difference=True,
+                legend=True,
+                legend_metrics=("mean", "count"),
+                random_seed=19,
+                jitter_amount=0.1,
+                point_size=37,
+                point_alpha=0.6,
+                boxplot=False,
+                ncols=2,
+                show=False,
+                **color_kwargs,
+            )
+            self.addCleanup(plt.close, result[0])
+            results.append(result)
+
+        baseline_fig, baseline_axes, baseline_df = results[0]
+        for variant_index, (fig, axes, plot_df) in enumerate(results[1:], start=1):
+            pd.testing.assert_frame_equal(plot_df, baseline_df)
+            np.testing.assert_array_equal(fig.get_size_inches(), baseline_fig.get_size_inches())
+            self.assertEqual(len(fig.axes), len(baseline_fig.axes))
+            for baseline_ax, ax in zip(baseline_fig.axes, fig.axes):
+                self.assertEqual(ax.get_xlim(), baseline_ax.get_xlim())
+                self.assertEqual(ax.get_ylim(), baseline_ax.get_ylim())
+                self.assertEqual(len(ax.lines), len(baseline_ax.lines))
+                for baseline_line, line in zip(baseline_ax.lines, ax.lines):
+                    np.testing.assert_array_equal(line.get_xydata(), baseline_line.get_xydata())
+                    self.assertEqual(to_rgba(line.get_color()), to_rgba(baseline_line.get_color()))
+                self.assertEqual(len(ax.collections), len(baseline_ax.collections))
+                for baseline_collection, collection in zip(baseline_ax.collections, ax.collections):
+                    np.testing.assert_array_equal(collection.get_offsets(), baseline_collection.get_offsets())
+                    np.testing.assert_array_equal(collection.get_sizes(), baseline_collection.get_sizes())
+                    self.assertEqual(collection.get_alpha(), baseline_collection.get_alpha())
+                    np.testing.assert_array_equal(
+                        collection.get_paths()[0].vertices,
+                        baseline_collection.get_paths()[0].vertices,
+                    )
+                    if variant_index == 1 or baseline_ax not in baseline_axes.values():
+                        np.testing.assert_array_equal(collection.get_facecolors(), baseline_collection.get_facecolors())
+                        np.testing.assert_array_equal(collection.get_edgecolors(), baseline_collection.get_edgecolors())
+            for panel_name, ax in axes.items():
+                legend = ax.get_legend()
+                baseline_legend = baseline_axes[panel_name].get_legend()
+                self.assertEqual(
+                    [text.get_text() for text in legend.get_texts()],
+                    [text.get_text() for text in baseline_legend.get_texts()],
+                )
+                if variant_index == 1:
+                    self.assertEqual(
+                        [handle.get_markerfacecolor() for handle in legend.get_lines()],
+                        [handle.get_markerfacecolor() for handle in baseline_legend.get_lines()],
+                    )
+                    self.assertEqual(
+                        [handle.get_markeredgecolor() for handle in legend.get_lines()],
+                        [handle.get_markeredgecolor() for handle in baseline_legend.get_lines()],
+                    )
+        pd.testing.assert_frame_equal(adata.obs, original_obs)
+        pd.testing.assert_frame_equal(adata.var, original_var)
+        np.testing.assert_array_equal(adata.X, original_x)
+
+    def test_side_colors_match_summary_markers_across_panels_and_legend_scopes(self):
+        for legend_scope, subset_obs_key in (
+            ("axis", None),
+            ("axis", "cohort"),
+            ("figure", None),
+            ("figure", "cohort"),
+        ):
+            for color_kwargs in (
+                {},
+                {"ref_point_color": "#1122aa", "target_point_color": (0.9, 0.4, 0.1, 0.2)},
+            ):
+                with self.subTest(legend_scope=legend_scope, subset=subset_obs_key, colors=color_kwargs):
+                    ref_color = color_kwargs.get("ref_point_color", "tab:blue")
+                    target_color = color_kwargs.get("target_point_color", "tab:orange")
+                    fig, axes, _ = adtl.paired_datapoints(
+                        adata=self.make_adata(),
+                        var_names=["A_v1", "A_v2"],
+                        pair_by_key="Subject_ID",
+                        subset_obs_key=subset_obs_key,
+                        subset_order=["B", "A"] if subset_obs_key is not None else None,
+                        point_color_by_side=True,
+                        show_paired_difference=True,
+                        legend=True,
+                        legend_scope=legend_scope,
+                        legend_metrics=("mean",),
+                        point_size=49,
+                        point_alpha=0.6,
+                        jitter_amount=0,
+                        boxplot=False,
+                        ncols=2,
+                        show=False,
+                        **color_kwargs,
+                    )
+                    self.addCleanup(plt.close, fig)
+                    for ax in axes.values():
+                        for collection in ax.collections:
+                            expected_colors = [
+                                to_rgba(ref_color if x == 1 else target_color, 0.6)
+                                for x, _y in collection.get_offsets()
+                            ]
+                            np.testing.assert_allclose(collection.get_facecolors(), expected_colors)
+                            np.testing.assert_allclose(collection.get_edgecolors(), expected_colors)
+                            np.testing.assert_array_equal(collection.get_sizes(), [49])
+                            self.assertEqual(collection.get_alpha(), 0.6)
+                    legends = (
+                        [ax.get_legend() for ax in axes.values()]
+                        if legend_scope == "axis"
+                        else fig.legends
+                    )
+                    self.assertEqual(len(legends), 2 if legend_scope == "axis" else 1)
+                    panel_count = 1 if legend_scope == "axis" else 2
+                    for legend in legends:
+                        self.assertFalse(any("cohort=" in text.get_text() for text in legend.get_texts()))
+                        handles = legend.get_lines()
+                        self.assertEqual(len(handles), 3 * panel_count)
+                        for handle, facecolor, edgecolor in zip(
+                            handles,
+                            [ref_color, target_color, "0.75"] * panel_count,
+                            [ref_color, target_color, "0.35"] * panel_count,
+                        ):
+                            self.assertEqual(to_rgba(handle.get_markerfacecolor(), handle.get_alpha()), to_rgba(facecolor, 0.6))
+                            self.assertEqual(to_rgba(handle.get_markeredgecolor(), handle.get_alpha()), to_rgba(edgecolor, 0.6))
+                            self.assertEqual(handle.get_marker(), "o")
+                            self.assertEqual(handle.get_markersize(), 7)
+                    for ax in fig.axes:
+                        if ax not in axes.values() or legend_scope == "figure":
+                            self.assertIsNone(ax.get_legend())
+
+    def test_side_colors_leave_difference_and_connector_sign_colors_unchanged(self):
+        paired_df = pd.DataFrame(
+            {
+                "condition": ["Baseline", "Followup"] * 3,
+                "subject": ["S1", "S1", "S2", "S2", "S3", "S3"],
+                "feature": [1.0, 4.0, 4.0, 1.0, 2.0, 2.0],
+            }
+        )
+        for mode, expected_values in (("difference", [3.0, -3.0, 0.0]), ("log2fc", [2.0, -2.0, 0.0])):
+            with self.subTest(mode=mode):
+                fig, axes, plot_df = adtl.paired_datapoints(
+                    df=paired_df,
+                    var_names=["feature"],
+                    groupby_key="condition",
+                    groupby_key_ref_value="Baseline",
+                    groupby_key_target_value="Followup",
+                    pair_by_key="subject",
+                    point_color_by_side=True,
+                    ref_point_color="purple",
+                    target_point_color="cyan",
+                    show_paired_difference=True,
+                    paired_difference_mode=mode,
+                    line_color_by_slope=True,
+                    legend_metrics=("mean",),
+                    jitter_amount=0,
+                    boxplot=False,
+                    show=False,
+                )
+                self.addCleanup(plt.close, fig)
+                difference_ax = next(ax for ax in fig.axes if ax.get_label() == "feature__paired_difference")
+                np.testing.assert_allclose(plot_df.loc[plot_df["side"] == "difference", "value"], expected_values)
+                np.testing.assert_allclose(
+                    difference_ax.collections[0].get_facecolors(),
+                    [to_rgba(color, 0.85) for color in ("green", "red", "gray")],
+                )
+                self.assertEqual(
+                    [to_rgba(line.get_color()) for line in axes["feature"].lines],
+                    [to_rgba(color) for color in ("green", "red", "gray")],
+                )
+                self.assertEqual(fig.legends, [])
+                self.assertTrue(all(ax.get_legend() is None for ax in fig.axes))
+
+    def test_side_colors_preserve_subset_order_and_missing_subset_selection(self):
+        for subset_key, selected_value, excluded_value, expected_count, subset_kwargs in (
+            ("cohort", "A", "B", 4, {"var_names": ["A_v1"], "subset_obs_key": "cohort"}),
+            ("feature_type", "protein", "rna", 12, {
+                "var_names": ["A_v1", "A_v2", "B_v1"],
+                "subset_var_key": "feature_type",
+                "collapse_mode": "all",
+            }),
+        ):
+            with self.subTest(subset_key=subset_key):
+                adata = self.make_adata()
+                if subset_key == "cohort":
+                    adata.obs.loc[["s3_pre", "s3_post"], "cohort"] = np.nan
+                else:
+                    adata.var.loc["A_v2", "feature_type"] = np.nan
+                results = []
+                for point_color_by_side in (False, True):
+                    result = adtl.paired_datapoints(
+                        adata=adata,
+                        pair_by_key="Subject_ID",
+                        subset_order=[selected_value],
+                        point_color_by_side=point_color_by_side,
+                        point_alpha=1,
+                        legend=True,
+                        jitter_amount=0,
+                        boxplot=False,
+                        show=False,
+                        **subset_kwargs,
+                    )
+                    self.addCleanup(plt.close, result[0])
+                    results.append(result)
+                _, baseline_axes, baseline_df = results[0]
+                fig, axes, plot_df = results[1]
+                pd.testing.assert_frame_equal(plot_df, baseline_df)
+                self.assertIn(excluded_value, plot_df[subset_key].dropna().tolist())
+                self.assertTrue(plot_df[subset_key].isna().any())
+                baseline_ax = next(iter(baseline_axes.values()))
+                ax = next(iter(axes.values()))
+                self.assertEqual(sum(len(collection.get_offsets()) for collection in ax.collections), expected_count)
+                self.assertEqual(len(ax.collections), len(baseline_ax.collections))
+                for baseline_collection, collection in zip(baseline_ax.collections, ax.collections):
+                    np.testing.assert_array_equal(collection.get_offsets(), baseline_collection.get_offsets())
+                    np.testing.assert_allclose(
+                        collection.get_facecolors(),
+                        [to_rgba("tab:blue" if x == 1 else "tab:orange") for x, _y in collection.get_offsets()],
+                    )
+                self.assertEqual(to_rgba(baseline_ax.collections[-1].get_facecolors()[0]), to_rgba("black"))
+                self.assertIsNotNone(baseline_ax.get_legend())
+                self.assertIsNone(ax.get_legend())
+                self.assertEqual(fig.legends, [])
+
+    def test_side_colors_keep_derived_subset_legend_when_sign_coloring_is_disabled(self):
+        for legend_scope in ("axis", "figure"):
+            for legend_metrics in (None, ("mean",)):
+                for mode, label_kwargs, difference_label in (
+                    ("difference", {}, "Post - Pre"),
+                    ("log2fc", {"paired_difference_label": "L2FC"}, "L2FC"),
+                ):
+                    with self.subTest(scope=legend_scope, metrics=legend_metrics, mode=mode):
+                        fig, axes, _ = adtl.paired_datapoints(
+                            adata=self.make_adata(),
+                            var_names=["A_v1", "A_v2"],
+                            pair_by_key="Subject_ID",
+                            subset_obs_key="cohort",
+                            subset_order=["B", "A"],
+                            subset_palette=["#112233", "#445566"],
+                            point_color_by_side=True,
+                            show_paired_difference=True,
+                            paired_difference_mode=mode,
+                            paired_difference_color_by_sign=False,
+                            legend=True,
+                            legend_scope=legend_scope,
+                            legend_metrics=legend_metrics,
+                            connect_lines=False,
+                            boxplot=False,
+                            ncols=2,
+                            show=False,
+                            **label_kwargs,
+                        )
+                        self.addCleanup(plt.close, fig)
+                        expected_colors = [to_rgba(color, 0.85) for color in ("#112233", "#445566")]
+                        for ax in fig.axes:
+                            if ax not in axes.values():
+                                np.testing.assert_allclose(
+                                    [collection.get_facecolors()[0] for collection in ax.collections],
+                                    expected_colors,
+                                )
+                                self.assertIsNone(ax.get_legend())
+                        legends = [ax.get_legend() for ax in axes.values()] if legend_scope == "axis" else fig.legends
+                        self.assertEqual(len(legends), 2 if legend_scope == "axis" else 1)
+                        expected_labels = [
+                            f"{difference_label}: cohort={value}" if legend_metrics else f"{difference_label}: {value}"
+                            for value in ("B", "A")
+                        ]
+                        for legend in legends:
+                            labels = [text.get_text() for text in legend.get_texts()]
+                            self.assertEqual(labels[:2], expected_labels)
+                            expected_summary_count = (3 if legend_scope == "axis" else 6) if legend_metrics else 0
+                            self.assertEqual(len(labels), 2 + expected_summary_count)
+                            np.testing.assert_allclose(
+                                [handle.get_facecolor()[0] for handle in legend.findobj(PathCollection)],
+                                expected_colors,
+                            )
+
+    def test_side_colors_preserve_ungrouped_difference_fallback_without_auto_legend(self):
+        for palette, expected_color in ((None, "black"), (["#123456"], "#123456")):
+            with self.subTest(palette=palette):
+                fig, _, _ = adtl.paired_datapoints(
+                    adata=self.make_adata(),
+                    var_names=["A_v1"],
+                    pair_by_key="Subject_ID",
+                    palette=palette,
+                    point_color_by_side=True,
+                    show_paired_difference=True,
+                    paired_difference_color_by_sign=False,
+                    legend=True,
+                    boxplot=False,
+                    show=False,
+                )
+                self.addCleanup(plt.close, fig)
+                difference_ax = next(ax for ax in fig.axes if ax.get_label() == "A_v1__paired_difference")
+                np.testing.assert_allclose(difference_ax.collections[0].get_facecolors(), [to_rgba(expected_color, 0.85)])
+                self.assertEqual(fig.legends, [])
+                self.assertTrue(all(ax.get_legend() is None for ax in fig.axes))
+
     def test_legend_metrics_default_off_preserves_existing_legend_behavior(self):
         no_subset_fig = None
         default_subset_fig = None
@@ -2804,6 +3121,9 @@ class PairedDatapointsTests(unittest.TestCase):
                 **plot_kwargs,
             )
             explicit_fig, explicit_axes, explicit_df = adtl.paired_datapoints(
+                point_color_by_side=False,
+                ref_point_color="tab:blue",
+                target_point_color="tab:orange",
                 wspace=None,
                 hspace=None,
                 subplot_title_fontsize=None,

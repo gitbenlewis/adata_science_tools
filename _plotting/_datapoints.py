@@ -1531,6 +1531,9 @@ def paired_datapoints(
     subset_order: Sequence[Any] | None = None,
     palette: Sequence[Any] | str | None = palettes.tol_colors,
     subset_palette: Sequence[Any] | str | None = None,
+    point_color_by_side: bool = False,
+    ref_point_color: Any = "tab:blue",
+    target_point_color: Any = "tab:orange",
     connect_lines: bool = True,
     line_alpha: float = 0.55,
     line_color: Any = "0.55",
@@ -2449,6 +2452,18 @@ def paired_datapoints(
             raise ValueError("'palette' cannot be an empty sequence.")
         default_point_color = palette_colors[0]
 
+    side_point_colors = (
+        {
+            "ref": _mcolors.to_rgba(ref_point_color),
+            "target": _mcolors.to_rgba(target_point_color),
+        }
+        if point_color_by_side
+        else {}
+    )
+    subset_legend_prefix = (
+        f"{resolved_difference_label}: " if point_color_by_side else ""
+    )
+
     if title is not None:
         title_kwargs: dict[str, Any] = {"fontsize": title_fontsize}
         if title_y is not None:
@@ -2597,10 +2612,16 @@ def paired_datapoints(
         scatter_targets = [(ax, endpoint_panel_df, True)]
         if difference_ax is not None:
             scatter_targets.append((difference_ax, difference_panel_df, False))
-        for scatter_ax, scatter_df, add_legend_labels in scatter_targets:
+        for scatter_ax, scatter_df, is_endpoint in scatter_targets:
             if scatter_df.empty:
                 continue
-            if not add_legend_labels and paired_difference_color_by_sign:
+            use_side_colors = point_color_by_side and is_endpoint
+            # In side mode, subset hues describe only difference dots when
+            # their sign coloring is disabled, not the endpoint points.
+            add_subset_legend_labels = (
+                not is_endpoint if point_color_by_side else is_endpoint
+            )
+            if not is_endpoint and paired_difference_color_by_sign:
                 difference_values = scatter_df["value"].to_numpy(dtype=float)
                 point_colors = np.tile(
                     _mcolors.to_rgba(flat_slope_color),
@@ -2624,7 +2645,11 @@ def paired_datapoints(
                 scatter_ax.scatter(
                     scatter_df["_jittered_x"],
                     scatter_df["value"],
-                    color=default_point_color,
+                    color=(
+                        scatter_df["side"].map(side_point_colors).tolist()
+                        if use_side_colors
+                        else default_point_color
+                    ),
                     s=point_size,
                     alpha=point_alpha,
                     zorder=2,
@@ -2636,11 +2661,14 @@ def paired_datapoints(
                     ]
                     if subset_df.empty:
                         continue
-                    color = (
-                        subset_palette_map.get(subset_value)
-                        if subset_palette_map is not None
-                        else None
-                    )
+                    if use_side_colors:
+                        color = subset_df["side"].map(side_point_colors).tolist()
+                    else:
+                        color = (
+                            subset_palette_map.get(subset_value)
+                            if subset_palette_map is not None
+                            else None
+                        )
                     scatter_ax.scatter(
                         subset_df["_jittered_x"],
                         subset_df["value"],
@@ -2648,10 +2676,10 @@ def paired_datapoints(
                         s=point_size,
                         alpha=point_alpha,
                         label=(
-                            f"{active_subset_key}={subset_value}"
-                            if add_legend_labels and summary_legend_enabled
-                            else str(subset_value)
-                            if add_legend_labels
+                            f"{subset_legend_prefix}{active_subset_key}={subset_value}"
+                            if add_subset_legend_labels and summary_legend_enabled
+                            else f"{subset_legend_prefix}{subset_value}"
+                            if add_subset_legend_labels
                             else None
                         ),
                         zorder=2,
@@ -2663,7 +2691,11 @@ def paired_datapoints(
                     scatter_ax.scatter(
                         missing_subset_df["_jittered_x"],
                         missing_subset_df["value"],
-                        color="black",
+                        color=(
+                            missing_subset_df["side"].map(side_point_colors).tolist()
+                            if use_side_colors
+                            else "black"
+                        ),
                         s=point_size,
                         alpha=point_alpha,
                         zorder=2,
@@ -2703,7 +2735,9 @@ def paired_datapoints(
                 fontsize=axis_label_fontsize,
             )
 
-        subset_handles, subset_labels = ax.get_legend_handles_labels()
+        subset_handles, subset_labels = (
+            difference_ax if point_color_by_side and difference_ax is not None else ax
+        ).get_legend_handles_labels()
         subset_legend_entries = list(zip(subset_handles, subset_labels))
         subset_legend_entries_by_panel[panel_name] = subset_legend_entries
         summary_legend_entries: list[tuple[Any, str, bool]] = []
@@ -2723,15 +2757,20 @@ def paired_datapoints(
                 ]
                 if finite_values.empty:
                     continue
+                summary_color = side_point_colors.get(side)
                 summary_legend_entries.append(
                     (
                         _Line2D(
                             [],
                             [],
-                            color="0.35",
+                            color=summary_color if summary_color is not None else "0.35",
                             marker="o",
-                            markerfacecolor="0.75",
-                            markeredgecolor="0.35",
+                            markerfacecolor=(
+                                summary_color if summary_color is not None else "0.75"
+                            ),
+                            markeredgecolor=(
+                                summary_color if summary_color is not None else "0.35"
+                            ),
                             linestyle="none",
                             markersize=math.sqrt(point_size),
                             alpha=point_alpha,
@@ -2801,9 +2840,9 @@ def paired_datapoints(
         figure_legend_entries: list[tuple[Any, str, bool]] = []
         if active_subset_key is not None and subset_hue_order:
             ordered_subset_labels = [
-                f"{active_subset_key}={subset_value}"
+                f"{subset_legend_prefix}{active_subset_key}={subset_value}"
                 if summary_legend_enabled
-                else str(subset_value)
+                else f"{subset_legend_prefix}{subset_value}"
                 for subset_value in subset_hue_order
             ]
             subset_handles_by_label: dict[str, Any] = {}
