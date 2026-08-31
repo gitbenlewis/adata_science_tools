@@ -11,7 +11,7 @@ def average_feature_expression(adata, groupby_key, layer=None, use_raw=False, lo
     use_raw (bool, optional): If True, use adata.raw for the expression data. Default is False.
     log1p (bool, optional): If True, apply log1p transformation to the data before averaging. Default is False.
     zscore (bool, optional): If True, apply Z-score scaling to the data before averaging. Default is False.
-    subtract_mean (bool, optional): If True, subtract the mean from each feature. Default is False.
+    subtract_mean (bool, optional): If True, subtract the mean from each feature. Default is True.
 
     Returns:
     pd.DataFrame: DataFrame with average feature expression, where rows are groups and columns are features (genes).

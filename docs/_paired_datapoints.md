@@ -257,6 +257,7 @@ fig, axes, plot_df = adtl.paired_datapoints(
     subset_order=["Vehicle", "Drug"],
     legend=True,
     title="Synthetic paired Pre/Post datapoints",
+    xlabel="Visit",
     ylabel="Synthetic abundance",
     random_seed=7,
     figsize=(8, 4),

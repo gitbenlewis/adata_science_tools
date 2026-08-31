@@ -1,3 +1,4 @@
+import inspect
 import sys
 import unittest
 from pathlib import Path
@@ -68,7 +69,56 @@ class RankPlotRendererTests(unittest.TestCase):
         )
         self.assertEqual(len(axes[0].collections[0].get_offsets()), 4)
         self.assertEqual(len(axes[1].collections[0].get_offsets()), 4)
+        for axis in axes:
+            semantic_lines = [
+                line
+                for line in axis.lines
+                if np.asarray(line.get_xdata()).size
+                and np.asarray(line.get_ydata()).size
+            ]
+            self.assertEqual(len(semantic_lines), 3)
+        self.assertTrue(all(axis.get_xlim()[0] <= 0 for axis in axes))
+        self.assertTrue(all(axis.get_ylim()[0] <= 0 for axis in axes))
         pd.testing.assert_frame_equal(data, original)
+
+    def test_spearman_cor_dotplot_2_can_omit_zero_reference_lines(self):
+        data = pd.DataFrame(
+            {
+                "x": [10.0, 11.0, 12.0, 13.0],
+                "y": [14.0, 13.0, 12.0, 11.0],
+                "left_group": pd.Categorical(["A", "A", "B", "B"]),
+                "right_group": pd.Categorical(["C", "D", "C", "D"]),
+            }
+        )
+
+        _, axes = adtl.spearman_cor_dotplot_2(
+            data,
+            "x",
+            "y",
+            "left_group",
+            "right_group",
+            figsize=(6, 3),
+            axes_lines=False,
+        )
+
+        self.assertIs(
+            inspect.signature(adtl.spearman_cor_dotplot_2)
+            .parameters["axes_lines"]
+            .default,
+            True,
+        )
+        for axis in axes:
+            semantic_lines = [
+                line
+                for line in axis.lines
+                if np.asarray(line.get_xdata()).size
+                and np.asarray(line.get_ydata()).size
+            ]
+            self.assertEqual(len(semantic_lines), 1)
+            np.testing.assert_allclose(semantic_lines[0].get_xdata(), [10.0, 13.0])
+            np.testing.assert_allclose(semantic_lines[0].get_ydata(), [14.0, 11.0])
+        self.assertTrue(all(axis.get_xlim()[0] > 0 for axis in axes))
+        self.assertTrue(all(axis.get_ylim()[0] > 0 for axis in axes))
 
     def test_rank_renderers_return_same_statistics_and_expected_artists(self):
         renderer_specs = [

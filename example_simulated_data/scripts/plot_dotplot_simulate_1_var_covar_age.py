@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 """Run correlation dotplots for the simulated Age covariate example."""
-# /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_simulated_data/scripts/plot_dotplot_simulate_1_var_covar_age.py
 ####################################
 import sys
 from collections import ChainMap
 from pathlib import Path
 import anndata
-from dataclasses import dataclass
 from datetime import datetime
 import logging
 import matplotlib
@@ -18,12 +16,15 @@ import matplotlib.pyplot as plt
  # CFG Configuration
 ####################################
 REPO_ROOT = Path(__file__).resolve().parent.parent
+PACKAGE_ROOT = REPO_ROOT.parent
 REPO_CONFIG_YAML_PATH = REPO_ROOT / "config" / "config.yaml"
 with REPO_CONFIG_YAML_PATH.open() as f:
     CFG = yaml.safe_load(f)
 
 # out and log path
-OUTPUT_DIR = Path(CFG["plot_dotplot_simulate_1_var_covar_age_params"]["repo_results_dir"])
+OUTPUT_DIR = PACKAGE_ROOT / Path(
+    CFG["plot_dotplot_simulate_1_var_covar_age_params"]["repo_results_dir"]
+)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 ####################################
 
@@ -61,46 +62,12 @@ logging.captureWarnings(True)
 logging.getLogger("py.warnings").propagate = True
 
 
-# dataclass G() ---------------------------------------------------------------------
-@dataclass
-class G():
-    """Class to hold global variables."""
-    WRITE_DIR = '/home/ubuntu/write/'
-    GITBENLEWIS_REPO_PARENT_DIR = '/home/ubuntu/projects/gitbenlewis/'
-    SCRIPTS_DIR = '../scripts/'
-    CONFIG_DIR = '../config/'
-    RESULTS_DIR = '../results/'
-    WRITE_CACHE = False
-    SAVE_OUTPUT = True
-    SAVE_OUTPUT_FIGURES = True
-# ------------- dataclass G()  --------------------------------------------------------
-
-
-########## import custom code libraries ################################################
-print(f"REPO_ROOT set to: {str(REPO_ROOT)}")
-if str(REPO_ROOT) not in sys.path:
-    sys.path.append(str(REPO_ROOT))
-try:
-    from code_library import adata_science_tools as adtl
-    print(f"Using adata_science_tools / adtl from {adtl.__file__}")
-except ImportError as e:
-    print(f"code_library adata_science_tools not available: {e}")
-    LOCAL_REPO_PARENT = REPO_ROOT.parent.parent
-    if str(LOCAL_REPO_PARENT) not in sys.path:
-        sys.path.append(str(LOCAL_REPO_PARENT))
-    import adata_science_tools as adtl
-    print(f"Using local adata_science_tools / adtl from {adtl.__file__}")
-try:
-    from code_library import run_GSEApy_wrapper as rgw
-    print(f"Using run_GSEApy_wrapper / rgw from {rgw.__file__}")
-except ImportError as e:
-    print(f"run_GSEApy_wrapper not available: {e}")
-try:
-    from code_library import RNAseq_analysis as rnaseq
-    print(f"Using RNAseq_analysis / rnaseq from {rnaseq.__file__}")
-except ImportError as e:
-    print(f"RNAseq_analysis not available: {e}")
-########################################################## import custom code libraries ################################################
+########## import local package ########################################################
+PACKAGE_PARENT = PACKAGE_ROOT.parent
+if str(PACKAGE_PARENT) not in sys.path:
+    sys.path.insert(0, str(PACKAGE_PARENT))
+import adata_science_tools as adtl
+########################################################################################
 
 
 if __name__ == "__main__":
@@ -110,7 +77,7 @@ if __name__ == "__main__":
     PLOT_CFG = CFG["plot_dotplot_simulate_1_var_covar_age_params"]
     DEFAULT_PARAMS = PLOT_CFG.get("default_params") or {}
     PLOT_RUNS = PLOT_CFG.get("plot_dotplot_simulate_1_var_covar_age__runs") or {}
-    SIM_OUTPUT_DIR = Path(SIM_CFG["repo_results_dir"])
+    SIM_OUTPUT_DIR = PACKAGE_ROOT / Path(SIM_CFG["repo_results_dir"])
 
     if not PLOT_RUNS:
         LOGGER.warning(
@@ -127,7 +94,7 @@ if __name__ == "__main__":
             LOGGER.info("Skipping plot for %s as per config.", run_key)
             continue
 
-        adata_h5ad_path = Path(
+        adata_h5ad_path = PACKAGE_ROOT / Path(
             chained_params.get(
                 "adata_h5ad_path",
                 SIM_OUTPUT_DIR / run_key / f"{run_key}.h5ad",
@@ -138,7 +105,9 @@ if __name__ == "__main__":
                 f"Run '{run_key}' expected AnnData input at {adata_h5ad_path}, but it does not exist."
             )
 
-        plot_path = Path(chained_params.get("file_name", OUTPUT_DIR / run_key / run_key))
+        plot_path = PACKAGE_ROOT / Path(
+            chained_params.get("file_name", OUTPUT_DIR / run_key / run_key)
+        )
         if plot_path.suffix == "":
             plot_path = plot_path.with_suffix(".png")
         plot_path.parent.mkdir(parents=True, exist_ok=True)
@@ -197,6 +166,8 @@ if __name__ == "__main__":
                 column_key_x=column_key_x,
                 column_key_y=column_key_y,
                 hue=hue,
+                xlabel=chained_params.get("xlabel"),
+                ylabel=chained_params.get("ylabel"),
                 show=bool(chained_params.get("show", False)),
                 axes_lines=bool(chained_params.get("axes_lines", False)),
                 figsize=tuple(chained_params.get("figsize", (12, 8))),
@@ -211,6 +182,8 @@ if __name__ == "__main__":
                 axes_title=axes_title,
                 subset_key=subset_key,
                 show_all_obs_fit=bool(chained_params.get("show_all_obs_fit", True)),
+                show_fit_legend=bool(chained_params.get("show_fit_legend", True)),
+                show_hue_legend=bool(chained_params.get("show_hue_legend", True)),
                 show_stats_text=bool(chained_params.get("show_stats_text", False)),
                 show_x_marginal_hist=bool(chained_params.get("show_x_marginal_hist", True)),
                 show_y_marginal_hist=bool(chained_params.get("show_y_marginal_hist", True)),
@@ -227,6 +200,31 @@ if __name__ == "__main__":
             LOGGER.info("corr_pvalue for %s: %s", run_key, corr_pvalue)
             LOGGER.info("axes returned for %s: %s", run_key, list(axes.keys()))
             LOGGER.info("fit returned for %s: %s", run_key, fit)
+
+            main_axes = axes["main"] if isinstance(axes, dict) else axes
+            fit_legend = main_axes.get_legend()
+            if fit_legend is not None:
+                if fit_legend_title := chained_params.get("fit_legend_title"):
+                    fit_legend.get_title().set_text(fit_legend_title)
+                if chained_params.get("humanize_group_legend_labels", False):
+                    label_prefix = f"{subset_key}="
+                    for label in fit_legend.get_texts():
+                        label_text = label.get_text()
+                        if label_text.startswith(label_prefix):
+                            group_value, separator, fit_stats = label_text.removeprefix(
+                                label_prefix
+                            ).partition("\n")
+                            label_text = group_value.replace("_", " ").title()
+                            if separator:
+                                label_text += f"\n{fit_stats}"
+                        label_text = (
+                            label_text.replace("Corr=", "r = ")
+                            .replace(",p=", "; p = ")
+                            .replace(",P=", "; p = ")
+                            .replace("E-", "e-")
+                            .replace("E+", "e+")
+                        )
+                        label.set_text(label_text)
 
             if bool(chained_params.get("save_plot", True)):
                 fig.savefig(

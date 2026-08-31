@@ -383,6 +383,9 @@ def _invoke_case(
             ],
             title="Simulated feature distributions by condition",
             xlabel="Simulated abundance",
+            legend_fontsize=8,
+            legend_loc="upper center",
+            legend_bbox_to_anchor=(0.5, -0.22),
             ncols=2,
             figsize=(9, 4.5),
             show=False,
@@ -404,6 +407,9 @@ def _invoke_case(
             add_mean_line=True,
             title="Collapsed distributions for feature groups",
             xlabel="Mean simulated abundance",
+            legend_fontsize=8,
+            legend_loc="upper center",
+            legend_bbox_to_anchor=(0.5, -0.22),
             ncols=2,
             figsize=(9, 4.5),
             show=False,
@@ -453,8 +459,11 @@ def _invoke_case(
                 dotplot_figure_plot_title="Welch t-test",
                 dotplot_subplot_xlabel="log2(case/control)",
                 dotplot_annotate=True,
-                dotplot_legend_bbox_to_anchor=(0.5, -0.04),
-                barh_legend_bbox_to_anchor=(0.5, -0.04),
+                sizes=(20, 500),
+                dotplot_sharex=True,
+                tight_layout_rect_arg=(0, 0.22, 1, 1),
+                dotplot_legend_bbox_to_anchor=(0.5, 0.11),
+                barh_legend_bbox_to_anchor=(0.5, 0.11),
             )
         if case_key == ("barh_dotplot_dotplot_column", "three_panel"):
             return renderer(
@@ -470,9 +479,14 @@ def _invoke_case(
                 dotplot_subplot_xlabel="log2(case/control)",
                 dotplot2_figure_plot_title="Mann–Whitney U",
                 dotplot2_subplot_xlabel="log2(case/control)",
-                barh_legend_bbox_to_anchor=(0.5, -0.04),
-                dotplot_legend_bbox_to_anchor=(0.5, -0.04),
-                dotplot2_legend_bbox_to_anchor=(0.5, -0.04),
+                sizes=(20, 500),
+                dotplot2_sizes=(20, 500),
+                dotplot_sharex=True,
+                dotplot2_sharex=True,
+                tight_layout_rect_arg=(0, 0.22, 1, 1),
+                barh_legend_bbox_to_anchor=(0.5, 0.11),
+                dotplot_legend_bbox_to_anchor=(0.5, 0.11),
+                dotplot2_legend_bbox_to_anchor=(0.5, 0.11),
             )
         if case_key == (
             "barh_dotplot_dotplot_dotplot_column",
@@ -493,10 +507,17 @@ def _invoke_case(
                 dotplot2_subplot_xlabel="log2(case/control)",
                 dotplot3_figure_plot_title="Age-adjusted OLS",
                 dotplot3_subplot_xlabel="Case coefficient",
-                barh_legend_bbox_to_anchor=(0.5, -0.04),
-                dotplot_legend_bbox_to_anchor=(0.5, -0.04),
-                dotplot2_legend_bbox_to_anchor=(0.5, -0.04),
-                dotplot3_legend_bbox_to_anchor=(0.5, -0.04),
+                sizes=(20, 500),
+                dotplot2_sizes=(20, 500),
+                dotplot3_sizes=(20, 500),
+                dotplot_sharex=True,
+                dotplot2_sharex=True,
+                dotplot3_sharex=True,
+                tight_layout_rect_arg=(0, 0.22, 1, 1),
+                barh_legend_bbox_to_anchor=(0.5, 0.11),
+                dotplot_legend_bbox_to_anchor=(0.5, 0.11),
+                dotplot2_legend_bbox_to_anchor=(0.5, 0.11),
+                dotplot3_legend_bbox_to_anchor=(0.5, 0.11),
             )
         if case_key == ("barh_4X_dotplot_column", "five_panel"):
             return renderer(
@@ -516,13 +537,22 @@ def _invoke_case(
                 dotplot3_subplot_xlabel="Case coefficient",
                 dotplot4_figure_plot_title="Age association",
                 dotplot4_subplot_xlabel="Age coefficient",
+                sizes=(20, 500),
+                dotplot2_sizes=(20, 500),
+                dotplot3_sizes=(20, 500),
+                dotplot4_sizes=(20, 500),
+                dotplot_sharex=True,
+                dotplot2_sharex=True,
+                dotplot3_sharex=True,
+                dotplot4_sharex=True,
                 use_single_dotplot_colormap=True,
                 use_tight_layout=True,
-                barh_legend_bbox_to_anchor=(0.5, -0.04),
-                dotplot_legend_bbox_to_anchor=(0.5, -0.04),
-                dotplot2_legend_bbox_to_anchor=(0.5, -0.04),
-                dotplot3_legend_bbox_to_anchor=(0.5, -0.04),
-                dotplot4_legend_bbox_to_anchor=(0.5, -0.04),
+                tight_layout_rect_arg=(0, 0.22, 1, 1),
+                barh_legend_bbox_to_anchor=(0.5, 0.11),
+                dotplot_legend_bbox_to_anchor=(0.5, 0.11),
+                dotplot2_legend_bbox_to_anchor=(0.5, 0.11),
+                dotplot3_legend_bbox_to_anchor=(0.5, 0.11),
+                dotplot4_legend_bbox_to_anchor=(0.5, 0.11),
             )
 
     if case_key == ("category_composition", "percent_annotated"):
@@ -543,6 +573,10 @@ def _invoke_case(
             xlabel="Sample group",
             ylabel="Composition (%)",
             legend_title="Category",
+            legend_kwargs={
+                "loc": "center left",
+                "bbox_to_anchor": (1.02, 0.5),
+            },
             figsize=(7, 5),
             show=False,
         )
@@ -586,6 +620,10 @@ def _invoke_case(
             ylabel="Precomputed effect",
             title="Continuous exposure–response curve",
             annotation="Precomputed curve and confidence interval",
+            legend_kwargs={
+                "loc": "center left",
+                "bbox_to_anchor": (1.02, 0.5),
+            },
             figsize=(7.5, 5.5),
             show=False,
         )
@@ -774,6 +812,9 @@ def _invoke_case(
             random_seed=2026,
             title="Collapsed feature-group values",
             ylabel="Mean simulated abundance",
+            legend_scope="figure",
+            legend_loc="center left",
+            legend_bbox_to_anchor=(1.01, 0.5),
             ncols=2,
             figsize=(9, 4.5),
             show=False,
@@ -808,8 +849,6 @@ def _invoke_case(
             x_reference_lines=[
                 {"value": 0.0, "label": "No group effect", "linestyle": "--"}
             ],
-            table_columns={"N": "n_total"},
-            table_formats={"N": "{value:.0f}"},
             xlabel="Case-versus-control OLS coefficient",
             title="Unadjusted and age-adjusted OLS estimates",
             figsize=(10, 5.5),
@@ -871,10 +910,13 @@ def _invoke_case(
             feature_label_fontsize=10,
             tick_label_fontsize=9,
             legend_fontsize=9,
+            sizes=(20, 700),
             dotplot_figure_plot_title="Welch t-test",
             dotplot_subplot_xlabel="log2(case/control)",
+            dotplot_set_xaxis_lims=(-0.5, 0.5),
             dotplot_annotate=True,
-            dotplot_legend_bbox_to_anchor=(0.5, -0.03),
+            dotplot_legend_bbox_to_anchor=(0.5, 0.07),
+            tight_layout_rect_arg=[0, 0.20, 1, 1],
             savefig=False,
         )
 
@@ -1120,7 +1162,7 @@ def _invoke_case(
         )
 
     if case_key == ("l2fc_dotplot_single", "single_axis"):
-        return renderer(
+        fig, axes = renderer(
             adata=inputs.column_adata,
             feature_list=list(FEATURES),
             feature_label_vars_col="feature_label",
@@ -1129,10 +1171,18 @@ def _invoke_case(
             feature_label_fontsize=10,
             tick_label_fontsize=9,
             legend_fontsize=9,
+            sizes=(20, 700),
             dotplot_subplot_xlabel="log2(case/control)",
+            dotplot_set_xaxis_lims=(-0.5, 0.5),
             dotplot_annotate=False,
-            dotplot_legend_bbox_to_anchor=(0.5, -0.08),
+            dotplot_legend_bbox_to_anchor=(0.5, 0.05),
+            tight_layout_rect_arg=(0, 0.23, 1, 1),
         )
+        axes.get_legend().set_bbox_to_anchor(
+            (0.5, 0.05),
+            transform=fig.transFigure,
+        )
+        return fig, axes
 
     if spec.name in {
         "l2fc_pvalue_dotplot_gex",
@@ -1154,8 +1204,8 @@ def _invoke_case(
             pvalue_cutoff=0.1,
             sizes=(30, 500),
             figsize=(7, 4.5),
-            bbox_to_anchor=(0.5, -0.28),
-            plot_title=f"Legacy API; use l2fc_dotplot_single ({spec.name})",
+            bbox_to_anchor=(0.5, -0.48),
+            plot_title="Legacy effect dotplot; use l2fc_dotplot_single",
             savefig=True,
             file_name=str(asset_path),
         )
@@ -1192,6 +1242,16 @@ def _invoke_case(
             xlabel="Visit",
             ylabel="Simulated outcome",
             title="Subject trajectories with an intentional visit gap",
+            color_legend_kwargs={
+                "bbox_to_anchor": (1.0, 1.0),
+                "borderaxespad": 0.0,
+                "fontsize": 9,
+            },
+            marker_legend_kwargs={
+                "bbox_to_anchor": (1.0, 0.55),
+                "borderaxespad": 0.0,
+                "fontsize": 9,
+            },
             figsize=(8.5, 5.5),
             show=False,
         )
@@ -1520,8 +1580,11 @@ def _invoke_case(
             legend_fontsize=9,
             barh_subplot_xlabel="Simulated abundance",
             dotplot_subplot_xlabel="log2(case/control)",
-            barh_legend_bbox_to_anchor=(0.5, -0.04),
-            dotplot_legend_bbox_to_anchor=(0.5, -0.04),
+            sizes=(20, 500),
+            dotplot_sharex=True,
+            tight_layout_rect_arg=(0, 0.22, 1, 1),
+            barh_legend_bbox_to_anchor=(0.5, 0.1),
+            dotplot_legend_bbox_to_anchor=(0.5, 0.1),
             savefig=False,
         )
 
@@ -1538,6 +1601,11 @@ def _invoke_case(
             figsize=(15, 5),
             sharex=False,
             sharey=False,
+            swarm_size=5,
+            suptitle_fontsize=18,
+            subplot_title_fontsize=14,
+            y_label_fontsize=11,
+            y_tick_label_fontsize=9,
         )
 
     if spec.name == "plot_heatmap":
@@ -1590,7 +1658,7 @@ def _invoke_case(
             extra_title="Method A versus Method C",
             x_label="Rank in method A",
             y_label="Rank in method C",
-            gridsize=8,
+            gridsize=3,
             figsize=(7, 5.5),
             show_diagonal=True,
         )
@@ -1739,6 +1807,7 @@ def _invoke_case(
             "condition",
             "batch",
             figsize=(11, 5),
+            axes_lines=False,
         )
 
     if case_key == ("timeseries_paired_datapoints", "faceted_time_series"):
@@ -1785,7 +1854,7 @@ def _invoke_case(
     if spec.name == "volcano_plot_generic":
         pooled = inputs.pooled_diff_results
         if case.case_id == "significance":
-            return renderer(
+            axes = renderer(
                 pooled,
                 l2fc_col="effect",
                 pvalue_col="pvalue",
@@ -1796,6 +1865,7 @@ def _invoke_case(
                 log2FoldChange_threshold=0.1,
                 pvalue_threshold=0.05,
                 xlimit=0.55,
+                ylimit=19.0,
                 figsize=(9, 6),
                 legend_bbox_to_anchor=(1.24, 1),
                 title_fontsize=14,
@@ -1812,6 +1882,18 @@ def _invoke_case(
                 save_deg_counts_csv=False,
                 savefig=False,
             )
+            lower_region_y = -np.log10(0.05) * 0.75
+            for annotation in axes.texts:
+                if annotation.get_gid() in {
+                    "volcano_threshold_region_lower_left",
+                    "volcano_threshold_region_lower_center",
+                    "volcano_threshold_region_lower_right",
+                }:
+                    annotation.set_y(lower_region_y)
+                    annotation.set_verticalalignment("top")
+                    annotation.set_fontsize(9)
+                    annotation.set_text(annotation.get_text().replace("\n", "  "))
+            return axes
         if case.case_id == "ranked_columns":
             return renderer(
                 pooled,
@@ -1824,6 +1906,7 @@ def _invoke_case(
                 log2FoldChange_threshold=0.1,
                 pvalue_threshold=0.05,
                 xlimit=0.55,
+                ylimit=19.0,
                 figsize=(9, 6),
                 legend_bbox_to_anchor=(1.24, 1),
                 title_fontsize=14,
@@ -1851,6 +1934,7 @@ def _invoke_case(
                 log2FoldChange_threshold=0.1,
                 pvalue_threshold=0.05,
                 xlimit=0.55,
+                ylimit=19.0,
                 figsize=(9, 6),
                 legend_bbox_to_anchor=(1.24, 1),
                 title_fontsize=14,

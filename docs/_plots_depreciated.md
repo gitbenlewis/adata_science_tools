@@ -95,4 +95,8 @@ Use this module only when maintaining older scripts that already depend on it. F
 
 ## Coverage note
 
-This page documents current source code. There do not appear to be dedicated tests for the legacy module.
+The deprecated call paths are exercised by the manifest-driven gallery and
+[`tests/test_plotting_gallery.py`](../tests/test_plotting_gallery.py), including
+one deterministic smoke image per deprecated renderer. Those checks verify that
+the compatibility paths still render; they are not full behavioral regression
+suites for every legacy argument.

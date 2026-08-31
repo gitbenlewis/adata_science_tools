@@ -507,6 +507,7 @@ def l2fc_dotplot_single(
     dotplot_legend_bbox_to_anchor: tuple[float, float] = (0.5, -0.05),
     dotplot_annotate: bool = False,
     dotplot_annotate_fontsize: int | None = None,
+    tight_layout_rect_arg: tuple[float, float, float, float] | None = None,
 ):
 ```
 
@@ -531,6 +532,9 @@ Important behavior:
 - Requires both the p-value column and the log2 fold-change column in `var_df`.
 - Points below the threshold are greyed out.
 - A red ring marks the `pvalue_cutoff_ring` threshold in `-log10(p)` space.
+- `tight_layout_rect_arg` optionally reserves figure space when applying
+  `tight_layout`; the default preserves the legacy conditional bottom margin
+  used when the legend is enabled.
 - The return value is `(fig, ax)`.
 
 ## `l2fc_dotplot_column`

@@ -128,6 +128,7 @@ class ColumnPlotRendererTests(unittest.TestCase):
                 feature_label_vars_col="feature_label",
                 figsize=(4, 3),
                 dotplot_legend=False,
+                tight_layout_rect_arg=(0, 0.25, 1, 1),
             )
 
         self.assertIsInstance(fig, Figure)
@@ -139,6 +140,12 @@ class ColumnPlotRendererTests(unittest.TestCase):
                 for collection in ax.collections
             )
         )
+        self.assertIsNone(
+            inspect.signature(adtl.l2fc_dotplot_single)
+            .parameters["tight_layout_rect_arg"]
+            .default
+        )
+        self.assertGreater(fig.subplotpars.bottom, 0.25)
         show.assert_not_called()
 
     def test_l2fc_dotplot_column_returns_one_axis_per_feature(self):

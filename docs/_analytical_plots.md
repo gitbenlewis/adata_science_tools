@@ -188,6 +188,7 @@ def continuous_effect_plot(
     ax: plt.Axes | None = None,
     figsize: tuple[float, float] = (6.5, 5),
     show: bool = True,
+    legend_kwargs: Mapping[str, Any] | None = None,
 ) -> tuple[
     plt.Figure,
     plt.Axes,
@@ -234,6 +235,8 @@ Categorized legend entries follow displayed category order. Labeled
 `y_reference_lines` follow them in configured reference order. Reference
 mappings use the shared schema: finite numeric `value` plus optional `label`,
 `color`, `linestyle`, `linewidth`, `alpha`, and `zorder`.
+`legend_kwargs` may be used to pass Matplotlib legend placement and styling
+arguments, including an external `bbox_to_anchor`.
 
 ### Example
 

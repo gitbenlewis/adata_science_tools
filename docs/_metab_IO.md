@@ -14,7 +14,9 @@ It is a high-level parser that:
 - optionally merges external obs and var metadata,
 - optionally writes output datasets to `.h5ad` plus CSV bundles.
 
-This page is based on the current implementation in [\_metab_IO.py](_io/_metab_IO.py). There do not appear to be direct `_io` regression tests for this function in this repo.
+This page is based on the current implementation in
+[`_metab_IO.py`](../_io/_metab_IO.py). There do not appear to be direct `_io`
+regression tests for this function in this repo.
 
 ## Full signature
 
@@ -31,7 +33,7 @@ def metabolon_excel_2_adata_h5ad_csv(
     output_filename: str | None ='dataset.metab',
     also_save_csvs: bool = True,
     logger: logging.Logger | None = None,
-    ######## new parameters for mergeing external metadata to adata.obs can be added here ########
+    ######## new parameters for merging external metadata to adata.obs can be added here ########
     merge_external_metadata: bool = False,
     save_plus_metadata_h5ad: bool = False,
     also_plus_metadata_save_csvs: bool = False,

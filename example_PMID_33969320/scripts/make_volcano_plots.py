@@ -76,19 +76,12 @@ class G():
     SAVE_OUTPUT_FIGURES=True
 # ------------- dataclass G()  --------------------------------------------------------
 
-########## import custom code libraries ###############################################
-import sys
-import os
-from pathlib import Path
-REPO_ROOT = Path(__file__).resolve().parent.parent
-# Use the current working directory instead of __file__
-#REPO_ROOT = Path(os.getcwd()).resolve().parent.parent
-print(f"REPO_ROOT set to: {str(REPO_ROOT)}")
-if str(REPO_ROOT) not in sys.path:
-    sys.path.append(str(REPO_ROOT))
-from code_library import adata_science_tools as adtl
-print(f"Using adata_science_tools / adtl from {adtl.__file__}")
-########################################################## import custom code libraries ################################################
+########## import local package ########################################################
+PACKAGE_PARENT = EXAMPLE_ROOT.parent.parent
+if str(PACKAGE_PARENT) not in sys.path:
+    sys.path.insert(0, str(PACKAGE_PARENT))
+import adata_science_tools as adtl
+########################################################################################
 
 
 #### paths and config dictionaries
@@ -205,6 +198,7 @@ if __name__ == "__main__":
                 only_label_hue_dots=chained_params.get("only_label_hue_dots",VOLCANO_PLOT_DEFAULTS.get("only_label_hue_dots", True)),
                 feature_label_col=chained_params.get("feature_label_col",VOLCANO_PLOT_DEFAULTS.get("feature_label_col", "gene_name")),
                 n_top_features=chained_params.get("n_top_features",VOLCANO_PLOT_DEFAULTS.get("n_top_features", 25)),
+                label_layout=chained_params.get("label_layout",VOLCANO_PLOT_DEFAULTS.get("label_layout", "inline")),
                 label_top_features_fontsize=chained_params.get("label_top_features_fontsize",VOLCANO_PLOT_DEFAULTS.get("label_top_features_fontsize", 16)),
                 label_features_char_limit=chained_params.get("label_features_char_limit",VOLCANO_PLOT_DEFAULTS.get("label_features_char_limit", None)),
                 dot_size_shrink_factor=chained_params.get("dot_size_shrink_factor",VOLCANO_PLOT_DEFAULTS.get("dot_size_shrink_factor", 10)),

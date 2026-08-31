@@ -1,3 +1,4 @@
+import inspect
 import sys
 import unittest
 from pathlib import Path
@@ -179,6 +180,11 @@ class GeneralPlotRendererTests(unittest.TestCase):
                 figsize=(5, 3),
                 sharex=False,
                 sharey=False,
+                swarm_size=4,
+                suptitle_fontsize=18,
+                subplot_title_fontsize=14,
+                y_label_fontsize=11,
+                y_tick_label_fontsize=9,
             )
 
         new_figures = sorted(set(plt.get_fignums()) - figures_before)
@@ -190,6 +196,25 @@ class GeneralPlotRendererTests(unittest.TestCase):
             [axis.get_title() for axis in fig.axes],
             ["First", "Second"],
         )
+        self.assertEqual(fig._suptitle.get_fontsize(), 18)
+        self.assertTrue(all(axis.title.get_fontsize() == 14 for axis in fig.axes))
+        self.assertEqual(fig.axes[0].yaxis.label.get_fontsize(), 11)
+        self.assertTrue(
+            all(label.get_fontsize() == 9 for label in fig.axes[0].get_yticklabels())
+        )
+        self.assertTrue(
+            all(
+                collection.get_sizes()[0] == 16
+                for axis in fig.axes
+                for collection in axis.collections[-1:]
+            )
+        )
+        signature = inspect.signature(adtl.plot_columns)
+        self.assertEqual(signature.parameters["swarm_size"].default, 10)
+        self.assertEqual(signature.parameters["suptitle_fontsize"].default, 40)
+        self.assertEqual(signature.parameters["subplot_title_fontsize"].default, 30)
+        self.assertEqual(signature.parameters["y_label_fontsize"].default, 30)
+        self.assertEqual(signature.parameters["y_tick_label_fontsize"].default, 24)
         self.assertTrue(all(len(axis.collections) >= 1 for axis in fig.axes))
         for axis in fig.axes:
             lower, upper = sorted(axis.get_ylim())

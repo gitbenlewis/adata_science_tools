@@ -180,14 +180,18 @@ In the current default baseline config:
 - `residual_stdev: 1.0` prevents subgroup points from falling exactly on their fitted lines.
 - `case_control_prob: 0.5` targets an approximately balanced case/control split.
 
-Run the example from the repo root with:
+The two `repo_results_dir` values in
+[`example_simulated_data/config/config.yaml`](../example_simulated_data/config/config.yaml)
+are repository-relative. Run the example from the repository root; outputs
+resolve under `example_simulated_data/results/`.
 
 ```bash
 python example_simulated_data/scripts/simulate_1_var_covar_age.py
 python example_simulated_data/scripts/plot_dotplot_simulate_1_var_covar_age.py
 ```
 
-The default baseline outputs are:
+The repository contains these baseline output snapshots; a rerun writes the
+same filenames below the configured output directories:
 
 - [`baseline.h5ad`](../example_simulated_data/results/simulate_1_var_covar_age/baseline/baseline.h5ad)
 - [`baseline.obs.csv`](../example_simulated_data/results/simulate_1_var_covar_age/baseline/baseline.obs.csv)

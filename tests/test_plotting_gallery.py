@@ -186,14 +186,15 @@ class PlottingGalleryTests(unittest.TestCase):
             "ranked_columns",
         )
         self.assertEqual(renderer.call_args.kwargs["n_top_features"], 10)
+        self.assertEqual(renderer.call_args.kwargs["ylimit"], 19.0)
 
-    def test_significance_volcano_gallery_requests_threshold_summaries(self):
+    def test_feature_class_volcano_gallery_reserves_label_headroom(self):
         spec = next(
             spec for spec in RENDERER_MANIFEST
             if spec.name == "volcano_plot_generic"
         )
         case = next(
-            case for case in spec.cases if case.case_id == "significance"
+            case for case in spec.cases if case.case_id == "feature_class"
         )
         inputs = mock.Mock(pooled_diff_results=mock.sentinel.pooled_results)
 
@@ -210,6 +211,41 @@ class PlottingGalleryTests(unittest.TestCase):
             )
 
         self.assertIs(result, mock.sentinel.axis)
+        self.assertEqual(renderer.call_args.kwargs["ylimit"], 19.0)
+
+    def test_significance_volcano_gallery_requests_threshold_summaries(self):
+        spec = next(
+            spec for spec in RENDERER_MANIFEST
+            if spec.name == "volcano_plot_generic"
+        )
+        case = next(
+            case for case in spec.cases if case.case_id == "significance"
+        )
+        inputs = mock.Mock(pooled_diff_results=mock.sentinel.pooled_results)
+        _, rendered_axis = plt.subplots()
+        lower_annotations = [
+            rendered_axis.text(
+                0,
+                0.5,
+                region,
+                gid=f"volcano_threshold_region_{region}",
+            )
+            for region in ("lower_left", "lower_center", "lower_right")
+        ]
+
+        with mock.patch.object(
+            gallery_module.adtl,
+            "volcano_plot_generic",
+            return_value=rendered_axis,
+        ) as renderer:
+            result = gallery_module._invoke_case(
+                spec,
+                case,
+                inputs,
+                Path("unused.png"),
+            )
+
+        self.assertIs(result, rendered_axis)
         self.assertIs(renderer.call_args.args[0], mock.sentinel.pooled_results)
         self.assertEqual(renderer.call_args.kwargs["pvalue_col"], "pvalue")
         self.assertEqual(
@@ -228,7 +264,136 @@ class PlottingGalleryTests(unittest.TestCase):
             renderer.call_args.kwargs["save_deg_counts_csv"],
             False,
         )
+        self.assertEqual(renderer.call_args.kwargs["ylimit"], 19.0)
+        for annotation in lower_annotations:
+            self.assertAlmostEqual(
+                annotation.get_position()[1],
+                -np.log10(0.05) * 0.75,
+            )
+            self.assertEqual(annotation.get_verticalalignment(), "top")
+            self.assertEqual(annotation.get_fontsize(), 9)
+            self.assertNotIn("\n", annotation.get_text())
         self.assertIs(renderer.call_args.kwargs["savefig"], False)
+
+    def test_maintained_gallery_uses_layout_focused_renderer_controls(self):
+        specs = {spec.name: spec for spec in RENDERER_MANIFEST}
+        inputs = mock.Mock(
+            independent=mock.sentinel.independent,
+            column_adata=mock.sentinel.column_adata,
+            composition=mock.sentinel.composition,
+            continuous=(
+                mock.sentinel.continuous_curve,
+                mock.sentinel.continuous_observed,
+            ),
+            forest_grouped=mock.sentinel.forest_grouped,
+            longitudinal=mock.sentinel.longitudinal,
+            ranked=(
+                {"method_a": ["a"], "method_c": ["a"]},
+                mock.sentinel.rank_two,
+                mock.sentinel.rank_three,
+            ),
+        )
+        inputs.independent_frame = pd.DataFrame(
+            {
+                "condition": pd.Categorical(["control", "case"]),
+                "age": [40.0, 50.0],
+                "feature_positive": [1.0, 2.0],
+                "feature_negative": [2.0, 1.0],
+            }
+        )
+
+        expected_controls = {
+            ("adata_histograms", "subgroup_kde"): {
+                "legend_loc": "upper center",
+                "legend_bbox_to_anchor": (0.5, -0.22),
+            },
+            ("adata_histograms", "feature_group_collapse"): {
+                "legend_loc": "upper center",
+                "legend_bbox_to_anchor": (0.5, -0.22),
+            },
+            ("category_composition", "percent_annotated"): {
+                "legend_kwargs": {
+                    "loc": "center left",
+                    "bbox_to_anchor": (1.02, 0.5),
+                },
+            },
+            ("continuous_effect_plot", "observed_categories"): {
+                "legend_kwargs": {
+                    "loc": "center left",
+                    "bbox_to_anchor": (1.02, 0.5),
+                },
+            },
+            ("datapoints", "feature_group_collapse"): {
+                "legend_scope": "figure",
+                "legend_loc": "center left",
+                "legend_bbox_to_anchor": (1.01, 0.5),
+            },
+            ("forest", "grouped_estimates"): {},
+            ("l2fc_dotplot_column", "multi_feature"): {
+                "sizes": (20, 700),
+                "dotplot_set_xaxis_lims": (-0.5, 0.5),
+                "tight_layout_rect_arg": [0, 0.20, 1, 1],
+                "dotplot_legend_bbox_to_anchor": (0.5, 0.07),
+            },
+            ("l2fc_dotplot_single", "single_axis"): {
+                "sizes": (20, 700),
+                "dotplot_set_xaxis_lims": (-0.5, 0.5),
+                "tight_layout_rect_arg": (0, 0.23, 1, 1),
+                "dotplot_legend_bbox_to_anchor": (0.5, 0.05),
+            },
+            ("longitudinal_trajectories", "markers_and_gaps"): {
+                "color_legend_kwargs": {
+                    "bbox_to_anchor": (1.0, 1.0),
+                    "borderaxespad": 0.0,
+                    "fontsize": 9,
+                },
+                "marker_legend_kwargs": {
+                    "bbox_to_anchor": (1.0, 0.55),
+                    "borderaxespad": 0.0,
+                    "fontsize": 9,
+                },
+            },
+            ("plot_columns", "multi_metric"): {
+                "swarm_size": 5,
+                "suptitle_fontsize": 18,
+                "subplot_title_fontsize": 14,
+                "y_label_fontsize": 11,
+                "y_tick_label_fontsize": 9,
+            },
+            ("plot_rank_heatmap", "rank_hexbin"): {"gridsize": 3},
+            ("spearman_cor_dotplot_2", "dual_hue"): {"axes_lines": False},
+        }
+
+        for (renderer_name, case_id), expected in expected_controls.items():
+            case = next(
+                case
+                for case in specs[renderer_name].cases
+                if case.case_id == case_id
+            )
+            if renderer_name == "l2fc_dotplot_single":
+                returned_figure, returned_axis = plt.subplots()
+                returned_axis.plot([], [], label="legend")
+                returned_axis.legend()
+                renderer_result = (returned_figure, returned_axis)
+            else:
+                renderer_result = plt.figure()
+            with self.subTest(renderer=renderer_name), mock.patch.object(
+                gallery_module.adtl,
+                renderer_name,
+                return_value=renderer_result,
+            ) as renderer:
+                gallery_module._invoke_case(
+                    specs[renderer_name],
+                    case,
+                    inputs,
+                    Path("unused.png"),
+                )
+
+                for key, value in expected.items():
+                    self.assertEqual(renderer.call_args.kwargs[key], value)
+                if (renderer_name, case_id) == ("forest", "grouped_estimates"):
+                    self.assertNotIn("table_columns", renderer.call_args.kwargs)
+                    self.assertNotIn("table_formats", renderer.call_args.kwargs)
 
     def test_difference_gallery_has_varied_and_combined_slopes(self):
         spec = next(

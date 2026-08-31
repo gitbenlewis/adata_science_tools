@@ -247,8 +247,14 @@ GSEApy_params:
   ######################################################################
   gseapy_dotplot_params:
     top_terms_2_plot: 20
+    display_fdr_cutoff: 0.05
+    display_fdr_floor: 0.0001
+    term_label_width: 42
+    min_height: 3.5
+    height_per_term: 0.4
+    dpi: 180
     figsize:
-      - 6
+      - 9
       - 8
     gseapy_run_dir_list:
 ############### l2fc ranking gsea runs ######################################################################
@@ -268,7 +274,7 @@ diff_datapoint_plots_params:
     include_stripplot: true
     figsize:
       - 15
-      - 25
+      - 18
     feature_label_vars_col: gene_name
     feature_label_char_limit: 30
     feature_labels_as_ylabels: true
@@ -276,18 +282,18 @@ diff_datapoint_plots_params:
     feature_label_fontsize: 24
     remove_group_tick_labels: true
     comparison_axis_label: ""
-    fig_title: "OLINK proteomics PMID_33969320 Top 15 Differential T-test Features\n\nby D0 - COVID over NOT | dotplot= l2fc, indep t-test pvalues"
-    fig_title_y: 0.96
+    fig_title: "OLINK proteomics: top 15 differential features\nD0 comparison; independent t-test"
+    fig_title_y: 0.995
     fig_title_fontsize: 30
-    distribution_title: OLINK norm units
-    distribution_axis_label: OLINK norm units
-    column_title_y: 0.89
+    distribution_title: Normalized Olink abundance
+    distribution_axis_label: Normalized Olink abundance
+    column_title_y: 0.9
     column_title_fontsize: 24
     tick_label_fontsize: 16
-    legend_fontsize: 24
+    legend_fontsize: 18
     numeric_tick_format: "{x:g}"
     axis_labels_outer_only: true
-    row_hspace: 0.4
+    row_hspace: 0.3
     col_wspace: 0.07
     width_ratios:
       - 1.5
@@ -304,26 +310,26 @@ diff_datapoint_plots_params:
     share_distribution_axis: false
     distribution_legend: true
     distribution_legend_loc: lower center
-    distribution_legend_bbox_to_anchor: [0.5, 0.01]
+    distribution_legend_bbox_to_anchor: [0.5, -0.04]
     distribution_legend_frameon: true
     savefig: true
     ascending: true
     top_n_features: 15
     effect_panel_defaults:
-      title: "l2fc: COVID (Positive/negative)"
+      title: "COVID vs NOT: effect and significance"
       effect_mode: pvalue
       effect_column: l2fc_COVID_over_NOT_D0
-      effect_axis_label: log2fc COVID over NOT D0
+      effect_axis_label: "log2 fold change: COVID vs NOT at D0"
       pvalue_cutoff: 0.1
       effect_reference_value: 0
       share_effect_x: true
       pvalue_sizes: [20, 2000]
       legend: true
       legend_bins: 3
-      legend_bbox_to_anchor: [0.5, 0.01]
+      legend_bbox_to_anchor: [0.5, -0.04]
       annotate: true
-      annotate_xy: [0.8, 1.2]
-      annotate_fontsize: 16
+      annotate_xy: [0.98, 0.82]
+      annotate_fontsize: 11
   datapoints_effect_panels_column_calls:
     COVID_over_NOT_D0:
       run: true
@@ -333,8 +339,8 @@ diff_datapoint_plots_params:
         - pvalue_column: ttest_ind_pvals_COVID_over_NOT_D0
           pvalue_label: "-log10(RAW independent t-test p-value)"
           annotate_labels:
-            - 'l2fc: '
-            - 'RAW pvalue: '
+            - 'log2 fold change: '
+            - 'raw p-value: '
     COVID_over_NOT_D0_FDR:
       run: true
       file_name: example_PMID_33969320/results/figures/diff_datapoint_plots/COVID_over_NOT_D0_barh_l2fc_dotplot_FDR.png
@@ -343,8 +349,8 @@ diff_datapoint_plots_params:
         - pvalue_column: ttest_ind_pvals_FDR_COVID_over_NOT_D0
           pvalue_label: "-log10(FDR-adjusted independent t-test p-value)"
           annotate_labels:
-            - 'l2fc: '
-            - 'FDR pvalue: '
+            - 'log2 fold change: '
+            - 'FDR-adjusted p-value: '
 
 volcano_plot_params:
   repo_results_dir: example_PMID_33969320/results/figures/volcano_plots/
@@ -354,7 +360,10 @@ volcano_plot_params:
       - 15
       - 10
     legend_fontsize: 14
+    legend_bbox_to_anchor: [1.3, 1]
     label_top_features: true
+    label_layout: ranked_columns
+    n_top_features: 10
     only_label_hue_dots: true
     label_top_features_fontsize: 14
     label_features_char_limit: 40
@@ -372,26 +381,26 @@ volcano_plot_params:
       adata_h5ad_path: example_PMID_33969320/results/datasets/example_dataset_PMID_33969320/input/olink_PMID_33969320.input.ann.h5ad
       file_name: example_PMID_33969320/results/figures/volcano_plots/COVID_over_NOT_D0_volcano.png
       l2fc_col: l2fc_COVID_over_NOT_D0
-      set_xlabel: log2fc COVID over NOT D0
+      set_xlabel: "log2 fold change: COVID vs NOT at D0"
       xlimit: 5
       pvalue_col: ttest_ind_pvals_COVID_over_NOT_D0
       set_ylabel: -log10(Raw p-value)
       ylimit: 60
       pvalue_threshold: 0.05
       log2FoldChange_threshold: 1
-      title_text: OLINK PMID_33969320 D0 COVID over NOT
-      comparison_label: "RAW p-value : t-test"
+      title_text: "OLINK proteomics at D0: COVID vs NOT"
+      comparison_label: "Raw independent t-test p-value"
     COVID_over_NOT_D0_ttest_FDR:
       run: true
       adata_h5ad_path: example_PMID_33969320/results/datasets/example_dataset_PMID_33969320/input/olink_PMID_33969320.input.ann.h5ad
       file_name: example_PMID_33969320/results/figures/volcano_plots/COVID_over_NOT_D0_volcano_FDR.png
       l2fc_col: l2fc_COVID_over_NOT_D0
-      set_xlabel: log2fc COVID over NOT D0
+      set_xlabel: "log2 fold change: COVID vs NOT at D0"
       xlimit: 5
       pvalue_col: ttest_ind_pvals_FDR_COVID_over_NOT_D0
       set_ylabel: -log10(FDR p-value)
       ylimit: 60
       pvalue_threshold: 0.05
       log2FoldChange_threshold: 1
-      title_text: OLINK PMID_33969320 D0 COVID over NOT
-      comparison_label: "FDR p-value : t-test"
+      title_text: "OLINK proteomics at D0: COVID vs NOT"
+      comparison_label: "FDR-adjusted independent t-test p-value"

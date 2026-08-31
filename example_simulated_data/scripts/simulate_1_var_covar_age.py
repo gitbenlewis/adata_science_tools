@@ -1,24 +1,24 @@
 #!/usr/bin/env python3
 """Run covariate expectation correction workflows configured for this repo."""
-# /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_simulated_data/scripts/simulate_1_var_covar_age.py
 ####################################
 import sys
 from collections import ChainMap
 from pathlib import Path
-import anndata
-from dataclasses import dataclass
 from datetime import datetime
 import logging
 import yaml
  # CFG Configuration
 ####################################
 REPO_ROOT = Path(__file__).resolve().parent.parent
+PACKAGE_ROOT = REPO_ROOT.parent
 REPO_CONFIG_YAML_PATH = REPO_ROOT / "config" / "config.yaml"
 with REPO_CONFIG_YAML_PATH.open() as f:
     CFG = yaml.safe_load(f)
 
 # out and log path
-OUTPUT_DIR = Path(CFG["simulate_1_var_covar_age_params"]["repo_results_dir"])
+OUTPUT_DIR = PACKAGE_ROOT / Path(
+    CFG["simulate_1_var_covar_age_params"]["repo_results_dir"]
+)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 ####################################
 
@@ -56,48 +56,13 @@ logging.captureWarnings(True)
 logging.getLogger("py.warnings").propagate = True
 
 
-# dataclass G() ---------------------------------------------------------------------
-@dataclass
-class G():
-    """Class to hold global variables."""
-    WRITE_DIR = '/home/ubuntu/write/'
-    GITBENLEWIS_REPO_PARENT_DIR = '/home/ubuntu/projects/gitbenlewis/'
-    SCRIPTS_DIR = '../scripts/'
-    CONFIG_DIR = '../config/'
-    RESULTS_DIR = '../results/'
-    WRITE_CACHE = False
-    SAVE_OUTPUT = True
-    SAVE_OUTPUT_FIGURES = True
-# ------------- dataclass G()  --------------------------------------------------------
-
-
-########## import custom code libraries ################################################
-print(f"REPO_ROOT set to: {str(REPO_ROOT)}")
-if str(REPO_ROOT) not in sys.path:
-    sys.path.append(str(REPO_ROOT))
-try:
-    from code_library import adata_science_tools as adtl
-    from code_library.adata_science_tools._simulate_data import sim_covar_dependent_dataset
-    print(f"Using adata_science_tools / adtl from {adtl.__file__}")
-except ImportError as e:
-    print(f"code_library adata_science_tools not available: {e}")
-    LOCAL_REPO_PARENT = REPO_ROOT.parent.parent
-    if str(LOCAL_REPO_PARENT) not in sys.path:
-        sys.path.append(str(LOCAL_REPO_PARENT))
-    import adata_science_tools as adtl
-    from adata_science_tools._simulate_data import sim_covar_dependent_dataset
-    print(f"Using local adata_science_tools / adtl from {adtl.__file__}")
-try:
-    from code_library import run_GSEApy_wrapper as rgw
-    print(f"Using run_GSEApy_wrapper / rgw from {rgw.__file__}")
-except ImportError as e:
-    print(f"run_GSEApy_wrapper not available: {e}")
-try:
-    from code_library import RNAseq_analysis as rnaseq
-    print(f"Using RNAseq_analysis / rnaseq from {rnaseq.__file__}")
-except ImportError as e:
-    print(f"RNAseq_analysis not available: {e}")
-########################################################## import custom code libraries ################################################
+########## import local package ########################################################
+PACKAGE_PARENT = PACKAGE_ROOT.parent
+if str(PACKAGE_PARENT) not in sys.path:
+    sys.path.insert(0, str(PACKAGE_PARENT))
+import adata_science_tools as adtl
+from adata_science_tools._simulate_data import sim_covar_dependent_dataset
+########################################################################################
 
 
 
@@ -160,12 +125,16 @@ if __name__ == "__main__":
                 f"Run '{run_key}' is fixed to Age plus case_control simulation and cannot override obs_covar_dist_params directly."
             )
 
-        output_path = Path(chained_params.get("output_path", OUTPUT_DIR / run_key / run_key))
+        output_path = PACKAGE_ROOT / Path(
+            chained_params.get("output_path", OUTPUT_DIR / run_key / run_key)
+        )
         output_path.parent.mkdir(parents=True, exist_ok=True)
         save_obs_df = bool(chained_params.get("save_obs_df", False))
         save_adata_dataset = bool(chained_params.get("save_adata_dataset", True))
         also_return_adata = bool(chained_params.get("also_return_adata", True))
         save_obs_df_path = chained_params.get("save_obs_df_path")
+        if save_obs_df_path is not None:
+            save_obs_df_path = PACKAGE_ROOT / Path(save_obs_df_path)
         if save_obs_df and save_obs_df_path is None:
             save_obs_df_path = output_path.with_name(f"{output_path.name}.obs_only")
 

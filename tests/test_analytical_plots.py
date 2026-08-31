@@ -175,6 +175,7 @@ class AnalyticalPlotTests(unittest.TestCase):
                 "ax",
                 "figsize",
                 "show",
+                "legend_kwargs",
             ],
         )
         self.assertEqual(
@@ -563,6 +564,7 @@ class AnalyticalPlotTests(unittest.TestCase):
             ylims=(0.5, 2.5),
             annotation="Precomputed",
             annotation_xy=(0.1, 0.8),
+            legend_kwargs={"title": "Series", "frameon": False},
             show=False,
         )
         self.assertEqual(plotted["observed_category"].tolist(), ["a", "a", "b"])
@@ -574,6 +576,8 @@ class AnalyticalPlotTests(unittest.TestCase):
             [text.get_text() for text in ax.get_legend().get_texts()],
             ["Type A", "Type B", "Null"],
         )
+        self.assertEqual(ax.get_legend().get_title().get_text(), "Series")
+        self.assertFalse(ax.get_legend().get_frame_on())
         np.testing.assert_allclose(ax.get_ylim(), (0.5, 2.5))
         annotation = [text for text in ax.texts if text.get_text() == "Precomputed"][0]
         np.testing.assert_allclose(annotation.get_position(), (0.1, 0.8))

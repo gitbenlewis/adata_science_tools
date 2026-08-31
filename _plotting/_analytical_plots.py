@@ -709,6 +709,7 @@ def continuous_effect_plot(
     ax: plt.Axes | None = None,
     figsize: tuple[float, float] = (6.5, 5),
     show: bool = True,
+    legend_kwargs: Mapping[str, Any] | None = None,
 ) -> tuple[
     plt.Figure,
     plt.Axes,
@@ -730,6 +731,8 @@ def continuous_effect_plot(
         raise ValueError("'xscale' must be 'linear' or 'log'.")
     if ax is not None and not isinstance(ax, plt.Axes):
         raise TypeError("'ax' must be a Matplotlib Axes or None.")
+    if legend_kwargs is not None and not isinstance(legend_kwargs, Mapping):
+        raise ValueError("'legend_kwargs' must be a mapping.")
     try:
         line_color = mcolors.to_rgba(line_color)
     except (TypeError, ValueError) as exc:
@@ -954,7 +957,11 @@ def continuous_effect_plot(
                 legend_handles.append(artist)
                 legend_labels.append(str(label))
         if legend_handles:
-            ax.legend(legend_handles, legend_labels)
+            ax.legend(
+                legend_handles,
+                legend_labels,
+                **dict(legend_kwargs or {}),
+            )
 
         ax.set_xlabel(x if xlabel is None else xlabel)
         ax.set_ylabel(estimate if ylabel is None else ylabel)

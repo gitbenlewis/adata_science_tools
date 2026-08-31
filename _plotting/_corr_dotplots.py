@@ -1565,7 +1565,15 @@ def spearman_cor_dotplot(*args, **kwargs):
     return corr_dotplot(**kwargs)
 
 
-def spearman_cor_dotplot_2(df, column_key_x, column_key_y, hue, hue_right, figsize=(20, 10)):
+def spearman_cor_dotplot_2(
+    df,
+    column_key_x,
+    column_key_y,
+    hue,
+    hue_right,
+    figsize=(20, 10),
+    axes_lines=True,
+):
     df = df.loc[(df[column_key_x].isna() == False) & (df[column_key_y].isna() == False), :].copy()
     df[hue] = df[hue].cat.remove_unused_categories()
     df[hue_right] = df[hue_right].cat.remove_unused_categories()
@@ -1600,13 +1608,18 @@ def spearman_cor_dotplot_2(df, column_key_x, column_key_y, hue, hue_right, figsi
     plt.tight_layout()
 
     fit = linregress(df[column_key_x], df[column_key_y])
-    axes[0].axline(xy1=(0, fit.intercept), slope=fit.slope)
-    axes[1].axline(xy1=(0, fit.intercept), slope=fit.slope)
-
-    axes[0].axhline(0, color='black')
-    axes[0].axvline(0, color='black')
-    axes[1].axhline(0, color='black')
-    axes[1].axvline(0, color='black')
+    if axes_lines:
+        axes[0].axline(xy1=(0, fit.intercept), slope=fit.slope)
+        axes[1].axline(xy1=(0, fit.intercept), slope=fit.slope)
+        axes[0].axhline(0, color='black')
+        axes[0].axvline(0, color='black')
+        axes[1].axhline(0, color='black')
+        axes[1].axvline(0, color='black')
+    else:
+        x_endpoints = [df[column_key_x].min(), df[column_key_x].max()]
+        y_endpoints = [fit.intercept + fit.slope * x for x in x_endpoints]
+        axes[0].plot(x_endpoints, y_endpoints)
+        axes[1].plot(x_endpoints, y_endpoints)
 
     figure1.suptitle(
         f"{column_key_y} (Y-axis) and {column_key_x} (X-axis)\nSpearman Correlation = {round(XY_spearman, 3)}\n"

@@ -13,7 +13,20 @@ Use `plot_columns(...)` to render a one-row panel of grouped bar plots with swar
 ### Full signature
 
 ```python
-def plot_columns(df,columns2plot,columns2plot_titles,y_groupby,figsize,sharex,sharey):
+def plot_columns(
+    df,
+    columns2plot,
+    columns2plot_titles,
+    y_groupby,
+    figsize,
+    sharex,
+    sharey,
+    swarm_size=10,
+    suptitle_fontsize=40,
+    subplot_title_fontsize=30,
+    y_label_fontsize=30,
+    y_tick_label_fontsize=24,
+):
 ```
 
 ```python
@@ -40,6 +53,8 @@ adtl.plot_columns(
 - `columns2plot` and `columns2plot_titles` are matched positionally.
 - `y_groupby` is used as the grouping variable on the y-axis in every subplot.
 - Each subplot uses `sns.barplot(...)` plus a `sns.swarmplot(...)` overlay.
+- Marker and title/label font sizes can be reduced for compact layouts with
+  `swarm_size` and the four appended font-size controls.
 - The color palette comes from `adata_science_tools._plotting.palettes.godsnot_102`.
 - The function calls `plt.tight_layout()` while building the figure.
 

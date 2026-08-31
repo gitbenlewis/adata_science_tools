@@ -8,7 +8,7 @@ This directory holds module-level documentation for public `adata_science_tools`
 - [`_analytical_plots.md`](_analytical_plots.md): precomputed Kaplan–Meier and continuous-effect renderers with auditable returned tables.
 - [`_column_plots.md`](_column_plots.md): horizontal bar plots, log2 fold-change dotplots, and multi-panel composite figure builders.
 - [`_corr_dotplots.md`](_corr_dotplots.md): correlation scatterplots, subgroup fit overlays, and rank-comparison helpers.
-- [`_plotting_updates.md`](_plotting_updates.md): additive plotting-roadmap controls and compatibility summary.
+- [`_plotting_updates.md`](_plotting_updates.md): historical July 2026 plotting-roadmap controls and compatibility summary.
 - [`_tabular_plots.md`](_tabular_plots.md): ranked waterfall, category composition, and supplied-residual diagnostic plots.
 - [`_datapoints.md`](_datapoints.md): unpaired variable-level datapoint plots with obs/var filters, grouped variables, optional box/violin overlays, and metric legends.
 - [`_diff_test.md`](_diff_test.md): differential testing across independent, paired, and nested paired group comparisons, including CSV-backed input workflows.
@@ -23,10 +23,11 @@ This directory holds module-level documentation for public `adata_science_tools`
 - [`_plots.md`](_plots.md): volcano plots, QQ plots for p-values, and paired time-series datapoint plots.
 - [`_plots_depreciated.md`](_plots_depreciated.md): legacy plotting APIs kept for backward compatibility, with preferred modern replacements.
 - [`plotting_gallery.md`](plotting_gallery.md): deterministic visual examples for maintained, compatibility, and deprecated plotting renderers, with analysis provenance and known coverage limits.
-- [`_preprocessing.md`](_preprocessing.md): row-wise AnnData preprocessing helpers, including paired target-vs-reference transforms.
+- [`_preprocessing.md`](_preprocessing.md): row- and column-wise AnnData preprocessing helpers, including observation filters, paired transforms, and CSV-defined derived variables.
 - [`_row_plots.md`](_row_plots.md): grouped bar-plus-swarm row layouts from plain `DataFrame` input.
 - [`_simulate_data.md`](_simulate_data.md): covariate-driven dataset simulation helpers plus the config-driven example workflow used in `example_simulated_data/`.
 - [`_somascan_IO.md`](_somascan_IO.md): SomaScan `.adat` ingestion, sample-type cleanup, index normalization, and SomaScan-specific DataFrame export helpers.
+- [`_tools.md`](_tools.md): grouped average feature-expression helper, including layer, raw, log, and scaling controls.
 - [`_utils.md`](_utils.md): plotting helper functions for previewing and optionally saving color palettes.
 - [`_venn_plots.md`](_venn_plots.md): public two-set, three-set, and gene-set enrichment Venn renderers, including the retained legacy enrichment API.
 - [`palettes.md`](palettes.md): named palette constants exposed as `adata_science_tools.palettes`.

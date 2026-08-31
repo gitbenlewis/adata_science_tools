@@ -27,6 +27,8 @@ def test_example_pmid_volcano_count_defaults_preserve_current_outputs():
     assert defaults["show_deg_counts_in_legend"] is True
     assert defaults["label_threshold_regions"] is False
     assert defaults["save_deg_counts_csv"] is False
+    assert defaults["label_layout"] == "ranked_columns"
+    assert defaults["n_top_features"] == 10
 
 
 def test_example_pmid_volcano_forwards_count_controls_once():
@@ -50,6 +52,7 @@ def test_example_pmid_volcano_forwards_count_controls_once():
     )
     for control in count_controls:
         assert keyword_names.count(control) == 1
+    assert keyword_names.count("label_layout") == 1
 
     keyword_values = {
         keyword.arg: ast.unparse(keyword.value) for keyword in calls[0].keywords
@@ -64,6 +67,10 @@ def test_example_pmid_volcano_forwards_count_controls_once():
     assert keyword_values["save_deg_counts_csv"] == (
         "G.SAVE_OUTPUT_FIGURES and "
         "chained_params.get('save_deg_counts_csv', False)"
+    )
+    assert keyword_values["label_layout"] == (
+        "chained_params.get('label_layout', "
+        "VOLCANO_PLOT_DEFAULTS.get('label_layout', 'inline'))"
     )
     assert script_source.count(
         'deg_count_types = chained_params.get("deg_count_types")'

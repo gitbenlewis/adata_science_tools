@@ -1,6 +1,14 @@
-# Plotting API updates
+# Historical plotting-roadmap update (July 2026)
 
-This release implements the public plotting roadmap additively. Existing function defaults and tuple shapes remain unchanged unless an explicit new keyword requests new behavior.
+This page records the plotting roadmap implemented on July 22–23, 2026. It is
+a historical compatibility note, not an exhaustive inventory of the current
+plotting signatures. Use the API-specific pages in the
+[`docs` index](README.md) and the current Python signatures for present-day
+usage.
+
+That roadmap was implemented additively. Existing function defaults and tuple
+shapes remained unchanged unless an explicit new keyword requested new
+behavior.
 
 ## Compatibility summary
 
@@ -12,13 +20,15 @@ This release implements the public plotting roadmap additively. Existing functio
 | `ranked_waterfall` | New API | Stable ranked bars and returned ranked rows |
 | `category_composition` | New API | Ordered stacked composition and returned wide table |
 | `residual_diagnostic` | New API | Supplied-residual coordinates without model fitting |
-| `longitudinal_trajectories` | New API; `paired_datapoints` remains unchanged | Multi-timepoint exact/display values and auditable segment tuples |
+| `longitudinal_trajectories` | New API; `paired_datapoints` was unchanged by this roadmap | Multi-timepoint exact/display values and auditable segment tuples |
 | `kaplan_meier_plot` | New precomputed-data API | Supplied post-step curves, confidence bands, censors, aligned risk table, and normalized audit tables without survival fitting |
 | `continuous_effect_plot` | New precomputed-data API | Supplied effect curve, confidence band, optional styled observations, references, external-axis composition, and normalized audit tables without model fitting |
 
 ## Existing-function argument classification
 
-Every argument is classified below. “Existing” means the argument and default predate this roadmap; “new” means this release added the keyword. A type expansion is called out separately.
+Every argument in the July 2026 roadmap is classified below. “Existing” means
+the argument and default predated that roadmap; “new” means the roadmap added
+the keyword. Later additions are intentionally not backfilled here.
 
 ### `corr_dotplot`
 

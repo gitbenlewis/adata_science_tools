@@ -1,17 +1,136 @@
 # `_preprocessing`
 
-Preprocessing helpers for transforming and filtering `AnnData` objects.
+Preprocessing helpers for filtering observations and deriving new observation
+or variable matrices from `AnnData` objects. The implementations live in
+[`_adata_row_operations.py`](../_preprocessing/_adata_row_operations.py) and
+[`_adata_column_operations.py`](../_preprocessing/_adata_column_operations.py).
+They are re-exported from both `adata_science_tools._preprocessing` and the
+top-level package.
 
-The current row-operation APIs live in
-[`_preprocessing/_adata_row_operations.py`](../_preprocessing/_adata_row_operations.py)
-and are re-exported from `adata_science_tools._preprocessing`.
+## Public entry points
 
-## Main row-operation entry points
+Row operations:
 
 - `CFG_filter_adata_by_obs`
 - `compute_paired_mean_adata`
 - `compute_paired_difference_adata`
 - `ref_vs_target_adata`
+
+Column operations:
+
+- `compute_var_ratios_sums_diffs_adata`
+- `compute_var_ratios_sums_diffs_adata_multiple_layers`
+
+## `CFG_filter_adata_by_obs`
+
+`CFG_filter_adata_by_obs(...)` filters observations from explicit arguments or
+from the equivalent keys in a YAML-derived dataset dictionary.
+
+### Full signature
+
+```python
+def CFG_filter_adata_by_obs(
+    adata: ad.AnnData,
+    dataset_cfg: dict | None = None,
+    filter_obs_boolean_column: str | None = None,
+    filter_obs_column_key: str | None = None,
+    filter_obs_column_values_list: Sequence | None = None,
+    copy: bool = True,
+    logger: logging.Logger | None = None,
+    **kwargs,
+) -> ad.AnnData:
+```
+
+```python
+filtered = adtl.CFG_filter_adata_by_obs(
+    adata,
+    filter_obs_boolean_column="include_sample",
+    filter_obs_column_key="cohort",
+    filter_obs_column_values_list=["discovery", "validation"],
+)
+```
+
+When `dataset_cfg` contains a filter key, its value takes precedence over the
+matching explicit argument. Boolean-column and value-list filters are applied
+in sequence with AND semantics. Value matching first attempts numeric
+comparison and falls back to string comparison. Missing requested columns raise
+`KeyError`.
+
+If no complete filter is configured, `copy=True` returns an unchanged copy and
+`copy=False` returns the original object. With active filtering,
+`copy=False` returns an `AnnData` view rather than forcing a copy.
+
+## `compute_paired_mean_adata` and `compute_paired_difference_adata`
+
+These older helpers sort two selected observation groups by a pairing column,
+then return their elementwise mean or signed difference.
+
+### Full signatures
+
+```python
+def compute_paired_mean_adata(
+    adata,
+    layer="RFU",
+    pair_by_key="AnimalID_Tattoo",
+    groupby_key="Treatment_unique",
+    datapoint_1="drug78hr",
+    datapoint_2="drug30hr",
+    debug_mode=True,
+    layers_to_compute=None,
+    base_layer=None,
+):
+
+def compute_paired_difference_adata(
+    adata,
+    layer="RFU",
+    pair_by_key="AnimalID_Tattoo",
+    groupby_key="Treatment_unique",
+    datapoint_1="drug78hr",
+    datapoint_2="drug30hr",
+    debug_mode=True,
+    layers_to_compute=None,
+    base_layer=None,
+):
+```
+
+```python
+paired_mean, paired_mean_df = adtl.compute_paired_mean_adata(
+    adata,
+    layer=None,
+    pair_by_key="subject_id",
+    groupby_key="visit",
+    datapoint_1="post",
+    datapoint_2="pre",
+    debug_mode=False,
+)
+
+paired_difference, paired_difference_df = adtl.compute_paired_difference_adata(
+    adata,
+    layer=None,
+    pair_by_key="subject_id",
+    groupby_key="visit",
+    datapoint_1="post",
+    datapoint_2="pre",
+    debug_mode=False,
+)
+```
+
+The mean is `(datapoint_1 + datapoint_2) / 2`; the difference is
+`datapoint_1 - datapoint_2`. Each function always returns an `AnnData` and the
+base result as a `DataFrame`. The returned variable metadata is copied from the
+input.
+
+`layer=None` uses `adata.X`. To compute more than one source, pass a non-empty
+`layers_to_compute` list containing layer names or `None` for `adata.X`.
+`base_layer` selects which result becomes `.X` and must be present in that list;
+named results are also stored in matching output layers.
+
+These helpers align rows only by sorting the selected groups on categorical
+codes. They do not validate duplicate, missing, or unmatched pair IDs, so use
+them only when each selected group contains exactly one row per pair. Prefer
+`ref_vs_target_adata(...)` below when explicit one-to-one validation and
+unmatched-pair provenance are required. The runtime default is
+`debug_mode=True`; set it to `False` outside an interactive notebook.
 
 ## `ref_vs_target_adata`
 
@@ -342,3 +461,92 @@ result_adata, result_df = adtl.ref_vs_target_adata(
     return_df=True,
 )
 ```
+
+## `compute_var_ratios_sums_diffs_adata`
+
+`compute_var_ratios_sums_diffs_adata(...)` reads a CSV specification and adds
+derived variables along the feature axis.
+
+### Full signature
+
+```python
+def compute_var_ratios_sums_diffs_adata(
+    adata: ad.AnnData,
+    derived_variables_csv_file: str = "derived_variables_csv_file.csv",
+    numerator_var_names_col: str = "numerator_var_names",
+    denominator_var_names_col: str = "denominator_var_names",
+    new_var_names_col: str = "new_var_names",
+    var_meta_data_cols_list: list[str] | None = None,
+    layer: str | None = None,
+    use_raw: bool = False,
+    transform: str = "linear",
+    return_new_adata_only: bool = False,
+    logger: logging.Logger | None = None,
+    log_level="INFO",
+):
+```
+
+The CSV requires the numerator-expression and new-name columns. The denominator
+column is optional and is treated as empty when absent. Expressions may combine
+feature names with `+` and `-` signs:
+
+| `numerator_var_names` | `denominator_var_names` | `new_var_names` | Result |
+| --- | --- | --- | --- |
+| `feature_a+feature_b` | empty | `feature_sum` | `feature_a + feature_b` |
+| `feature_a-feature_b` | empty | `feature_difference` | `feature_a - feature_b` |
+| `feature_a` | `feature_b` | `feature_ratio` | `feature_a / feature_b` |
+
+```python
+with_derived_variables = adtl.compute_var_ratios_sums_diffs_adata(
+    adata,
+    derived_variables_csv_file="config/derived_variables.csv",
+    layer="RFU",
+    var_meta_data_cols_list=["display_name", "feature_class"],
+)
+```
+
+`transform="linear"` performs the configured arithmetic directly.
+`transform="ln"` assumes the selected values are natural-log transformed: it
+returns to linear space for sums and differences, then logs the derived result;
+ratios are returned as the difference between logged numerator and denominator.
+Non-positive derived values become missing when a logarithm is required.
+
+By default, the derived variables are concatenated to the input along the
+feature axis. Set `return_new_adata_only=True` to return only the derived
+variables. Rows with missing source features, blank or duplicate new names, or
+new names that already exist are skipped with a warning and printed status
+message. `use_raw=True` selects `adata.raw.X` and overrides `layer`.
+
+## `compute_var_ratios_sums_diffs_adata_multiple_layers`
+
+The multi-layer wrapper applies the same CSV definition to several input
+matrices.
+
+### Full signature
+
+```python
+def compute_var_ratios_sums_diffs_adata_multiple_layers(
+    adata: ad.AnnData,
+    layers_to_compute: list[str] | None = None,
+    layers_transforms: list[str] | None = None,
+    base_layer: str | None = None,
+    **kwargs,
+) -> ad.AnnData:
+```
+
+```python
+with_derived_variables = adtl.compute_var_ratios_sums_diffs_adata_multiple_layers(
+    adata,
+    layers_to_compute=[None, "RFU"],
+    layers_transforms=["linear", "linear"],
+    base_layer="RFU",
+    derived_variables_csv_file="config/derived_variables.csv",
+)
+```
+
+Use `None` in `layers_to_compute` for `adata.X`. When omitted, the wrapper uses
+only `adata.X`; omitted transforms default to `"linear"` for every source.
+`layers_transforms` must match the number of selected sources, and `base_layer`
+must be one of them. All sources must produce the same derived variable names.
+The base source becomes returned `.X`, while named layer results are stored in
+the corresponding output layers.

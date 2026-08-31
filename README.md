@@ -7,32 +7,47 @@
 - Plotting gallery: [deterministic renderer examples](docs/plotting_gallery.md)
 - Start with [simulation helpers](docs/_simulate_data.md) and [correlation dotplots](docs/_corr_dotplots.md).
 
-data science tools that operate on anndata objects
+Data-science tools that operate on `AnnData` objects.
 
-### Set up
-#### clone the repo
+## Setup
+
+### Clone the repository
+
 ```bash
 git clone https://github.com/gitbenlewis/adata_science_tools.git
+cd adata_science_tools
 ```
-#### Make the conda environments
+
+### Create the conda environment
+
 ```bash
-conda deactivate
-conda remove -n not_base --all
 conda env create -f config/env_not_base.yaml -n not_base
 conda activate not_base
 ```
-#### run the examples
+
+If `not_base` already exists, update it in place instead of deleting it:
+
 ```bash
-conda activate not_base
-bash example_PMID_33969320/scripts/000_run_everything.bash
-python example_simulated_data/scripts/simulate_1_var_covar_age.py
-python example_simulated_data/scripts/plot_dotplot_simulate_1_var_covar_age.py
+conda env update -f config/env_not_base.yaml -n not_base
+```
+
+### Run the self-contained plotting gallery
+
+```bash
 bash scripts/000_generate_plotting_gallery.bash
 ```
 
+This regenerates the deterministic PNG catalog in
+[`docs/assets/plotting_gallery`](docs/assets/plotting_gallery) and writes its run
+log under `scripts/logs/`.
+
 ## Simulated data example
 
-The repo includes a small config-driven simulated-data workflow in `example_simulated_data/`.
+The repo includes a small config-driven simulated-data workflow in
+`example_simulated_data/`. Its
+[`config.yaml`](example_simulated_data/config/config.yaml) uses repository-relative
+output paths, so the commands below are portable when run from the repository
+root. Outputs resolve under `example_simulated_data/results/`.
 
 ```bash
 conda activate not_base
@@ -40,13 +55,15 @@ python example_simulated_data/scripts/simulate_1_var_covar_age.py
 python example_simulated_data/scripts/plot_dotplot_simulate_1_var_covar_age.py
 ```
 
-The default config in [`example_simulated_data/config/config.yaml`](example_simulated_data/config/config.yaml) simulates one feature, `simulated_feature`, from `Age` and `case_control`, adds residual `y` variance so the points are not constrained to exact fit lines, and writes both a baseline `AnnData` bundle and a dotplot.
+The default parameters simulate one feature, `simulated_feature`, from `Age`
+and `case_control`, add residual `y` variance so the points are not constrained
+to exact fit lines, and write both a baseline `AnnData` bundle and a dotplot.
 
 The main example knobs are `beta` or `beta_age`, `beta_case_control`, `case_control_prob`, and `residual_stdev`.
 
 See [`docs/_simulate_data.md`](docs/_simulate_data.md) for the simulation API and config details, and [`docs/_corr_dotplots.md`](docs/_corr_dotplots.md) for the plotting API.
 
-Example outputs: [baseline.h5ad](example_simulated_data/results/simulate_1_var_covar_age/baseline/baseline.h5ad) and [baseline.png](example_simulated_data/results/plot_dotplot_simulate_1_var_covar_age/baseline/baseline.png).
+Committed output snapshots: [baseline.h5ad](example_simulated_data/results/simulate_1_var_covar_age/baseline/baseline.h5ad) and [baseline.png](example_simulated_data/results/plot_dotplot_simulate_1_var_covar_age/baseline/baseline.png).
 
 ![baseline simulated dotplot](example_simulated_data/results/plot_dotplot_simulate_1_var_covar_age/baseline/baseline.png)
 
@@ -75,20 +92,23 @@ than a fold change calculated from the endpoint means.
 
 ![Paired datapoints with post-over-baseline log2 fold changes and per-position summary legend](docs/assets/plotting_gallery/paired_datapoints__log2fc_summary_legend.png)
 
+## Example plots from `example_PMID_33969320`
 
-# Some example plots from example_PMID_33969320
+These are committed output snapshots from a dataset-specific workflow, not a
+fresh-clone runnable example. The workflow expects external study data and a
+`code_library` checkout that are not included in this repository.
 
-## Column plots 
- > /adata_science_tools/_plotting/_column_plots.py
-[view src file](_plotting/_column_plots.py)
+### Column plot
 
-### adtl.barh_l2fc_dotplot()
+API: [`adtl.datapoints_effect_panels_column()`](docs/_column_plots.md#datapoints_effect_panels_column)
+([source](_plotting/_column_plots.py))
+
 [View plot file](example_PMID_33969320/results/figures/diff_datapoint_plots/COVID_over_NOT_D0_barh_l2fc_dotplot_FDR.png)
-![COVID_over_NOT_D0_barh_l2fc_dotplot](example_PMID_33969320/results/figures/diff_datapoint_plots/COVID_over_NOT_D0_barh_l2fc_dotplot_FDR.png)
+![COVID versus non-COVID day-zero distributions with a log2 fold-change effect panel](example_PMID_33969320/results/figures/diff_datapoint_plots/COVID_over_NOT_D0_barh_l2fc_dotplot_FDR.png)
 
+### Volcano plot
 
-## Volcano plots 
+API: [`adtl.volcano_plot_generic()`](docs/_plots.md#volcano_plot_generic)
 
-### adtl.volcano_plot_generic()
 [View plot file](example_PMID_33969320/results/figures/volcano_plots/COVID_over_NOT_D0_volcano_FDR.png)
-![COVID_over_NOT_D0_barh_l2fc_dotplot](example_PMID_33969320/results/figures/volcano_plots/COVID_over_NOT_D0_volcano_FDR.png)
+![COVID versus non-COVID day-zero volcano plot](example_PMID_33969320/results/figures/volcano_plots/COVID_over_NOT_D0_volcano_FDR.png)

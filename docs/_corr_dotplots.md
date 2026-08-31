@@ -240,8 +240,20 @@ Creates a two-panel scatter plot of the same x/y pair with two different hue col
 #### Full signature
 
 ```python
-def spearman_cor_dotplot_2(df, column_key_x, column_key_y, hue, hue_right, figsize=(20, 10)):
+def spearman_cor_dotplot_2(
+    df,
+    column_key_x,
+    column_key_y,
+    hue,
+    hue_right,
+    figsize=(20, 10),
+    axes_lines=True,
+):
 ```
+
+Set `axes_lines=False` to fit each panel to its observed data range without
+drawing horizontal or vertical zero-reference lines. The default retains the
+legacy zero-reference lines and inclusion of zero in the displayed limits.
 
 <img src="assets/plotting_gallery/spearman_cor_dotplot_2__dual_hue.png" alt="Correlation under two categorical encodings" width="720">
 

@@ -1798,6 +1798,7 @@ def l2fc_dotplot_single(
     dotplot_legend_bbox_to_anchor: tuple[float, float] = (0.5, -0.05),
     dotplot_annotate: bool = False,
     dotplot_annotate_fontsize: int | None = None,
+    tight_layout_rect_arg: tuple[float, float, float, float] | None = None,
 ):
     """Single-axis l2fc dotplot with one row per feature."""
     if not feature_list:
@@ -1950,7 +1951,12 @@ def l2fc_dotplot_single(
             frameon=True,
         )
 
-    fig.tight_layout(rect=[0, 0.02 if dotplot_legend else 0, 1, 1])
+    rect_used = (
+        [0, 0.02 if dotplot_legend else 0, 1, 1]
+        if tight_layout_rect_arg is None
+        else tight_layout_rect_arg
+    )
+    fig.tight_layout(rect=rect_used)
     return fig, ax
 
 

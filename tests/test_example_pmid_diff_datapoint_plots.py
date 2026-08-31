@@ -35,12 +35,18 @@ def test_example_pmid_config_uses_unified_effect_panel_schema():
     assert defaults["comparison_col"] == "COVID"
     assert defaults["comparison_col_order"] == ["0", "1"]
     assert defaults["top_n_features"] == 15
-    assert defaults["column_title_y"] == 0.89
+    assert defaults["column_title_y"] == 0.9
+    assert defaults["figsize"] == [15, 18]
+    assert defaults["fig_title"] == (
+        "OLINK proteomics: top 15 differential features\n"
+        "D0 comparison; independent t-test"
+    )
     assert defaults["col_wspace"] == 0.07
     assert defaults["effect_panel_defaults"]["effect_column"] == (
         "l2fc_COVID_over_NOT_D0"
     )
-    assert defaults["effect_panel_defaults"]["annotate_fontsize"] == 16
+    assert defaults["effect_panel_defaults"]["annotate_xy"] == [0.98, 0.82]
+    assert defaults["effect_panel_defaults"]["annotate_fontsize"] == 11
     assert runs["COVID_over_NOT_D0"]["sortby_col"] == (
         "ttest_ind_pvals_COVID_over_NOT_D0"
     )

@@ -2,7 +2,7 @@
 
 
 simulate_1_var_covar_age_params:
-  repo_results_dir: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_simulated_data/results/simulate_1_var_covar_age/
+  repo_results_dir: example_simulated_data/results/simulate_1_var_covar_age/
   default_params:
     n_obs: 100
     obs_names_prefix: obs_
@@ -33,27 +33,33 @@ simulate_1_var_covar_age_params:
 
     
 plot_dotplot_simulate_1_var_covar_age_params:
-  repo_results_dir: /home/ubuntu/projects/gitbenlewis/adata_science_tools/example_simulated_data/results/plot_dotplot_simulate_1_var_covar_age/
+  repo_results_dir: example_simulated_data/results/plot_dotplot_simulate_1_var_covar_age/
   default_params:
     layer: null
     column_key_x: Age
     column_key_y: simulated_feature
     hue: case_control
     subset_key: case_control
-    axes_title: simulated_feature vs Age
+    xlabel: Age (years)
+    ylabel: Simulated feature abundance
+    axes_title: Simulated feature abundance vs age
     show: false
     save_plot: true
     axes_lines: false
-    figsize: [12, 8]
+    figsize: [10, 7]
     dropna: true
     show_y_intercept: false
-    palette: ['#AA4499', '#332288', '#1f77b4', '#661100', '#117733', '#ff7f0e']
-    subset_palette: ['#AA4499', '#332288', '#1f77b4', '#661100', '#117733', '#ff7f0e']
+    palette: ['#AA4499', '#332288']
+    subset_palette: ['#AA4499', '#332288']
     dot_size: 200
     title_fontsize: 16
     axis_label_fontsize: 12
     legend_fontsize: 12
     show_all_obs_fit: true
+    show_fit_legend: true
+    show_hue_legend: false
+    fit_legend_title: "Group fit\nPearson correlation"
+    humanize_group_legend_labels: true
     show_stats_text: false
     show_x_marginal_hist: true
     show_y_marginal_hist: true
@@ -61,7 +67,7 @@ plot_dotplot_simulate_1_var_covar_age_params:
     y_marginal_hist_bins: 10
     x_marginal_hist_height_ratio: 0.3
     y_marginal_hist_width_ratio: 0.3
-    dpi: 300
+    dpi: 200
     bbox_inches: tight
 
   plot_dotplot_simulate_1_var_covar_age__runs:

@@ -5,6 +5,7 @@ SomaScan-specific import and cleanup helpers for working with `.adat` files and 
 This module provides:
 
 - `read_adat_2_AnnData`
+- `somascan_adat_file_2_adata_h5ad_csv`
 - `soma_fill_sampletype_obs_values`
 - `soma_make_adata_index_unique_by_merge`
 - `make_df_obs_adataX_soma`
@@ -55,6 +56,104 @@ The example comments in the source show the intended next steps:
 - choose identifier columns,
 - assign them to `obs_names` and `var_names`,
 - make them unique if necessary.
+
+## `somascan_adat_file_2_adata_h5ad_csv`
+
+`somascan_adat_file_2_adata_h5ad_csv(...)` is the dataset-specific high-level
+workflow around the parser and cleanup helpers. It reads an `.adat`, normalizes
+sample and feature identifiers, creates an `RFU` layer, optionally removes QC
+features, optionally merges external metadata, and can write `.h5ad` and CSV
+bundles.
+
+### Full signature
+
+```python
+def somascan_adat_file_2_adata_h5ad_csv(
+    save_raw_h5ad: bool = False,
+    also_raw_save_csvs: bool = False,
+    merge_external_metadata: bool = False,
+    save_plus_metadata_h5ad: bool = False,
+    also_plus_metadata_save_csvs: bool = False,
+    output_dir: str | Path | None = None,
+    dataset_alias: str | None = None,
+    raw_somascan_adat_data_file: str | None = None,
+    new_index_key_from_raw_obs_metadata: str | None = None,
+    remove_mouse_QC_apatmers: bool = False,
+    raw_output_filename: str | None = None,
+    external_obs_metadata_2_merge_file: str | None = None,
+    merge_key_in_external_obs_metadata: str | None = None,
+    merge_key_in_raw_obs_metadata: str | None = None,
+    column_in_metadata_to_set_as_index: str | None = None,
+    external_var_metadata_2_merge_file: str | None = None,
+    merge_key_in_external_var_metadata: str | None = None,
+    merge_key_in_raw_var_metadata: str | None = None,
+    columns_in_external_var_metadata_to_use: list | None = None,
+    plus_metadata_file_name: str | None = None,
+    remove_mouse_QC_apatmers_QC_samples: bool = True,
+    logger: logging.Logger | None = None,
+) -> ad.AnnData | tuple[ad.AnnData, ad.AnnData]:
+```
+
+The misspelling `apatmers` in two keyword names is part of the current public
+signature.
+
+### Required source structure
+
+Although the signature types several inputs as optional, the workflow uses
+`raw_somascan_adat_data_file` and `new_index_key_from_raw_obs_metadata`
+unconditionally. The parsed `.adat` is also expected to provide the SomaScan
+columns used by the cleanup path, including `Barcode2d` and `SampleType` in
+`obs`, plus `SeqId`, `EntrezGeneSymbol`, `Type`, and `Organism` in `var`.
+
+```python
+raw_adata = adtl.somascan_adat_file_2_adata_h5ad_csv(
+    raw_somascan_adat_data_file="input/example.adat",
+    new_index_key_from_raw_obs_metadata="SampleId",
+    output_dir="results",
+    raw_output_filename="example_raw",
+    save_raw_h5ad=True,
+)
+```
+
+### Normalization and filtering
+
+The workflow:
+
+- sets `obs_names` from `new_index_key_from_raw_obs_metadata`;
+- appends `Barcode2d` to QC, buffer, and calibrator row names, then makes names
+  globally unique;
+- fills `AliquotingNotes`, `AssayNotes`, and `TimePoint` with the special
+  `SampleType` value for those rows;
+- builds `EntrezGeneSymbol_SeqId` and uses it for `var_names`;
+- copies `adata.X` to `adata.layers["RFU"]`;
+- when `remove_mouse_QC_apatmers=True`, keeps protein rows whose organism does
+  not contain `Mouse`.
+
+When external metadata is merged and
+`remove_mouse_QC_apatmers_QC_samples=True`, the merged object is additionally
+restricted to non-mouse protein rows and excludes QC, buffer, and calibrator
+observations.
+
+### Merge, save, and return behavior
+
+With `merge_external_metadata=False`, the function returns the normalized raw
+object. `save_raw_h5ad` controls its `.h5ad` output, while
+`also_raw_save_csvs` writes `.obs.csv`, `.var.csv`, and `.X.csv` sidecars.
+
+With `merge_external_metadata=True`, the current implementation requires a
+complete observation-metadata merge configuration to initialize the merged
+object. Supply `external_obs_metadata_2_merge_file`,
+`merge_key_in_external_obs_metadata`, and `merge_key_in_raw_obs_metadata`.
+Optional variable metadata is left-joined by
+`merge_key_in_external_var_metadata`, and
+`columns_in_external_var_metadata_to_use` can limit the imported columns. The
+function returns `(merged_adata, raw_adata)`.
+
+The current merge path always writes the merged `.h5ad` and CSV bundle through
+its internal save helper. Supply `plus_metadata_file_name` when `output_dir` is
+set. The `save_plus_metadata_h5ad`, `also_plus_metadata_save_csvs`,
+`dataset_alias`, and `merge_key_in_raw_var_metadata` parameters are currently
+logged but do not change execution.
 
 ## `soma_fill_sampletype_obs_values`
 
