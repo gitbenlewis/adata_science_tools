@@ -2571,34 +2571,45 @@ class PairedDatapointsTests(unittest.TestCase):
         self.assertEqual(metric_formats, original_formats)
 
     def test_legend_metrics_use_post_over_pre_log2fc_in_single_panel_figure_legend(self):
-        fig, axes, _ = adtl.paired_datapoints(
-            adata=self.make_adata(),
-            var_names=["A_v1"],
-            pair_by_key="Subject_ID",
-            show_paired_difference=True,
-            paired_difference_mode="log2fc",
-            legend=True,
-            legend_scope="figure",
-            legend_metrics=("mean",),
-            boxplot=False,
-            show=False,
-        )
-        self.addCleanup(plt.close, fig)
+        for separator_kwargs, expected_difference_label in (
+            ({}, "Overall log2(Post / Pre) (mean=0.559)"),
+            (
+                {"paired_difference_legend_label_separator": "\n"},
+                "Overall log2(Post / Pre)\n(mean=0.559)",
+            ),
+        ):
+            with self.subTest(separator_kwargs=separator_kwargs):
+                fig, axes, _ = adtl.paired_datapoints(
+                    adata=self.make_adata(),
+                    var_names=["A_v1"],
+                    pair_by_key="Subject_ID",
+                    show_paired_difference=True,
+                    paired_difference_mode="log2fc",
+                    legend=True,
+                    legend_scope="figure",
+                    legend_metrics=("mean",),
+                    boxplot=False,
+                    show=False,
+                    **separator_kwargs,
+                )
+                self.addCleanup(plt.close, fig)
 
-        self.assertEqual(len(fig.legends), 1)
-        self.assertIsNone(axes["A_v1"].get_legend())
-        difference_ax = next(
-            ax for ax in fig.axes if ax.get_label() == "A_v1__paired_difference"
-        )
-        self.assertIsNone(difference_ax.get_legend())
-        self.assertEqual(
-            [text.get_text() for text in fig.legends[0].get_texts()],
-            [
-                "Overall Pre (mean=3)",
-                "Overall Post (mean=4)",
-                "Overall log2(Post / Pre) (mean=0.559)",
-            ],
-        )
+                self.assertEqual(len(fig.legends), 1)
+                self.assertIsNone(axes["A_v1"].get_legend())
+                difference_ax = next(
+                    ax
+                    for ax in fig.axes
+                    if ax.get_label() == "A_v1__paired_difference"
+                )
+                self.assertIsNone(difference_ax.get_legend())
+                self.assertEqual(
+                    [text.get_text() for text in fig.legends[0].get_texts()],
+                    [
+                        "Overall Pre (mean=3)",
+                        "Overall Post (mean=4)",
+                        expected_difference_label,
+                    ],
+                )
 
     def test_legend_summary_prefix_defaults_and_overrides(self):
         for prefix_kwargs, expected_summaries in (
@@ -2656,6 +2667,126 @@ class PairedDatapointsTests(unittest.TestCase):
                 "Overall Post (mean=4\ncount=3)",
             ],
         )
+
+    def test_paired_difference_legend_label_separator_is_summary_only(self):
+        def data_artist_state(fig):
+            return [
+                (
+                    ax.get_xlim(),
+                    ax.get_ylim(),
+                    [
+                        (
+                            line.get_xydata().tolist(),
+                            to_rgba(line.get_color()),
+                            line.get_linestyle(),
+                            line.get_linewidth(),
+                            line.get_alpha(),
+                        )
+                        for line in ax.lines
+                    ],
+                    [
+                        (
+                            collection.get_offsets().tolist(),
+                            collection.get_facecolors().tolist(),
+                            collection.get_edgecolors().tolist(),
+                            collection.get_sizes().tolist(),
+                            collection.get_alpha(),
+                        )
+                        for collection in ax.collections
+                    ],
+                )
+                for ax in fig.axes
+            ]
+
+        plot_kwargs = {
+            "adata": self.make_adata(),
+            "var_names": ["A_v1"],
+            "pair_by_key": "Subject_ID",
+            "subset_obs_key": "cohort",
+            "subset_order": ["B", "A"],
+            "point_color_by_side": True,
+            "show_paired_difference": True,
+            "paired_difference_color_by_sign": False,
+            "paired_difference_label": "Change score",
+            "paired_difference_ylabel": "Within-pair change",
+            "legend": True,
+            "legend_metrics": ("mean", "count"),
+            "jitter_amount": 0,
+            "boxplot": False,
+            "show": False,
+        }
+        expected_labels = {
+            "omitted": "Overall Change score (mean=1, count=3)",
+            "explicit": "Overall Change score (mean=1, count=3)",
+            "newline": "Overall Change score\n(mean=1, count=3)",
+            "no_gap": "Overall Change score(mean=1, count=3)",
+        }
+        separator_configs = (
+            ("omitted", {}),
+            ("explicit", {"paired_difference_legend_label_separator": " "}),
+            ("newline", {"paired_difference_legend_label_separator": "\n"}),
+            ("no_gap", {"paired_difference_legend_label_separator": ""}),
+        )
+
+        for legend_scope in ("axis", "figure"):
+            with self.subTest(legend_scope=legend_scope):
+                results = {}
+                for config_name, config_kwargs in separator_configs:
+                    fig, axes, plot_df = adtl.paired_datapoints(
+                        legend_scope=legend_scope,
+                        **plot_kwargs,
+                        **config_kwargs,
+                    )
+                    self.addCleanup(plt.close, fig)
+                    legend = (
+                        axes["A_v1"].get_legend()
+                        if legend_scope == "axis"
+                        else fig.legends[0]
+                    )
+                    results[config_name] = (
+                        fig,
+                        axes,
+                        plot_df,
+                        [text.get_text() for text in legend.get_texts()],
+                    )
+
+                omitted_fig, _, omitted_df, omitted_labels = results["omitted"]
+                omitted_artist_state = data_artist_state(omitted_fig)
+                for config_name, _config_kwargs in separator_configs:
+                    fig, _, plot_df, labels = results[config_name]
+                    pd.testing.assert_frame_equal(plot_df, omitted_df)
+                    self.assertEqual(
+                        labels,
+                        [
+                            "Change score: cohort=B",
+                            "Change score: cohort=A",
+                            "Overall Pre (mean=3, count=3)",
+                            "Overall Post (mean=4, count=3)",
+                            expected_labels[config_name],
+                        ],
+                    )
+                    self.assertEqual(data_artist_state(fig), omitted_artist_state)
+                self.assertEqual(results["explicit"][3], omitted_labels)
+
+                newline_fig, newline_axes, newline_df, _ = results["newline"]
+                self.assertEqual(list(newline_axes), ["A_v1"])
+                self.assertEqual(
+                    list(pd.unique(newline_df["x_label"])),
+                    ["Pre", "Post", "Change score"],
+                )
+                primary_ax = newline_axes["A_v1"]
+                self.assertEqual(
+                    [tick.get_text() for tick in primary_ax.get_xticklabels()],
+                    ["Pre", "Post", "Change score"],
+                )
+                self.assertEqual(primary_ax.get_xlabel(), "Pre_or_Post_obs_col")
+                self.assertEqual(primary_ax.get_ylabel(), "value")
+                difference_ax = next(
+                    ax
+                    for ax in newline_fig.axes
+                    if ax.get_label() == "A_v1__paired_difference"
+                )
+                self.assertEqual(difference_ax.get_ylabel(), "Within-pair change")
 
     def test_negative_mean_summary_legend_is_red_and_bold_and_can_be_disabled(self):
         paired_df = pd.DataFrame(

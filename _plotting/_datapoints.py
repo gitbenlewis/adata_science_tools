@@ -127,6 +127,7 @@ def _legend_metric_label(
     metric_names: Sequence[str],
     metric_formats: Mapping[str, str],
     metric_separator: str = ", ",
+    label_separator: str = " ",
 ) -> str:
     if not metric_names:
         return label
@@ -147,7 +148,7 @@ def _legend_metric_label(
             metric_parts.append(f"count={int(metric_value)}")
         else:
             metric_parts.append(f"{metric_name}={metric_value:.3g}")
-    return f"{label} ({metric_separator.join(metric_parts)})"
+    return f"{label}{label_separator}({metric_separator.join(metric_parts)})"
 
 ####### START ############. datapoint plots ###################.###################.###################.###################.
 
@@ -1570,6 +1571,7 @@ def paired_datapoints(
     ] | None = None,
     legend_summary_prefix: str | None = "Overall",
     legend_metric_separator: str = ", ",
+    paired_difference_legend_label_separator: str = " ",
     highlight_negative_summary_legend: bool = True,
     ncols: int = 3,
     figsize: tuple[float, float] | None = None,
@@ -2786,6 +2788,11 @@ def paired_datapoints(
                             metric_names,
                             normalized_metric_formats,
                             metric_separator=legend_metric_separator,
+                            label_separator=(
+                                paired_difference_legend_label_separator
+                                if side == "difference"
+                                else " "
+                            ),
                         ),
                         any(
                             _legend_metric_value(metric_name, finite_values) < 0

@@ -99,6 +99,7 @@ def paired_datapoints(
     ] | None = None,
     legend_summary_prefix: str | None = "Overall",
     legend_metric_separator: str = ", ",
+    paired_difference_legend_label_separator: str = " ",
     highlight_negative_summary_legend: bool = True,
     ncols: int = 3,
     figsize: tuple[float, float] | None = None,
@@ -504,6 +505,17 @@ placeholders, or format specifications raise before drawing.
 Its default `", "` preserves comma-separated labels. Set it to `"\n"` to place
 each metric on its own line without adding newline characters to the individual
 `legend_metric_formats` strings.
+
+`paired_difference_legend_label_separator` instead controls only the separator
+between the derived paired-difference or log2FC summary label and its opening
+parenthesis. Its default `" "` preserves the existing label, while `"\n"` moves
+the parenthesized metrics to a new line and `""` removes the gap. Reference and
+target summary rows, x-axis labels, and secondary y-axis labels are unchanged.
+For YAML-backed `**kwargs`, use an escaped newline in the YAML source:
+
+```yaml
+paired_difference_legend_label_separator: "\n"
+```
 
 By default, `highlight_negative_summary_legend=True` renders an entire summary
 row in red bold text when any displayed `mean` or `median` is less than zero.
