@@ -4,7 +4,7 @@ This gallery is a repository-owned visual catalog for the plotting functions
 exported by `adata_science_tools._plotting`. The coverage contract and asset
 filenames come from
 [`example_plotting_gallery/manifest.py`](../example_plotting_gallery/manifest.py):
-45 renderers and 63 cases, split across maintained, compatibility, and
+45 renderers and 65 cases, split across maintained, compatibility, and
 deprecated APIs.
 
 The examples are for rendering and API coverage. They are not benchmark
@@ -228,6 +228,9 @@ oversizing square or portrait plots.
 <small><code>_plotting._datapoints</code> · Maintained · <a href="#renderer-datapoints">Permalink</a></small>
 </td></tr>
 <tr><td>
+<a href="assets/plotting_gallery/datapoints__horizontal_medians.png"><img src="assets/plotting_gallery/datapoints__horizontal_medians.png" alt="Horizontal feature values with median ticks" width="520"></a><br>
+<code>horizontal_medians</code> — Horizontal feature values with median ticks
+<br><br>
 <a href="assets/plotting_gallery/datapoints__grouped_markers.png"><img src="assets/plotting_gallery/datapoints__grouped_markers.png" alt="Feature values with independent marker and color encodings" width="700"></a><br>
 <code>grouped_markers</code> — Feature values with independent marker and color encodings
 <br><br>
@@ -338,6 +341,9 @@ oversizing square or portrait plots.
 <small><code>_plotting._datapoints</code> · Maintained · <a href="#renderer-paired_datapoints">Permalink</a></small>
 </td></tr>
 <tr><td>
+<a href="assets/plotting_gallery/paired_datapoints__horizontal_pairs.png"><img src="assets/plotting_gallery/paired_datapoints__horizontal_pairs.png" alt="Horizontal before/after pairs" width="520"></a><br>
+<code>horizontal_pairs</code> — Horizontal before/after pairs
+<br><br>
 <a href="assets/plotting_gallery/paired_datapoints__paired_groups.png"><img src="assets/plotting_gallery/paired_datapoints__paired_groups.png" alt="Paired changes by treatment" width="700"></a><br>
 <code>paired_groups</code> — Paired changes by treatment
 <br><br>

@@ -749,6 +749,37 @@ def _invoke_case(
                 show=False,
             )
 
+    if case_key == ("datapoints", "horizontal_medians"):
+        toy_df = pd.DataFrame({
+            "group": ["A"] * 4 + ["B"] * 4 + ["C"] * 4,
+            "feature_a": [-2., -1., 0., 1., 1., 2., 3., 4., -1., 0., 1., 2.],
+            "feature_b": [1., 2., 3., 4., -3., -2., -1., 0., 0., 1., 2., 3.],
+        })
+        return renderer(
+            df=toy_df,
+            var_names=["feature_a", "feature_b"],
+            x_by_obs_key="group",
+            x_order=["A", "B", "C"],
+            orientation="horizontal",
+            subset_obs_key="group",
+            subset_palette={"A": "#4477AA", "B": "#CC6677", "C": "#228833"},
+            boxplot=False,
+            violinplot=False,
+            median_tick=True,
+            add_zero_line=True,
+            x_reference_lines=[{"value": 2., "linestyle": "--", "color": "0.65"}],
+            random_seed=2026,
+            jitter_amount=.12,
+            point_size=48,
+            legend=False,
+            title="Horizontal feature values with median ticks",
+            xlabel="Simulated value",
+            ylabel="Group",
+            ncols=2,
+            figsize=(9, 4.5),
+            show=False,
+        )
+
     if case_key == ("datapoints", "grouped_markers"):
         return renderer(
             adata=inputs.independent,
@@ -1280,6 +1311,39 @@ def _invoke_case(
             xlabel="Precomputed standardized effect",
             title="Precomputed subgroup meta-analysis",
             figsize=(11, 6.5),
+            show=False,
+        )
+
+    if case_key == ("paired_datapoints", "horizontal_pairs"):
+        toy_df = pd.DataFrame({
+            "condition": ["before", "after"] * 4,
+            "subject": ["one", "one", "two", "two", "three", "three", "four", "four"],
+            "feature_a": [1., 2., 3., 2., 2., 2.02, 4., 5.],
+            "feature_b": [7., 5., 4., 6., 5., 5.05, 2., 4.],
+        })
+        return renderer(
+            df=toy_df,
+            var_names=["feature_a", "feature_b"],
+            groupby_key="condition",
+            groupby_key_ref_value="before",
+            groupby_key_target_value="after",
+            pair_by_key="subject",
+            orientation="horizontal",
+            boxplot=False,
+            line_color_by_slope=True,
+            point_color_by_side=True,
+            line_alpha=.8,
+            line_width=1.3,
+            x_reference_lines=[{"value": 3., "linestyle": ":", "color": "0.45"}],
+            random_seed=2026,
+            jitter_amount=.08,
+            point_size=48,
+            legend=False,
+            title="Horizontal before/after pairs",
+            xlabel="Simulated value",
+            ylabel="Condition",
+            ncols=2,
+            figsize=(9, 4.5),
             show=False,
         )
 

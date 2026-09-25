@@ -155,6 +155,7 @@ def _legend_metric_label(
 def datapoints(
     input_data: anndata.AnnData | pd.DataFrame | None = None,
     *,
+    orientation: Literal["vertical", "horizontal"] = "vertical",
     adata: anndata.AnnData | None = None,
     df: pd.DataFrame | None = None,
     var_df: pd.DataFrame | None = None,
@@ -196,6 +197,7 @@ def datapoints(
     boxplot: bool = True,
     boxplot_width: float = 0.55,
     boxplot_showfliers: bool = False,
+    median_tick: bool = False,
     violinplot: bool = False,
     violin_width: float = 0.8,
     violin_alpha: float = 0.25,
@@ -214,6 +216,7 @@ def datapoints(
     ylims: Sequence[float] | None = None,
     add_zero_line: bool = False,
     y_reference_lines: Sequence[Mapping[str, Any]] | None = None,
+    x_reference_lines: Sequence[Mapping[str, Any]] | None = None,
     xlabel: str | None = None,
     ylabel: str | None = None,
     title: str | None = None,
@@ -263,6 +266,8 @@ def datapoints(
         else:
             raise TypeError("'input_data' must be an AnnData object or pandas DataFrame.")
 
+    if orientation not in ("vertical", "horizontal"):
+        raise ValueError("'orientation' must be 'vertical' or 'horizontal'.")
     if (adata is None) == (df is None):
         raise ValueError("Provide exactly one of 'adata' or 'df'.")
     if use_raw and layer is not None:
@@ -308,8 +313,12 @@ def datapoints(
         y_reference_lines,
         param_name="y_reference_lines",
     )
+    normalized_x_reference_lines = _normalize_reference_lines(
+        x_reference_lines,
+        param_name="x_reference_lines",
+    )
     if yscale == "log":
-        if add_zero_line:
+        if add_zero_line and orientation == "vertical":
             raise ValueError("'add_zero_line=True' is not valid when yscale='log'.")
         if any(line["value"] <= 0 for line in normalized_reference_lines):
             raise ValueError("Reference-line values must be positive when yscale='log'.")
@@ -1075,7 +1084,7 @@ def datapoints(
         clean_values = values.dropna()
         return not clean_values.empty and clean_values.mean() < 0
 
-    if yscale == "log":
+    if yscale == "log" and orientation == "vertical":
         point_values = plot_df["value"]
         invalid_points = point_values.notna() & (
             ~np.isfinite(point_values) | (point_values <= 0)
@@ -1142,6 +1151,11 @@ def datapoints(
     if legend_bbox_to_anchor is not None:
         legend_position_kwargs["bbox_to_anchor"] = legend_bbox_to_anchor
 
+    point_x_column, point_y_column = (
+        (jittered_x_column, "value")
+        if orientation == "vertical"
+        else ("value", jittered_x_column)
+    )
     for plot_idx, panel_name in enumerate(panel_names):
         ax = axes_flat[plot_idx]
         axes_by_panel[panel_name] = ax
@@ -1168,6 +1182,7 @@ def datapoints(
         if violinplot and nonempty_grouped_values:
             violin_parts = ax.violinplot(
                 nonempty_grouped_values,
+                **({"vert": False} if orientation == "horizontal" else {}),
                 positions=nonempty_x_positions,
                 widths=violin_width,
                 showmeans=False,
@@ -1183,6 +1198,7 @@ def datapoints(
         if boxplot and nonempty_grouped_values:
             boxplot_artists = ax.boxplot(
                 nonempty_grouped_values,
+                **({"vert": False} if orientation == "horizontal" else {}),
                 positions=nonempty_x_positions,
                 patch_artist=False,
                 showfliers=boxplot_showfliers,
@@ -1194,11 +1210,31 @@ def datapoints(
             for cap in boxplot_artists["caps"]:
                 cap.set_visible(False)
 
+        if median_tick:
+            for category_position, values in nonempty_grouped:
+                finite_values = values[np.isfinite(values)]
+                if len(finite_values) < 2:
+                    continue
+                median = np.median(finite_values)
+                category_span = (
+                    category_position - boxplot_width / 2,
+                    category_position + boxplot_width / 2,
+                )
+                numeric_span = (median, median)
+                ax.plot(
+                    category_span if orientation == "vertical" else numeric_span,
+                    numeric_span if orientation == "vertical" else category_span,
+                    color="black",
+                    linewidth=1.5,
+                    zorder=3,
+                    label="_nolegend_",
+                )
+
         if marker_by_obs_key is None:
             if subset_obs_key is None:
                 ax.scatter(
-                    panel_df[jittered_x_column],
-                    panel_df["value"],
+                    panel_df[point_x_column],
+                    panel_df[point_y_column],
                     color=default_point_color,
                     s=point_size,
                     alpha=point_alpha,
@@ -1221,8 +1257,8 @@ def datapoints(
                     if "mean" in metric_names and _has_negative_mean(summary_subset_df["value"]):
                         negative_mean_legend_labels.add(label)
                     ax.scatter(
-                        subset_df[jittered_x_column],
-                        subset_df["value"],
+                        subset_df[point_x_column],
+                        subset_df[point_y_column],
                         color=subset_palette_map[subset_value],
                         s=point_size,
                         alpha=point_alpha,
@@ -1232,8 +1268,8 @@ def datapoints(
                 missing_subset_df = panel_df.loc[panel_df[subset_obs_key].isna()]
                 if not missing_subset_df.empty:
                     ax.scatter(
-                        missing_subset_df[jittered_x_column],
-                        missing_subset_df["value"],
+                        missing_subset_df[point_x_column],
+                        missing_subset_df[point_y_column],
                         color="black",
                         s=point_size,
                         alpha=point_alpha,
@@ -1278,8 +1314,8 @@ def datapoints(
                         continue
                     first_row = marker_df.iloc[0]
                     ax.scatter(
-                        marker_df[jittered_x_column],
-                        marker_df["value"],
+                        marker_df[point_x_column],
+                        marker_df[point_y_column],
                         marker=first_row["resolved_marker"],
                         facecolors=first_row["rendered_marker_facecolor"],
                         edgecolors=first_row["resolved_marker_edgecolor"],
@@ -1292,8 +1328,8 @@ def datapoints(
                 missing_marker_df = subset_df.loc[subset_df["marker_category"].isna()]
                 if not missing_marker_df.empty:
                     ax.scatter(
-                        missing_marker_df[jittered_x_column],
-                        missing_marker_df["value"],
+                        missing_marker_df[point_x_column],
+                        missing_marker_df[point_y_column],
                         marker="o",
                         facecolors=missing_marker_df.iloc[0]["rendered_marker_facecolor"],
                         edgecolors=missing_marker_df.iloc[0]["resolved_marker_edgecolor"],
@@ -1376,16 +1412,25 @@ def datapoints(
                 if annotation["position"] == "metric":
                     annotation_y = annotation_value
                 else:
-                    text_kwargs["transform"] = ax.get_xaxis_transform()
+                    text_kwargs["transform"] = (
+                        ax.get_xaxis_transform()
+                        if orientation == "vertical"
+                        else ax.get_yaxis_transform()
+                    )
                     if annotation["position"] == "axes_top":
                         annotation_y = 0.98 - (0.06 * same_position_index)
                         text_kwargs["va"] = "top"
                     else:
                         annotation_y = 0.02 + (0.06 * same_position_index)
+                if orientation == "horizontal":
+                    text_kwargs["ha"] = (
+                        "right" if annotation["position"] == "axes_top" else "left"
+                    )
+                    text_kwargs["va"] = "center"
                 text_kwargs.update(annotation["text_kwargs"])
                 ax.text(
-                    x_position,
-                    annotation_y,
+                    x_position if orientation == "vertical" else annotation_y,
+                    annotation_y if orientation == "vertical" else x_position,
                     annotation_text,
                     **text_kwargs,
                 )
@@ -1394,17 +1439,27 @@ def datapoints(
             ax.set_title(panel_name)
         elif panel_df["variable"].nunique() == 1:
             ax.set_title(str(panel_df["variable"].iloc[0]))
-        ax.set_xticks(x_positions)
-        ax.set_xticklabels(x_labels, rotation=45, ha="right")
+        category_label = x_by_obs_key if x_by_obs_key is not None else "variable"
+        if orientation == "vertical":
+            ax.set_xticks(x_positions)
+            ax.set_xticklabels(x_labels, rotation=45, ha="right")
+        else:
+            ax.set_yticks(x_positions)
+            ax.set_yticklabels(x_labels)
+            ax.yaxis.set_inverted(True)
         ax.set_xlabel(
-            xlabel or (x_by_obs_key if x_by_obs_key is not None else "variable"),
+            xlabel or (category_label if orientation == "vertical" else "value"),
             fontsize=axis_label_fontsize,
         )
-        ax.set_ylabel(ylabel or "value", fontsize=axis_label_fontsize)
+        ax.set_ylabel(
+            ylabel or ("value" if orientation == "vertical" else category_label),
+            fontsize=axis_label_fontsize,
+        )
         if tick_label_fontsize is not None:
             ax.tick_params(axis="both", labelsize=tick_label_fontsize)
         if add_zero_line:
-            ax.axhline(
+            zero_line = ax.axhline if orientation == "vertical" else ax.axvline
+            zero_line(
                 0,
                 color="red",
                 linestyle=":",
@@ -1417,8 +1472,15 @@ def datapoints(
             normalized_reference_lines,
             axis="y",
             param_name="y_reference_lines",
-            skip_values=(0.0,) if add_zero_line else (),
+            skip_values=(0.0,) if add_zero_line and orientation == "vertical" else (),
         )
+        reference_handles.extend(_draw_reference_lines(
+            ax,
+            normalized_x_reference_lines,
+            axis="x",
+            param_name="x_reference_lines",
+            skip_values=(0.0,) if add_zero_line and orientation == "horizontal" else (),
+        ))
         if append_reference_handles_to_legend:
             legend_entries.extend(
                 (handle, handle.get_label())
@@ -1494,6 +1556,7 @@ def datapoints(
 def paired_datapoints(
     input_data: anndata.AnnData | pd.DataFrame | None = None,
     *,
+    orientation: Literal["vertical", "horizontal"] = "vertical",
     adata: anndata.AnnData | None = None,
     df: pd.DataFrame | None = None,
     var_df: pd.DataFrame | None = None,
@@ -1579,6 +1642,7 @@ def paired_datapoints(
     hspace: float | None = None,
     sharey: bool = False,
     ylims: Sequence[float] | None = None,
+    x_reference_lines: Sequence[Mapping[str, Any]] | None = None,
     ylabel: str | None = None,
     xlabel: str | None = None,
     title: str | None = None,
@@ -1630,6 +1694,16 @@ def paired_datapoints(
         else:
             raise TypeError("'input_data' must be an AnnData object or pandas DataFrame.")
 
+    if orientation not in ("vertical", "horizontal"):
+        raise ValueError("'orientation' must be 'vertical' or 'horizontal'.")
+    if orientation == "horizontal" and show_paired_difference:
+        raise ValueError(
+            "'show_paired_difference=True' is not supported with orientation='horizontal'."
+        )
+    normalized_x_reference_lines = _normalize_reference_lines(
+        x_reference_lines,
+        param_name="x_reference_lines",
+    )
     if (adata is None) == (df is None):
         raise ValueError("Provide exactly one of 'adata' or 'df'.")
     if use_raw and layer is not None:
@@ -2482,6 +2556,12 @@ def paired_datapoints(
     legend_entries_to_style: list[
         tuple[Any, list[tuple[Any, str, bool]]]
     ] = []
+    reference_handles_by_label: dict[str, Any] = {}
+    point_x_column, point_y_column = (
+        ("_jittered_x", "value")
+        if orientation == "vertical"
+        else ("value", "_jittered_x")
+    )
     for plot_idx, panel_name in enumerate(plot_panel_names):
         ax = axes_flat[plot_idx]
         axes_by_panel[panel_name] = ax
@@ -2542,6 +2622,7 @@ def paired_datapoints(
             if finite_violin_groups:
                 violin_parts = distribution_ax.violinplot(
                     [values for _x_order, values in finite_violin_groups],
+                    **({"vert": False} if orientation == "horizontal" else {}),
                     positions=[
                         x_order for x_order, _values in finite_violin_groups
                     ],
@@ -2559,6 +2640,7 @@ def paired_datapoints(
             if boxplot and nonempty_values:
                 boxplot_artists = distribution_ax.boxplot(
                     nonempty_values,
+                    **({"vert": False} if orientation == "horizontal" else {}),
                     positions=nonempty_positions,
                     patch_artist=False,
                     showfliers=boxplot_showfliers,
@@ -2579,7 +2661,7 @@ def paired_datapoints(
                         line_values = line_df["value"].to_numpy(dtype=float)
                         if np.isfinite(line_values).all():
                             # Normalize the logical ref-to-target change symmetrically;
-                            # horizontal jitter must not affect the color category.
+                            # categorical jitter must not affect the color category.
                             baseline = line_values[0]
                             target = line_values[-1]
                             # Scale first so finite extremes do not overflow or underflow.
@@ -2602,8 +2684,8 @@ def paired_datapoints(
                             else:
                                 resolved_line_color = positive_slope_color
                     ax.plot(
-                        line_df["_jittered_x"],
-                        line_df["value"],
+                        line_df[point_x_column],
+                        line_df[point_y_column],
                         color=resolved_line_color,
                         linestyle=line_style,
                         linewidth=line_width,
@@ -2636,8 +2718,8 @@ def paired_datapoints(
                     positive_slope_color
                 )
                 scatter_ax.scatter(
-                    scatter_df["_jittered_x"],
-                    scatter_df["value"],
+                    scatter_df[point_x_column],
+                    scatter_df[point_y_column],
                     color=point_colors,
                     s=point_size,
                     alpha=point_alpha,
@@ -2645,8 +2727,8 @@ def paired_datapoints(
                 )
             elif active_subset_key is None:
                 scatter_ax.scatter(
-                    scatter_df["_jittered_x"],
-                    scatter_df["value"],
+                    scatter_df[point_x_column],
+                    scatter_df[point_y_column],
                     color=(
                         scatter_df["side"].map(side_point_colors).tolist()
                         if use_side_colors
@@ -2672,8 +2754,8 @@ def paired_datapoints(
                             else None
                         )
                     scatter_ax.scatter(
-                        subset_df["_jittered_x"],
-                        subset_df["value"],
+                        subset_df[point_x_column],
+                        subset_df[point_y_column],
                         color=color,
                         s=point_size,
                         alpha=point_alpha,
@@ -2692,8 +2774,8 @@ def paired_datapoints(
                 ]
                 if not missing_subset_df.empty:
                     scatter_ax.scatter(
-                        missing_subset_df["_jittered_x"],
-                        missing_subset_df["value"],
+                        missing_subset_df[point_x_column],
+                        missing_subset_df[point_y_column],
                         color=(
                             missing_subset_df["side"].map(side_point_colors).tolist()
                             if use_side_colors
@@ -2721,11 +2803,19 @@ def paired_datapoints(
                 rotation=45,
                 ha="right",
             )
-        else:
+        elif orientation == "vertical":
             ax.set_xticks([1, 2])
             ax.set_xticklabels([ref_label, target_label], rotation=45, ha="right")
-        ax.set_xlabel(groupby_key if xlabel is None else xlabel, fontsize=axis_label_fontsize)
-        ax.set_ylabel(ylabel or "value", fontsize=axis_label_fontsize)
+        else:
+            ax.set_yticks([1, 2])
+            ax.set_yticklabels([ref_label, target_label])
+            ax.yaxis.set_inverted(True)
+        default_xlabel = groupby_key if orientation == "vertical" else "value"
+        ax.set_xlabel(default_xlabel if xlabel is None else xlabel, fontsize=axis_label_fontsize)
+        ax.set_ylabel(
+            ylabel or ("value" if orientation == "vertical" else groupby_key),
+            fontsize=axis_label_fontsize,
+        )
         if tick_label_fontsize is not None:
             ax.tick_params(axis="both", labelsize=tick_label_fontsize)
             if difference_ax is not None:
@@ -2738,10 +2828,26 @@ def paired_datapoints(
                 fontsize=axis_label_fontsize,
             )
 
+        reference_handles = _draw_reference_lines(
+            ax,
+            normalized_x_reference_lines,
+            axis="x",
+            param_name="x_reference_lines",
+        )
+        for handle in reference_handles:
+            label = handle.get_label()
+            if label and not label.startswith("_"):
+                reference_handles_by_label.setdefault(label, handle)
         subset_handles, subset_labels = (
             difference_ax if point_color_by_side and difference_ax is not None else ax
         ).get_legend_handles_labels()
         subset_legend_entries = list(zip(subset_handles, subset_labels))
+        if point_color_by_side and difference_ax is not None:
+            subset_legend_entries.extend(
+                (handle, handle.get_label())
+                for handle in reference_handles
+                if handle.get_label() and not handle.get_label().startswith("_")
+            )
         subset_legend_entries_by_panel[panel_name] = subset_legend_entries
         summary_legend_entries: list[tuple[Any, str, bool]] = []
         if summary_legend_enabled:
@@ -2881,6 +2987,12 @@ def paired_datapoints(
                     figure_legend_entries.append(
                         (handle, figure_label, is_negative)
                     )
+        existing_figure_labels = {label for _handle, label, _negative in figure_legend_entries}
+        figure_legend_entries.extend(
+            (handle, label, False)
+            for label, handle in reference_handles_by_label.items()
+            if label not in existing_figure_labels
+        )
         if figure_legend_entries:
             legend_kwargs = {"fontsize": legend_fontsize}
             if active_subset_key is not None and not summary_legend_enabled:

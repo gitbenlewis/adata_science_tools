@@ -63,7 +63,7 @@ class PlottingGalleryTests(unittest.TestCase):
         self.assertEqual(len(RENDERER_MANIFEST), 45)
         self.assertEqual(
             sum(len(spec.cases) for spec in RENDERER_MANIFEST),
-            63,
+            65,
         )
         for spec in RENDERER_MANIFEST:
             renderer = getattr(adtl.pl, spec.name)
@@ -727,6 +727,23 @@ class PlottingGalleryTests(unittest.TestCase):
             residuals["observed"] - residuals["expected"],
         )
 
+    def test_horizontal_gallery_cases_render_deterministically(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            options = dict(
+                renderer_names=["datapoints", "paired_datapoints"],
+                case_ids=["horizontal_medians", "horizontal_pairs"],
+            )
+            first = generate_gallery(root / "first", **options)
+            second = generate_gallery(root / "second", **options)
+            self.assertEqual({p.name for p in first}, {
+                "datapoints__horizontal_medians.png",
+                "paired_datapoints__horizontal_pairs.png",
+            })
+            for a, b in zip(first, second, strict=True):
+                self.assertEqual(a.name, b.name)
+                self.assertEqual(a.read_bytes(), b.read_bytes())
+
     def test_selected_gallery_generation_writes_declared_pngs(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             generated = generate_gallery(
@@ -762,6 +779,7 @@ class PlottingGalleryTests(unittest.TestCase):
                     "paired_datapoints__log2fc_axis.png",
                     "paired_datapoints__log2fc_summary_legend.png",
                     "paired_datapoints__paired_groups.png",
+                    "paired_datapoints__horizontal_pairs.png",
                     "paired_datapoints__precomputed_pair_values.png",
                     "paired_datapoints__slope_colored_lines.png",
                     "plot_heatmap__clustered.png",

@@ -6,8 +6,8 @@ Unpaired variable-level datapoint plotting for `AnnData` objects and wide
 ## `datapoints`
 
 `datapoints(...)` draws selected variables or variable groups as categorical
-x-axis entries. It is intended for config-driven plotting runs that need the
-same obs/var filtering and grouping conventions as `adata_histograms()` without
+entries on x by default, or on y with `orientation="horizontal"`. It is intended
+for config-driven plotting runs that need the same obs/var filtering and grouping conventions as `adata_histograms()` without
 requiring paired reference/target observations.
 
 ### Full signature
@@ -16,6 +16,7 @@ requiring paired reference/target observations.
 def datapoints(
     input_data: anndata.AnnData | pd.DataFrame | None = None,
     *,
+    orientation: Literal["vertical", "horizontal"] = "vertical",
     adata: anndata.AnnData | None = None,
     df: pd.DataFrame | None = None,
     var_df: pd.DataFrame | None = None,
@@ -57,6 +58,7 @@ def datapoints(
     boxplot: bool = True,
     boxplot_width: float = 0.55,
     boxplot_showfliers: bool = False,
+    median_tick: bool = False,
     violinplot: bool = False,
     violin_width: float = 0.8,
     violin_alpha: float = 0.25,
@@ -75,6 +77,7 @@ def datapoints(
     ylims: Sequence[float] | None = None,
     add_zero_line: bool = False,
     y_reference_lines: Sequence[Mapping[str, Any]] | None = None,
+    x_reference_lines: Sequence[Mapping[str, Any]] | None = None,
     xlabel: str | None = None,
     ylabel: str | None = None,
     title: str | None = None,
@@ -107,7 +110,64 @@ def datapoints(
 | Status | Arguments |
 |---|---|
 | Existing | input selection, variable grouping/collapse, observation and variable filters, subset colors, panels, x categories, deterministic jitter, box/violin overlays, legend metrics, figure sizing, saving, and missing/zero handling |
-| New | `summary_filter_obs_by_isin_lists`, mapping-form `subset_palette`, `marker_by_obs_key`, `marker_order`, `marker_styles`, `legend_metric_formats`, `group_annotations`, `yscale`, `y_reference_lines`, `title_axes_top`, `append_marker_handles_to_legend`, and `append_reference_handles_to_legend` |
+| New | `orientation`, `median_tick`, `x_reference_lines`, `summary_filter_obs_by_isin_lists`, mapping-form `subset_palette`, `marker_by_obs_key`, `marker_order`, `marker_styles`, `legend_metric_formats`, `group_annotations`, `yscale`, `y_reference_lines`, `title_axes_top`, `append_marker_handles_to_legend`, and `append_reference_handles_to_legend` |
+
+### Horizontal groups with median ticks
+
+`orientation="vertical"` preserves the existing default. In horizontal mode,
+numeric values are on x, ordered categories are on y, and the first category
+is at the top. Jitter moves points along y. `xlabel`, `ylabel`, `sharey`,
+`ylims`, and `yscale` retain their physical-axis meaning. Orientation changes
+only rendering; returned `plot_df` columns and values stay unchanged.
+
+Set `median_tick=True` to draw a short tick without requiring boxes or whiskers.
+Each tick spans `boxplot_width` along the category axis and uses the median of
+finite `summary_included` values in that category. Groups with fewer than two
+eligible values have no tick. The default is `False`; box and violin options
+remain independent.
+
+```python
+import pandas as pd
+import adata_science_tools as adtl
+
+toy_df = pd.DataFrame({
+    "group": ["A"] * 4 + ["B"] * 4 + ["C"] * 4,
+    "feature_a": [-2., -1., 0., 1., 1., 2., 3., 4., -1., 0., 1., 2.],
+    "feature_b": [1., 2., 3., 4., -3., -2., -1., 0., 0., 1., 2., 3.],
+})
+fig, axes, plot_df = adtl.datapoints(
+    df=toy_df,
+    var_names=["feature_a", "feature_b"],
+    x_by_obs_key="group",
+    x_order=["A", "B", "C"],
+    orientation="horizontal",
+    subset_obs_key="group",
+    subset_palette={"A": "#4477AA", "B": "#CC6677", "C": "#228833"},
+    boxplot=False,
+    violinplot=False,
+    median_tick=True,
+    add_zero_line=True,
+    x_reference_lines=[{"value": 2., "linestyle": "--", "color": "0.65"}],
+    random_seed=2026,
+    jitter_amount=.12,
+    point_size=48,
+    legend=False,
+    title="Horizontal feature values with median ticks",
+    xlabel="Simulated value",
+    ylabel="Group",
+    ncols=2,
+    figsize=(9, 4.5),
+    show=False,
+)
+# Optional final adjustments use the returned Matplotlib axes:
+# axes["feature_a"].set_xlim(-4, 5)
+# axes["feature_a"].tick_params(axis="both", labelsize=11)
+```
+
+<img src="assets/plotting_gallery/datapoints__horizontal_medians.png" alt="Horizontal feature values with median ticks" width="720">
+
+*Black ticks show category medians; the red dotted line marks zero and the gray
+dashed line marks x=2. All observations are synthetic.*
 
 ### Synthetic example
 
@@ -222,13 +282,13 @@ variable label and therefore remains visible.
    The function selects requested variable columns before converting sparse
    slices to dense arrays.
 
-4. X-AXIS: By default, one axis named `"all"` contains the selected variable
-   names as x-axis categories. With `var_groupby_key`, `collapse_mode="aggregate"`
-   uses variable-group names as x categories, while `collapse_mode="stack"` uses
-   source variable names. Set `x_by_obs_key="column"` to use observation
-   metadata groups as x-axis categories instead. Missing `x_by_obs_key` values
+4. CATEGORIES: By default, one axis named `"all"` contains the selected variable
+   names as categories. With `var_groupby_key`, `collapse_mode="aggregate"`
+   uses variable-group names, while `collapse_mode="stack"` uses source variable
+   names. Set `x_by_obs_key="column"` to use observation metadata groups instead.
+   Categories are on x in vertical mode and on y in horizontal mode. Missing `x_by_obs_key` values
    are routed to `x_by_obs_missing_label`, which defaults to `"Missing"`.
-   `x_order` orders the displayed x-axis labels; for config-driven calls, raw
+   `x_order` orders categories in either orientation; for config-driven calls, raw
    typed values such as `[2, 1]` and string labels such as `["2", "1"]` both
    match displayed labels. Set `x_order_include_unobserved=True` to keep every
    requested `x_order` label as a tick in each panel even when no post-filter
@@ -238,7 +298,7 @@ variable label and therefore remains visible.
    `x_order` unless `subset_order` is supplied; the same rule applies inside
    `subplot_by_obs_key` panels.
 
-5. OBS-GROUP X-AXIS: With `x_by_obs_key` and multiple selected variables or
+5. OBS-GROUP CATEGORIES: With `x_by_obs_key` and multiple selected variables or
    groups, `x_by_obs_multi_var_mode="panel_by_variable"` is the default and
    creates one panel per selected variable/group. Use
    `x_by_obs_multi_var_mode="pool_variables"` to pool all selected variables or
@@ -275,20 +335,28 @@ variable label and therefore remains visible.
     `axes_bottom`; unobserved and summary-empty x categories are skipped. Optional
     `label`, `format`, and `text_kwargs` fields control text. `format` may use
     `metric`, `label`, `value`, `count`, and `x_label`. Unsupported named or
-    positional fields raise `ValueError` before drawing.
+    positional fields raise `ValueError` before drawing. In horizontal mode,
+    metric annotations use numeric x values; `axes_top` and `axes_bottom` place
+    text at the right and left ends of the numeric axis, respectively.
 
 11. AXIS SCALE AND LIMITS: `yscale` is validated against Matplotlib scales.
     The callable-only `function` and `functionlog` scales are rejected because
     this API does not accept their required transform functions.
     `ylims=[low, high]` must be finite and increasing and is applied after
-    drawing. For `yscale="log"`, every visible point and rendered summary
-    metric, limit, and reference must be positive; `add_zero_line=True` raises.
+    drawing. These options always control the physical y-axis. In vertical mode
+    with `yscale="log"`, every visible point and rendered summary metric, limit,
+    and y-reference must be positive; `add_zero_line=True` raises. In horizontal
+    mode, numeric values remain on a linear x-axis and may be zero or negative.
+    Explicit `ylims` override automatic top-first category ordering. Use the
+    returned axes to set numeric x limits or scale.
 
-12. REFERENCES: `add_zero_line=True` retains the legacy red dotted y=0 line.
-    `y_reference_lines` is an ordered sequence of mappings with required finite
+12. REFERENCES: `add_zero_line=True` draws a red dotted line at numeric zero:
+    y=0 in vertical mode or x=0 in horizontal mode. `y_reference_lines` and
+    `x_reference_lines` always draw on their named physical axes. Each is an
+    ordered sequence of mappings with required finite
     numeric `value` and optional `label`, `color`, `linestyle`, `linewidth`,
     `alpha`, and `zorder`. Unsupported keys raise. An explicit reference at
-    exactly zero is not duplicated when the legacy zero line is enabled.
+    exactly zero on the numeric axis is not duplicated when the zero line is enabled.
 
 13. LEGEND METRICS: `legend_metrics` can include `mean`, `median`, `count`,
     `std`, and `sem`. When `legend=True`, labels include all-data metrics plus

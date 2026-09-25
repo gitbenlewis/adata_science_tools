@@ -350,8 +350,14 @@ RENDERER_MANIFEST: tuple[RendererSpec, ...] = (
         name="datapoints",
         module="_plotting._datapoints",
         status="maintained",
-        provenance="make_independent_group_adata; simulated measurements and observed sample metadata",
+        provenance="make_independent_group_adata and inline synthetic grouped values; simulated measurements and sample metadata",
         cases=(
+            GalleryCase(
+                case_id="horizontal_medians",
+                title="Horizontal feature values with median ticks",
+                asset="datapoints__horizontal_medians.png",
+                features=("ordered horizontal groups", "median-only ticks", "zero and x-reference lines"),
+            ),
             GalleryCase(
                 case_id="grouped_markers",
                 title="Feature values with independent marker and color encodings",
@@ -527,8 +533,14 @@ RENDERER_MANIFEST: tuple[RendererSpec, ...] = (
         name="paired_datapoints",
         module="_plotting._datapoints",
         status="maintained",
-        provenance="make_paired_adata; deterministic paired subjects, conditions, and treatment strata",
+        provenance="make_paired_adata and inline synthetic pairs; deterministic subjects, conditions, and treatment strata",
         cases=(
+            GalleryCase(
+                case_id="horizontal_pairs",
+                title="Horizontal before/after pairs",
+                asset="paired_datapoints__horizontal_pairs.png",
+                features=("horizontal pairing", "slope colors", "styled x-reference line"),
+            ),
             GalleryCase(
                 case_id="paired_groups",
                 title="Paired changes by treatment",

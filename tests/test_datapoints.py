@@ -916,5 +916,172 @@ class DatapointsTests(unittest.TestCase):
             )
 
 
+
+class DatapointsOrientationTests(unittest.TestCase):
+    def tearDown(self):
+        plt.close("all")
+
+    def plot(self, **kwargs):
+        options = dict(
+            df=pd.DataFrame({
+                "group": ["B", "A", "B", "A", "C"],
+                "feature_a": [2., -3., 6., 1., 9.],
+                "feature_b": [3., -2., 7., 2., 10.],
+                "included": [True, True, True, False, True],
+                "subset": ["one", "two", "one", "two", None],
+                "marker": ["circle", "square", "circle", "square", None],
+            }),
+            var_names=["feature_a", "feature_b"],
+            x_by_obs_key="group", x_order=["A", "B", "C"],
+            boxplot=False, legend=False, random_seed=23, show=False,
+        )
+        options.update(kwargs)
+        return adtl.datapoints(**options)
+
+    def test_horizontal_order_coordinates_determinism_and_unchanged_data(self):
+        vertical = self.plot()
+        horizontal = self.plot(orientation="horizontal", sharey=True)
+        repeated = self.plot(orientation="horizontal", sharey=True)
+        pd.testing.assert_frame_equal(vertical[2], horizontal[2])
+        pd.testing.assert_frame_equal(horizontal[2], repeated[2])
+        for name, ax in horizontal[1].items():
+            self.assertEqual([t.get_text() for t in ax.get_yticklabels()],
+                             ["A", "B", "C"] if name == "feature_a" else [])
+            self.assertTrue(ax.yaxis_inverted())
+            self.assertEqual(ax.get_xlabel(), "value")
+            self.assertEqual(ax.get_ylabel(), "group")
+            offsets = ax.collections[0].get_offsets()
+            np.testing.assert_array_equal(
+                offsets, vertical[1][name].collections[0].get_offsets()[:, ::-1])
+            np.testing.assert_array_equal(
+                offsets, repeated[1][name].collections[0].get_offsets())
+            panel = horizontal[2].loc[horizontal[2]["panel"] == name]
+            np.testing.assert_array_equal(offsets[:, 0], panel["value"])
+            self.assertTrue(np.all(np.abs(offsets[:, 1] - panel["x_order"].to_numpy()) <= .2))
+            first = ax.transData.transform((0, 1))[1]
+            last = ax.transData.transform((0, 3))[1]
+            self.assertGreater(first, last)
+
+    def test_marker_and_subset_colors_rotate_without_changing_data(self):
+        for marker in (None, "marker"):
+            for subset in (None, "subset"):
+                with self.subTest(marker=marker, subset=subset):
+                    options = dict(marker_by_obs_key=marker, subset_obs_key=subset,
+                                   legend=True, legend_metrics=("mean",))
+                    vertical = self.plot(**options)
+                    horizontal = self.plot(orientation="horizontal", **options)
+                    pd.testing.assert_frame_equal(vertical[2], horizontal[2])
+                    for name, ax in horizontal[1].items():
+                        for v, h in zip(vertical[1][name].collections, ax.collections, strict=True):
+                            np.testing.assert_array_equal(h.get_offsets(), v.get_offsets()[:, ::-1])
+                            np.testing.assert_array_equal(h.get_facecolors(), v.get_facecolors())
+                            np.testing.assert_array_equal(h.get_edgecolors(), v.get_edgecolors())
+                        self.assertEqual(
+                            [t.get_text() for t in ax.get_legend().get_texts()],
+                            [t.get_text() for t in vertical[1][name].get_legend().get_texts()])
+                    plt.close("all")
+
+    def test_median_ticks_filter_finite_values_and_omit_singletons(self):
+        frame = pd.DataFrame({
+            "group": ["A"] * 4 + ["B"] * 2 + ["C"] * 2,
+            "feature_a": [1., 5., 100., np.inf, 9., np.nan, np.inf, np.nan],
+            "included": [True, True, False, True, True, True, True, True],
+        })
+        for orientation in ("vertical", "horizontal"):
+            with self.subTest(orientation=orientation):
+                _, axes, _ = self.plot(
+                    df=frame, var_names=["feature_a"], orientation=orientation,
+                    median_tick=True, boxplot_width=.6, dropna=False,
+                    summary_filter_obs_by_isin_lists={"included": [True]},
+                )
+                ax = next(iter(axes.values()))
+                self.assertEqual(len(ax.lines), 1)
+                line = ax.lines[0]
+                numeric = line.get_ydata() if orientation == "vertical" else line.get_xdata()
+                categorical = line.get_xdata() if orientation == "vertical" else line.get_ydata()
+                np.testing.assert_array_equal(numeric, [3., 3.])
+                np.testing.assert_allclose(categorical, [.7, 1.3])
+
+    def test_horizontal_zero_and_physical_reference_lines(self):
+        _, axes, _ = self.plot(
+            orientation="horizontal", add_zero_line=True, legend=True,
+            x_reference_lines=[{"value": 0}, {"value": 4, "label": "Threshold",
+                "color": "purple", "linewidth": 2, "linestyle": "--"}],
+            y_reference_lines=[{"value": 0, "label": "Category guide"}],
+        )
+        for ax in axes.values():
+            self.assertEqual(len(ax.lines), 3)
+            np.testing.assert_array_equal(ax.lines[0].get_xdata(), [0, 0])
+            np.testing.assert_array_equal(ax.lines[1].get_ydata(), [0, 0])
+            np.testing.assert_array_equal(ax.lines[2].get_xdata(), [4, 4])
+            self.assertEqual(ax.lines[2].get_color(), "purple")
+            self.assertEqual(ax.lines[2].get_linewidth(), 2)
+            self.assertEqual(ax.lines[2].get_linestyle(), "--")
+            self.assertIn("Threshold", [t.get_text() for t in ax.get_legend().get_texts()])
+
+    def test_physical_axis_settings_and_metric_annotations(self):
+        _, axes, _ = self.plot(
+            orientation="horizontal", ylims=(.5, 3.5), yscale="log",
+            xlabel="Numeric axis", ylabel="Category axis", add_zero_line=True,
+            group_annotations=[{"metric": "median", "position": "metric"}],
+        )
+        for ax in axes.values():
+            self.assertEqual(ax.get_ylim(), (.5, 3.5))
+            self.assertEqual(ax.get_yscale(), "log")
+            self.assertEqual(ax.get_xscale(), "linear")
+            self.assertEqual(ax.get_xlabel(), "Numeric axis")
+            self.assertEqual(ax.get_ylabel(), "Category axis")
+        self.assertEqual(axes["feature_a"].texts[0].get_position(), (-1., 1))
+
+    def test_horizontal_distributions_match_vertical_geometry(self):
+        for kind in ("boxplot", "violinplot"):
+            with self.subTest(kind=kind):
+                v = self.plot(**{kind: True})
+                h = self.plot(orientation="horizontal", **{kind: True})
+                for name, ax in h[1].items():
+                    if kind == "boxplot":
+                        for vl, hl in zip(v[1][name].lines, ax.lines, strict=True):
+                            np.testing.assert_array_equal(hl.get_xdata(), vl.get_ydata())
+                            np.testing.assert_array_equal(hl.get_ydata(), vl.get_xdata())
+                    else:
+                        for vc, hc in zip(v[1][name].collections[:-1], ax.collections[:-1], strict=True):
+                            np.testing.assert_allclose(
+                                hc.get_paths()[0].vertices, vc.get_paths()[0].vertices[:, ::-1])
+                plt.close("all")
+
+    def test_horizontal_unobserved_categories_and_axis_annotations(self):
+        _, axes, data = self.plot(
+            orientation="horizontal", x_order=["C", "B", "A"],
+            x_order_include_unobserved=True,
+            filter_obs_by_isin_lists={"group": ["A", "B"]},
+            median_tick=True,
+            group_annotations=[
+                {"metric": "median", "position": "axes_top"},
+                {"metric": "median", "position": "axes_bottom"},
+            ],
+        )
+        self.assertNotIn("C", data["group"].tolist())
+        for ax in axes.values():
+            self.assertEqual([t.get_text() for t in ax.get_yticklabels()], ["C", "B", "A"])
+            self.assertTrue(ax.yaxis_inverted())
+            self.assertEqual(len(ax.lines), 2)
+            self.assertEqual([t.get_position() for t in ax.texts],
+                             [(.98, 2), (.98, 3), (.02, 2), (.02, 3)])
+            for text in ax.texts:
+                self.assertEqual(text.get_transform(), ax.get_yaxis_transform())
+
+    def test_explicit_vertical_matches_default_pixels_and_data(self):
+        default = self.plot(boxplot=True, violinplot=True)
+        explicit = self.plot(boxplot=True, violinplot=True, orientation="vertical")
+        pd.testing.assert_frame_equal(default[2], explicit[2])
+        for fig in (default[0], explicit[0]):
+            fig.canvas.draw()
+        np.testing.assert_array_equal(default[0].canvas.buffer_rgba(), explicit[0].canvas.buffer_rgba())
+
+    def test_invalid_orientation(self):
+        with self.assertRaisesRegex(ValueError, "orientation"):
+            self.plot(orientation="diagonal")
+
+
 if __name__ == "__main__":
     unittest.main()

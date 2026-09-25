@@ -16,12 +16,78 @@ The function builds a deterministic long-form plotting table first, then draws
 one panel per selected variable or variable metadata group. It returns the
 figure, axes, and that plotting table.
 
+## Horizontal before/after pairs
+
+`orientation="horizontal"` puts values on x and the reference/target categories
+on y, with the reference at the top. Points jitter along y; lines connect the
+same complete pairs, retaining existing colors and styling. Boxes and violins
+also follow the selected orientation. The default remains `"vertical"`.
+`show_paired_difference=True` with horizontal orientation raises `ValueError`;
+secondary difference axes are supported only in vertical mode.
+
+`x_reference_lines` draws vertical lines at physical x coordinates in either
+orientation. Each mapping requires a finite numeric `value` and accepts `label`,
+`color`, `linestyle`, `linewidth`, `alpha`, and `zorder`. Repeated values are drawn
+once. Labeled lines appear in axis or figure legends when `legend=True`.
+
+`xlabel`, `ylabel`, `ylims`, and `sharey` always refer to physical axes. Explicit
+y limits override automatic top-first category ordering. Use the returned axes
+for per-panel numeric x limits, scaling, and typography. Orientation does not
+change the returned long-form data or its category-related column names.
+
+```python
+import pandas as pd
+import adata_science_tools as adtl
+
+toy_df = pd.DataFrame({
+    "condition": ["before", "after"] * 4,
+    "subject": ["one", "one", "two", "two", "three", "three", "four", "four"],
+    "feature_a": [1., 2., 3., 2., 2., 2.02, 4., 5.],
+    "feature_b": [7., 5., 4., 6., 5., 5.05, 2., 4.],
+})
+fig, axes, plot_df = adtl.paired_datapoints(
+    df=toy_df,
+    var_names=["feature_a", "feature_b"],
+    groupby_key="condition",
+    groupby_key_ref_value="before",
+    groupby_key_target_value="after",
+    pair_by_key="subject",
+    orientation="horizontal",
+    boxplot=False,
+    line_color_by_slope=True,
+    point_color_by_side=True,
+    line_alpha=.8,
+    line_width=1.3,
+    x_reference_lines=[{"value": 3., "linestyle": ":", "color": "0.45"}],
+    random_seed=2026,
+    jitter_amount=.08,
+    point_size=48,
+    legend=False,
+    title="Horizontal before/after pairs",
+    xlabel="Simulated value",
+    ylabel="Condition",
+    ncols=2,
+    figsize=(9, 4.5),
+    show=False,
+)
+# axes["feature_a"].set_xlim(0, 6)
+# axes["feature_a"].tick_params(axis="both", labelsize=11)
+```
+
+<img src="assets/plotting_gallery/paired_datapoints__horizontal_pairs.png" alt="Horizontal before/after pairs" width="720">
+
+*Blue/orange points show before/after observations. Green, red, and gray
+connectors indicate increases, decreases, and approximately flat changes using
+the existing 5% relative-change threshold. The dotted line marks x=3. All pairs
+are synthetic.*
+
 ## Full signature
 
 ```python
 def paired_datapoints(
     input_data: anndata.AnnData | pd.DataFrame | None = None,
     *,
+    orientation: Literal["vertical", "horizontal"] = "vertical",
     adata: anndata.AnnData | None = None,
     df: pd.DataFrame | None = None,
     var_df: pd.DataFrame | None = None,
@@ -107,6 +173,7 @@ def paired_datapoints(
     hspace: float | None = None,
     sharey: bool = False,
     ylims: Sequence[float] | None = None,
+    x_reference_lines: Sequence[Mapping[str, Any]] | None = None,
     ylabel: str | None = None,
     xlabel: str | None = None,
     title: str | None = None,
@@ -167,7 +234,7 @@ single-variable subplot titles from variable metadata. Use `title_y` and
 `title_fontsize` controls only the overall figure title, while
 `subplot_title_fontsize` independently controls the subplot titles. Leaving
 `subplot_title_fontsize=None` preserves the existing subplot title sizing. Use
-`xlabel=""` to suppress the x-axis label below the Pre/Post tick labels.
+`xlabel=""` to suppress the physical x-axis label.
 
 Set `title_axes_top` to the normalized figure coordinate for the top edge of the
 subplot area. Set `wspace` or `hspace` to reserve horizontal or vertical space
@@ -284,8 +351,9 @@ fig, axes, plot_df = adtl.paired_datapoints(
 
 ## Pairing behavior
 
-1. The x-axis is ordered as reference then target, with labels from
-   `groupby_key_ref_value` and `groupby_key_target_value`.
+1. Categories are ordered as reference then target, with labels from
+   `groupby_key_ref_value` and `groupby_key_target_value`. They run left-to-right
+   in vertical mode and top-to-bottom in horizontal mode.
 
 2. Pairing uses `pair_by_key` when provided, otherwise `subject_col`.
 
@@ -339,7 +407,8 @@ finite endpoints from its symmetric average-magnitude normalized change:
 `(target - reference) / ((abs(reference) + abs(target)) / 2)`. The absolute
 magnitudes make the calculation safe for negative or opposite-sign endpoints,
 and swapping the endpoints negates the change without altering its magnitude.
-The calculation uses the displayed y values, not the jittered x positions.
+The calculation uses the displayed numeric values, independent of categorical
+jitter and orientation.
 
 Exact zero and values with
 `abs(normalized_change) < slope_color_threshold` use `flat_slope_color`; values
@@ -478,10 +547,10 @@ fig, axes, plot_df = adtl.paired_datapoints(
 ## Per-position summary legends
 
 Set `legend=True` and provide `legend_metrics` to add overall summary rows for
-each displayed x-axis position. This feature is opt-in: the default
+each displayed category. This feature is opt-in: the default
 `legend_metrics=None` adds no summary rows. Supported metrics are `mean`,
 `median`, `count`, `std`, and `sem`. They appear in the requested order, while
-the summary rows follow the displayed x order:
+the summary rows follow the displayed category order:
 reference, target, then the optional paired difference or log2FC.
 
 Each summary uses the finite `value` rows that remain in its panel and x

@@ -3366,5 +3366,145 @@ class PairedDatapointsTests(unittest.TestCase):
             )
 
 
+
+class PairedDatapointsOrientationTests(unittest.TestCase):
+    def tearDown(self):
+        plt.close("all")
+
+    def plot(self, **kwargs):
+        options = dict(
+            df=pd.DataFrame({
+                "condition": ["before", "after"] * 3,
+                "subject": ["one", "one", "two", "two", "three", "three"],
+                "subset": ["A", "A", "B", "B", None, None],
+                "feature_a": [1., 4., 8., 3., 5., np.nan],
+                "feature_b": [2., 5., 9., 4., 6., 7.],
+            }),
+            var_names=["feature_a", "feature_b"], groupby_key="condition",
+            groupby_key_ref_value="before", groupby_key_target_value="after",
+            pair_by_key="subject", boxplot=False, random_seed=23, show=False,
+        )
+        options.update(kwargs)
+        return adtl.paired_datapoints(**options)
+
+    def test_horizontal_pairs_order_endpoints_missing_pairs_and_determinism(self):
+        v = self.plot(line_color_by_slope=True)
+        h = self.plot(orientation="horizontal", line_color_by_slope=True, sharey=True)
+        repeat = self.plot(orientation="horizontal", line_color_by_slope=True, sharey=True)
+        pd.testing.assert_frame_equal(v[2], h[2])
+        pd.testing.assert_frame_equal(h[2], repeat[2])
+        self.assertEqual(len(h[1]["feature_a"].lines), 2)
+        self.assertEqual(len(h[1]["feature_b"].lines), 3)
+        for name, ax in h[1].items():
+            self.assertTrue(ax.yaxis_inverted())
+            self.assertEqual([t.get_text() for t in ax.get_yticklabels()],
+                             ["before", "after"] if name == "feature_a" else [])
+            self.assertEqual(ax.get_xlabel(), "value")
+            self.assertEqual(ax.get_ylabel(), "condition")
+            for vl, hl, rl in zip(v[1][name].lines, ax.lines, repeat[1][name].lines, strict=True):
+                np.testing.assert_array_equal(hl.get_xdata(), vl.get_ydata())
+                np.testing.assert_array_equal(hl.get_ydata(), vl.get_xdata())
+                np.testing.assert_array_equal(hl.get_xydata(), rl.get_xydata())
+                self.assertEqual(hl.get_color(), vl.get_color())
+                self.assertEqual(hl.get_linestyle(), vl.get_linestyle())
+                self.assertEqual(hl.get_linewidth(), vl.get_linewidth())
+                self.assertEqual(hl.get_alpha(), vl.get_alpha())
+            offsets = ax.collections[0].get_offsets()
+            np.testing.assert_array_equal(offsets, v[1][name].collections[0].get_offsets()[:, ::-1])
+            np.testing.assert_array_equal(offsets, repeat[1][name].collections[0].get_offsets())
+        np.testing.assert_array_equal(h[1]["feature_a"].lines[0].get_xdata(), [1., 4.])
+        np.testing.assert_array_equal(h[1]["feature_a"].lines[1].get_xdata(), [8., 3.])
+
+    def test_horizontal_subset_and_side_colors(self):
+        for side_colors in (False, True):
+            with self.subTest(side_colors=side_colors):
+                options = dict(subset_obs_key="subset", point_color_by_side=side_colors,
+                               legend=True, legend_metrics=("mean",))
+                v = self.plot(**options)
+                h = self.plot(orientation="horizontal", **options)
+                pd.testing.assert_frame_equal(v[2], h[2])
+                for name, ax in h[1].items():
+                    for vc, hc in zip(v[1][name].collections, ax.collections, strict=True):
+                        np.testing.assert_array_equal(hc.get_offsets(), vc.get_offsets()[:, ::-1])
+                        np.testing.assert_array_equal(hc.get_facecolors(), vc.get_facecolors())
+                    self.assertEqual(
+                        [t.get_text() for t in ax.get_legend().get_texts()],
+                        [t.get_text() for t in v[1][name].get_legend().get_texts()])
+                plt.close("all")
+
+    def test_horizontal_box_and_violin_geometry(self):
+        for kind in ("boxplot", "violinplot"):
+            with self.subTest(kind=kind):
+                v = self.plot(connect_lines=False, **{kind: True})
+                h = self.plot(connect_lines=False, orientation="horizontal", **{kind: True})
+                for name, ax in h[1].items():
+                    if kind == "boxplot":
+                        for vl, hl in zip(v[1][name].lines, ax.lines, strict=True):
+                            np.testing.assert_array_equal(hl.get_xdata(), vl.get_ydata())
+                            np.testing.assert_array_equal(hl.get_ydata(), vl.get_xdata())
+                    else:
+                        for vc, hc in zip(v[1][name].collections[:-1], ax.collections[:-1], strict=True):
+                            np.testing.assert_allclose(hc.get_paths()[0].vertices,
+                                                       vc.get_paths()[0].vertices[:, ::-1])
+                plt.close("all")
+
+    def test_x_reference_lines_styling_legends_and_physical_axes(self):
+        for orientation in ("vertical", "horizontal"):
+            for scope in ("axis", "figure"):
+                with self.subTest(orientation=orientation, scope=scope):
+                    fig, axes, _ = self.plot(
+                        orientation=orientation, connect_lines=False,
+                        x_reference_lines=[{"value": 2.5, "color": "purple", "label": "Threshold",
+                                            "linestyle": ":", "linewidth": 2, "alpha": .7}],
+                        xlabel="Physical x", ylabel="Physical y", ylims=(.5, 3.5),
+                        legend=True, legend_scope=scope,
+                    )
+                    for ax in axes.values():
+                        self.assertEqual(len(ax.lines), 1)
+                        np.testing.assert_array_equal(ax.lines[0].get_xdata(), [2.5, 2.5])
+                        self.assertEqual(ax.lines[0].get_color(), "purple")
+                        self.assertEqual(ax.lines[0].get_linewidth(), 2)
+                        self.assertEqual(ax.lines[0].get_linestyle(), ":")
+                        self.assertEqual(ax.lines[0].get_alpha(), .7)
+                        self.assertEqual(ax.get_ylim(), (.5, 3.5))
+                        self.assertEqual(ax.get_xlabel(), "Physical x")
+                        self.assertEqual(ax.get_ylabel(), "Physical y")
+                        legend = fig.legends[0] if scope == "figure" else ax.get_legend()
+                        self.assertIn("Threshold", [t.get_text() for t in legend.get_texts()])
+                    plt.close("all")
+
+    def test_explicit_vertical_matches_default_pixels_and_data(self):
+        v = self.plot(boxplot=True, violinplot=True, show_paired_difference=True)
+        explicit = self.plot(boxplot=True, violinplot=True, show_paired_difference=True,
+                             orientation="vertical")
+        pd.testing.assert_frame_equal(v[2], explicit[2])
+        for fig in (v[0], explicit[0]):
+            fig.canvas.draw()
+        np.testing.assert_array_equal(v[0].canvas.buffer_rgba(), explicit[0].canvas.buffer_rgba())
+
+    def test_reference_legend_with_vertical_difference_axis_and_side_colors(self):
+        for scope in ("axis", "figure"):
+            with self.subTest(scope=scope):
+                fig, axes, _ = self.plot(
+                    show_paired_difference=True, point_color_by_side=True,
+                    subset_obs_key="subset", legend=True, legend_scope=scope,
+                    x_reference_lines=[{"value": 1.5, "label": "Threshold"},
+                                       {"value": 1.5, "label": "Duplicate"}],
+                )
+                legends = fig.legends if scope == "figure" else [ax.get_legend() for ax in axes.values()]
+                self.assertTrue(legends)
+                for legend in legends:
+                    labels = [text.get_text() for text in legend.get_texts()]
+                    self.assertEqual(labels.count("Threshold"), 1)
+                    self.assertNotIn("Duplicate", labels)
+                plt.close("all")
+
+    def test_invalid_orientation_and_horizontal_difference(self):
+        with self.assertRaisesRegex(ValueError, "orientation"):
+            self.plot(orientation="diagonal")
+        with self.assertRaisesRegex(ValueError, "show_paired_difference.*horizontal"):
+            self.plot(orientation="horizontal", show_paired_difference=True)
+
+
 if __name__ == "__main__":
     unittest.main()
