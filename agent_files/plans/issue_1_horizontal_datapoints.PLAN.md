@@ -2,7 +2,7 @@
 
 ## Status and objective
 
-Status: implementation and simplicity review complete; ready for authorized publication. Updated: 2026-09-25.
+Status: complete; implementation reviewed, committed, and pushed. Updated: 2026-09-25.
 Repository: `adata_science_tools`; no related repositories.
 Issue: https://github.com/gitbenlewis/adata_science_tools/issues/1
 
@@ -220,3 +220,12 @@ publication. Working-tree and existing-index size scans found no blobs above
 100 MiB. Both new horizontal PNGs are included in the scoped commit. Next Git
 steps are staged/outgoing-blob checks, commit, push to origin/main, and remote
 SHA/clean-worktree verification; the publication result is reported in the task.
+
+### 2026-09-25 — Publication verified
+
+Committed the 12 scoped files as `c37faf3` (Add horizontal datapoint plots and
+median ticks) and pushed to origin/main. All 12 outgoing blobs were below
+100 MiB. A live remote check matched local HEAD at
+`c37faf3b557d5eeb522e24e6a238db2d32c526b5`, with no divergence and a clean
+worktree. This final plan-only record closes the publication phase. No PR was
+created and no issue state was changed.
