@@ -12,7 +12,7 @@ import seaborn as sns
 from ._utils import _draw_reference_lines, _normalize_reference_lines
 
 
-__all__ = ["ranked_waterfall", "category_composition", "residual_diagnostic"]
+__all__ = ["ranked_waterfall", "category_composition", "residual_diagnostic", "coordinate_scatter"]
 
 
 def _require_columns(df: pd.DataFrame, columns: Sequence[str]) -> None:
@@ -460,3 +460,90 @@ def residual_diagnostic(
     else:
         plt.close(fig)
     return fig, ax, prepared
+
+
+def coordinate_scatter(
+    df: pd.DataFrame,
+    *,
+    x: str,
+    y: str,
+    hue: str | None = None,
+    hue_order: Sequence[Any] | None = None,
+    palette: Mapping[Any, Any] | Sequence[Any] | str | None = None,
+    point_size: float = 40,
+    point_alpha: float = 0.85,
+    xlabel: str | None = None,
+    ylabel: str | None = None,
+    xlims: Sequence[float] | None = None,
+    ylims: Sequence[float] | None = None,
+    title: str | None = None,
+    axis_label_fontsize: float = 12,
+    tick_fontsize: float = 10,
+    legend: bool = True,
+    legend_kwargs: Mapping[str, Any] | None = None,
+    ax: plt.Axes | None = None,
+    figsize: tuple[float, float] = (6, 5),
+    show: bool = True,
+    savefig: bool = False,
+    file_name: str = "coordinate_scatter.png",
+) -> tuple[plt.Figure, plt.Axes, pd.DataFrame]:
+    """Draw supplied coordinates without fitting, centering, or scaling them.
+
+    All source rows/index values are returned in order, with ``source_position``
+    and ``plot_status``. Nonfinite coordinates and missing hue are omitted from
+    the artists. Caller-owned figures are never closed, shown, or relaid out.
+    """
+    _require_columns(df, [x, y] + ([hue] if hue is not None else []))
+    if {"source_position", "plot_status"}.intersection(df.columns):
+        raise ValueError("Input columns conflict with returned 'source_position' or 'plot_status'.")
+    coordinates = df[[x, y]].apply(pd.to_numeric, errors="raise").to_numpy(dtype=float, na_value=np.nan)
+    plotted = df.copy()
+    plotted["source_position"] = np.arange(len(df))
+    plotted["plot_status"] = np.where(
+        np.isfinite(coordinates).all(axis=1), "plotted", "nonfinite_coordinate"
+    )
+    if hue is not None:
+        plotted.loc[(plotted["plot_status"] == "plotted") & df[hue].isna(), "plot_status"] = "missing_hue"
+        order = _resolve_order(df[hue], hue_order, include_unobserved=True, param_name="hue_order")
+        colors = _resolve_palette(order, palette)
+    else:
+        order, colors = [], {}
+    plotted.attrs["hue_order"] = order
+    plotted.attrs["palette"] = colors
+
+    created_figure = ax is None
+    if created_figure:
+        fig, ax = plt.subplots(figsize=figsize)
+    else:
+        fig = ax.figure
+    valid = plotted["plot_status"].eq("plotted").to_numpy()
+    if hue is None:
+        ax.scatter(coordinates[valid, 0], coordinates[valid, 1], s=point_size, alpha=point_alpha)
+    else:
+        for category in order:
+            mask = valid & df[hue].eq(category).fillna(False).to_numpy(dtype=bool)
+            ax.scatter(
+                coordinates[mask, 0], coordinates[mask, 1],
+                color=colors[category], label=str(category), s=point_size, alpha=point_alpha,
+            )
+        if legend and order:
+            ax.legend(**{"title": hue, **dict(legend_kwargs or {})})
+    ax.set_xlabel(x if xlabel is None else xlabel, fontsize=axis_label_fontsize)
+    ax.set_ylabel(y if ylabel is None else ylabel, fontsize=axis_label_fontsize)
+    ax.tick_params(axis="both", labelsize=tick_fontsize)
+    if xlims is not None:
+        ax.set_xlim(xlims)
+    if ylims is not None:
+        ax.set_ylim(ylims)
+    if title is not None:
+        ax.set_title(title)
+    if created_figure:
+        fig.tight_layout()
+    if savefig:
+        fig.savefig(file_name, bbox_inches="tight")
+    if created_figure:
+        if show:
+            plt.show()
+        else:
+            plt.close(fig)
+    return fig, ax, plotted

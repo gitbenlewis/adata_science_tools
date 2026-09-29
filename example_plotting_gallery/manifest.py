@@ -43,6 +43,40 @@ class RendererSpec:
 
 RENDERER_MANIFEST: tuple[RendererSpec, ...] = (
     RendererSpec(
+        name="coordinate_scatter",
+        module="_plotting._tabular_plots",
+        status="maintained",
+        provenance="inline synthetic coordinates; supplied values only, no fitting or embedding",
+        cases=(
+            GalleryCase(
+                case_id="precomputed_coordinates",
+                title="Supplied coordinates without fitting",
+                asset="coordinate_scatter__precomputed_coordinates.png",
+                features=("exact coordinates", "ordered categories", "no statistics"),
+            ),
+        ),
+    ),
+    RendererSpec(
+        name="enrichment_dotplot",
+        module="_plotting._enrichment",
+        status="maintained",
+        provenance="inline synthetic enrichment table; supplied scores, adjusted p-values, and overlap counts",
+        cases=(
+            GalleryCase(
+                case_id="grouped_comparison",
+                title="Precomputed enrichment comparison",
+                asset="enrichment_dotplot__grouped_comparison.png",
+                features=("stable term IDs", "missing comparison slots", "strict significance boundary"),
+            ),
+            GalleryCase(
+                case_id="explicit_bubbles",
+                title="Enrichment bubbles with explicit scales",
+                asset="enrichment_dotplot__explicit_bubbles.png",
+                features=("fixed color and area scales", "empirical zero", "labeled display floor"),
+            ),
+        ),
+    ),
+    RendererSpec(
         name="adata_histograms",
         module="_plotting._histograms",
         status="maintained",
@@ -962,6 +996,8 @@ EXPECTED_RENDERER_NAMES = frozenset(
         "barh_l2fc_dotplot_column",
         "category_composition",
         "continuous_effect_plot",
+        "coordinate_scatter",
+        "enrichment_dotplot",
         "corr_dotplot",
         "corr_dotplot_dev",
         "datapoints",
@@ -1016,8 +1052,8 @@ MANIFEST_BY_NAME = {spec.name: spec for spec in RENDERER_MANIFEST}
 def validate_manifest() -> None:
     """Raise ``ValueError`` when the gallery coverage contract is inconsistent."""
 
-    if len(RENDERER_MANIFEST) != 45:
-        raise ValueError(f"Expected 45 renderer entries, found {len(RENDERER_MANIFEST)}.")
+    if len(RENDERER_MANIFEST) != 47:
+        raise ValueError(f"Expected 47 renderer entries, found {len(RENDERER_MANIFEST)}.")
     if len(RENDERER_NAMES) != len(RENDERER_MANIFEST):
         raise ValueError("Renderer names must be unique.")
     if RENDERER_NAMES != EXPECTED_RENDERER_NAMES:

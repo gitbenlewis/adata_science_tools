@@ -60,10 +60,10 @@ class PlottingGalleryTests(unittest.TestCase):
             public_functions,
             RENDERER_NAMES | set(EXCLUDED_PUBLIC_CALLABLES),
         )
-        self.assertEqual(len(RENDERER_MANIFEST), 45)
+        self.assertEqual(len(RENDERER_MANIFEST), 47)
         self.assertEqual(
             sum(len(spec.cases) for spec in RENDERER_MANIFEST),
-            65,
+            68,
         )
         for spec in RENDERER_MANIFEST:
             renderer = getattr(adtl.pl, spec.name)
@@ -727,18 +727,21 @@ class PlottingGalleryTests(unittest.TestCase):
             residuals["observed"] - residuals["expected"],
         )
 
-    def test_horizontal_gallery_cases_render_deterministically(self):
+    def test_recent_gallery_cases_render_deterministically(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
             options = dict(
-                renderer_names=["datapoints", "paired_datapoints"],
-                case_ids=["horizontal_medians", "horizontal_pairs"],
+                renderer_names=["datapoints", "paired_datapoints", "enrichment_dotplot", "coordinate_scatter"],
+                case_ids=["horizontal_medians", "horizontal_pairs", "grouped_comparison", "explicit_bubbles", "precomputed_coordinates"],
             )
             first = generate_gallery(root / "first", **options)
             second = generate_gallery(root / "second", **options)
             self.assertEqual({p.name for p in first}, {
                 "datapoints__horizontal_medians.png",
                 "paired_datapoints__horizontal_pairs.png",
+                "enrichment_dotplot__grouped_comparison.png",
+                "enrichment_dotplot__explicit_bubbles.png",
+                "coordinate_scatter__precomputed_coordinates.png",
             })
             for a, b in zip(first, second, strict=True):
                 self.assertEqual(a.name, b.name)

@@ -4,7 +4,7 @@ This gallery is a repository-owned visual catalog for the plotting functions
 exported by `adata_science_tools._plotting`. The coverage contract and asset
 filenames come from
 [`example_plotting_gallery/manifest.py`](../example_plotting_gallery/manifest.py):
-45 renderers and 65 cases, split across maintained, compatibility, and
+47 renderers and 68 cases, split across maintained, compatibility, and
 deprecated APIs.
 
 The examples are for rendering and API coverage. They are not benchmark
@@ -31,6 +31,11 @@ rows. The latter case reshapes the long expression fixture into the preferred
 API's aligned wide expression, observation-metadata, and feature-metadata
 tables without changing any values.
 
+The `enrichment_dotplot` and `coordinate_scatter` cases use fixed synthetic
+results and coordinates from issue #2. They perform no enrichment analysis,
+statistical fitting, or coordinate transformation. The bubble example uses
+explicit color and area scales and labels its logarithmic display floor.
+
 Some examples deliberately consume analysis results produced by public library
 functions:
 
@@ -51,7 +56,7 @@ analysis values.
 
 ## Coverage boundaries
 
-The manifest labels 30 renderers as maintained, 6 as compatibility APIs, and 9
+The manifest labels 32 renderers as maintained, 6 as compatibility APIs, and 9
 as deprecated. Compatibility and deprecated entries remain in the catalog so
 their current call paths and recommended replacements are visible; their
 screenshots do not change their support status.
@@ -83,7 +88,7 @@ its API page, or select an image to view the full-size PNG. Preview widths are
 scaled by aspect ratio so panoramic multi-panel figures remain legible without
 oversizing square or portrait plots.
 
-### Maintained renderers (30)
+### Maintained renderers (32)
 
 <details>
 <summary>Jump to a maintained renderer</summary>
@@ -93,6 +98,8 @@ oversizing square or portrait plots.
 <li><a href="#renderer-datapoints_effect_panels_column"><code>datapoints_effect_panels_column</code></a></li>
 <li><a href="#renderer-category_composition"><code>category_composition</code></a></li>
 <li><a href="#renderer-continuous_effect_plot"><code>continuous_effect_plot</code></a></li>
+<li><a href="#renderer-coordinate_scatter"><code>coordinate_scatter</code></a></li>
+<li><a href="#renderer-enrichment_dotplot"><code>enrichment_dotplot</code></a></li>
 <li><a href="#renderer-corr_dotplot"><code>corr_dotplot</code></a></li>
 <li><a href="#renderer-datapoints"><code>datapoints</code></a></li>
 <li><a href="#renderer-forest"><code>forest</code></a></li>
@@ -120,6 +127,35 @@ oversizing square or portrait plots.
 <li><a href="#renderer-volcano_plot_generic"><code>volcano_plot_generic</code></a></li>
 </ul>
 </details>
+
+<a id="renderer-coordinate_scatter"></a>
+
+<table>
+<tr><td>
+<strong><a href="_tabular_plots.md"><code>coordinate_scatter</code></a></strong><br>
+<small><code>_plotting._tabular_plots</code> · Maintained · <a href="#renderer-coordinate_scatter">Permalink</a></small>
+</td></tr>
+<tr><td>
+<a href="assets/plotting_gallery/coordinate_scatter__precomputed_coordinates.png"><img src="assets/plotting_gallery/coordinate_scatter__precomputed_coordinates.png" alt="Supplied coordinates without fitting" width="520"></a><br>
+<code>precomputed_coordinates</code> — Supplied coordinates without fitting
+</td></tr>
+</table>
+
+<a id="renderer-enrichment_dotplot"></a>
+
+<table>
+<tr><td>
+<strong><a href="_enrichment.md"><code>enrichment_dotplot</code></a></strong><br>
+<small><code>_plotting._enrichment</code> · Maintained · <a href="#renderer-enrichment_dotplot">Permalink</a></small>
+</td></tr>
+<tr><td>
+<a href="assets/plotting_gallery/enrichment_dotplot__grouped_comparison.png"><img src="assets/plotting_gallery/enrichment_dotplot__grouped_comparison.png" alt="Precomputed enrichment comparison" width="520"></a><br>
+<code>grouped_comparison</code> — Precomputed enrichment comparison
+<br><br>
+<a href="assets/plotting_gallery/enrichment_dotplot__explicit_bubbles.png"><img src="assets/plotting_gallery/enrichment_dotplot__explicit_bubbles.png" alt="Enrichment bubbles with explicit scales" width="520"></a><br>
+<code>explicit_bubbles</code> — Enrichment bubbles with explicit scales
+</td></tr>
+</table>
 
 <a id="renderer-adata_histograms"></a>
 

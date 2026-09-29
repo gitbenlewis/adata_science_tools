@@ -145,3 +145,85 @@ plotted[["x_original", "x_transformed", "residual"]]
 ```
 
 Validation is explicit rather than silently dropping ambiguous data. Waterfalls reject missing/non-finite values, missing labels, and duplicate labels unless duplicates are enabled. Compositions reject missing x values, unsupported missing-category policies, incomplete explicit orders, palette gaps, and missing-label collisions; when dropping missing categories leaves no observations, explicit or categorical orders can still return zero-total rows. Residual diagnostics reject invalid transform names, nonpositive log domains, non-finite rendered values, and missing values when `dropna=False`.
+
+## `coordinate_scatter`
+
+Render precomputed two-dimensional coordinates without regression, correlation,
+embedding fitting, centering, or scaling. Existing `corr_dotplot` behavior is
+unchanged. The new function is available as `adtl.coordinate_scatter`.
+
+```python
+def coordinate_scatter(
+    df: pd.DataFrame,
+    *,
+    x: str,
+    y: str,
+    hue: str | None = None,
+    hue_order: Sequence[Any] | None = None,
+    palette: Mapping[Any, Any] | Sequence[Any] | str | None = None,
+    point_size: float = 40,
+    point_alpha: float = 0.85,
+    xlabel: str | None = None,
+    ylabel: str | None = None,
+    xlims: Sequence[float] | None = None,
+    ylims: Sequence[float] | None = None,
+    title: str | None = None,
+    axis_label_fontsize: float = 12,
+    tick_fontsize: float = 10,
+    legend: bool = True,
+    legend_kwargs: Mapping[str, Any] | None = None,
+    ax: plt.Axes | None = None,
+    figsize: tuple[float, float] = (6, 5),
+    show: bool = True,
+    savefig: bool = False,
+    file_name: str = "coordinate_scatter.png",
+) -> tuple[plt.Figure, plt.Axes, pd.DataFrame]:
+```
+
+```python
+import pandas as pd
+import adata_science_tools as adtl
+
+coordinates = pd.DataFrame({
+    "axis_1": [0.0, 1.0, 2.0, 2.0],
+    "axis_2": [1.0, 0.0, 1.5, 1.5],
+    "group": ["group_a", "group_a", "group_b", "group_b"],
+})
+fig, ax, plotted = adtl.coordinate_scatter(
+    coordinates, x="axis_1", y="axis_2", hue="group",
+    hue_order=["group_a", "group_b"],
+    palette={"group_a": "#4477AA", "group_b": "#CC6677"},
+    xlabel="Axis 1", ylabel="Axis 2", point_size=85,
+    legend_kwargs={"loc": "upper left", "bbox_to_anchor": (1.02, 1)},
+    figsize=(8, 5), show=False,
+)
+```
+
+<img src="assets/plotting_gallery/coordinate_scatter__precomputed_coordinates.png" alt="Supplied coordinates without fitting" width="720">
+
+The two coincident group B rows remain separate observations and overlap exactly.
+Labels, including caller-provided explained-variance text, are used verbatim.
+Coordinates must be numeric; numeric source values are not changed. Nonfinite or
+missing coordinates omit the point. A missing hue also omits it. Empty inputs
+produce empty axes; singleton groups and constant coordinates render normally.
+Matplotlib expands constant axis limits for display without changing coordinates.
+
+The third return value retains every source row, original column, index label,
+and row order. `source_position` records the zero-based row position, including
+when index labels repeat. `plot_status` is `plotted`, `nonfinite_coordinate`, or
+`missing_hue`, with coordinate failure taking precedence. These identifiers are
+never added to the visible plot. Conflicting input audit-column names raise an
+error. The input frame is unchanged.
+
+Explicit hue order takes precedence over categorical dtype order and first
+appearance. It must include all observed categories; additional categories retain
+empty legend entries. `plotted.attrs` records `hue_order` and `palette`.
+`point_size` is marker area in points squared. `xlims`, `ylims`, `point_alpha`,
+`axis_label_fontsize`, `tick_fontsize`, and `legend_kwargs` control appearance;
+legend font size can be set through `legend_kwargs`. Use `legend=False` to hide it.
+
+Use `savefig=True, file_name="coordinates.png"` to save with a tight bounding box.
+A newly created figure is laid out and closed from GUI registration when
+`show=False`, but remains usable through the return value. Supplied axes are
+never shown, closed, or subjected to figure-wide layout. No global plotting
+settings are changed.

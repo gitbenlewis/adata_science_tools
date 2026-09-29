@@ -7,9 +7,10 @@ This directory holds module-level documentation for public `adata_science_tools`
 - [`_IO.md`](_IO.md): core dataset save and AnnData-to-DataFrame helpers used across the package.
 - [`_analytical_plots.md`](_analytical_plots.md): precomputed Kaplan–Meier and continuous-effect renderers with auditable returned tables.
 - [`_column_plots.md`](_column_plots.md): horizontal bar plots, log2 fold-change dotplots, and multi-panel composite figure builders.
+- [`_enrichment.md`](_enrichment.md): precomputed enrichment comparisons and bubbles with explicit encodings and auditable display scales.
 - [`_corr_dotplots.md`](_corr_dotplots.md): correlation scatterplots, subgroup fit overlays, and rank-comparison helpers.
 - [`_plotting_updates.md`](_plotting_updates.md): historical July 2026 plotting-roadmap controls and compatibility summary.
-- [`_tabular_plots.md`](_tabular_plots.md): ranked waterfall, category composition, and supplied-residual diagnostic plots.
+- [`_tabular_plots.md`](_tabular_plots.md): ranked waterfall, category composition, supplied-residual diagnostics, and scatter-only precomputed coordinates.
 - [`_datapoints.md`](_datapoints.md): unpaired variable-level datapoint plots with obs/var filters, grouped variables, optional box/violin overlays, and metric legends.
 - [`_diff_test.md`](_diff_test.md): differential testing across independent, paired, and nested paired group comparisons, including CSV-backed input workflows.
 - [`_expectation_based_covar_correction.md`](_expectation_based_covar_correction.md): expectation-model fitting, artifact export, prediction, regression-based correction, and residual or ratio transforms for `AnnData` objects.

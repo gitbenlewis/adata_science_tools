@@ -360,6 +360,64 @@ def _invoke_case(
     renderer = getattr(adtl, spec.name)
     case_key = (spec.name, case.case_id)
 
+    if case_key == ("coordinate_scatter", "precomputed_coordinates"):
+        coordinates = pd.DataFrame({
+            "axis_1": [0., 1., 2., 2.],
+            "axis_2": [1., 0., 1.5, 1.5],
+            "group": ["group_a", "group_a", "group_b", "group_b"],
+        })
+        return renderer(
+            coordinates, x="axis_1", y="axis_2", hue="group",
+            hue_order=["group_a", "group_b"],
+            palette={"group_a": "#4477AA", "group_b": "#CC6677"},
+            xlabel="Axis 1", ylabel="Axis 2", point_size=85,
+            title="Supplied coordinates — no fitting or transformation",
+            legend_kwargs={"loc": "upper left", "bbox_to_anchor": (1.02, 1)},
+            figsize=(8, 5), show=False,
+        )
+
+    if spec.name == "enrichment_dotplot":
+        enrichment = pd.DataFrame({
+            "term_id": ["term_a", "term_b", "term_c", "term_a", "term_b"],
+            "comparison": ["method_a", "method_a", "method_a", "method_b", "method_b"],
+            "nes": [-1.8, .4, 2.1, -1.2, .7],
+            "adjusted_p": [.01, .20, 0., .05, .03],
+            "overlap_count": [8, 3, 12, 6, 4],
+        })
+        enrichment["display_label"] = enrichment["term_id"].map({
+            "term_a": "Synthetic pathway A with a long descriptive label",
+            "term_b": "Synthetic pathway B",
+            "term_c": "Synthetic pathway C",
+        })
+        if case.case_id == "grouped_comparison":
+            return renderer(
+                enrichment, term="term_id", score="nes", significance="adjusted_p",
+                comparison="comparison", term_label="display_label",
+                term_order=["term_a", "term_b", "term_c"],
+                comparison_order=["method_a", "method_b"],
+                palette={"method_a": "#4477AA", "method_b": "#CC6677"},
+                significance_cutoff=.05, xlims=(-2.5, 2.5), label_wrap=28,
+                title="Precomputed enrichment comparison",
+                legend_kwargs={"loc": "upper left", "bbox_to_anchor": (1.02, 1)},
+                figsize=(11, 5.5), show=False,
+            )
+        if case.case_id == "explicit_bubbles":
+            return renderer(
+                enrichment.loc[enrichment["comparison"] == "method_a"],
+                term="term_id", term_label="display_label", mode="bubble",
+                x="nes", color="adjusted_p", area="overlap_count",
+                significance="adjusted_p", term_order=["term_a", "term_b", "term_c"],
+                color_transform="neglog10", color_floor=.001,
+                color_norm=plt.Normalize(0, 3, clip=True),
+                area_norm=plt.Normalize(0, 12, clip=True), area_range=(30, 300),
+                color_label="Adjusted P", area_label="Overlap count",
+                xlabel="Normalized enrichment score (NES)", xlims=(-2.5, 2.5),
+                title="Precomputed enrichment — explicit color and area scales",
+                label_wrap=28,
+                legend_kwargs={"loc": "upper center", "bbox_to_anchor": (.5, -.2), "ncol": 2},
+                figsize=(11, 6), show=False,
+            )
+
     if case_key == ("adata_histograms", "subgroup_kde"):
         return renderer(
             adata=inputs.independent,
@@ -2183,7 +2241,7 @@ def generate_gallery(
     output_dir
         Directory that receives the manifest-declared PNG filenames.
     renderer_names
-        Optional exported renderer names. By default all 45 are invoked.
+        Optional exported renderer names. By default all 47 are invoked.
     case_ids
         Optional manifest case IDs, applied within the selected renderer set.
     """
