@@ -1,0 +1,133 @@
+// Browser-state regressions without extra npm dependencies: node --test tests/web_state.test.cjs
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const {test} = require('node:test');
+
+function app() {
+  const nodes = new Map();
+  // Only the DOM operations used by navigation and pipeline controls are needed.
+  class Node {
+    constructor() {
+      this.children = []; this.options = []; this.value = ''; this.content = 'csrf';
+      this.classList = {toggle() {}};
+    }
+    set id(value) { this._id = value; nodes.set(value, this); }
+    get id() { return this._id; }
+    get childElementCount() { return this.children.length; }
+    get selectedOptions() { return this.options.filter(option => option.value === this.value); }
+    append(...children) { this.children.push(...children); }
+    replaceChildren(...children) { this.children = children; this.options = []; this.value = ''; }
+    add(option) { this.options.push(option); if (this.options.length === 1) this.value = option.value; }
+    setAttribute() {}
+  }
+  const get = id => {
+    if (!nodes.has(id)) nodes.set(id, new Node());
+    return nodes.get(id);
+  };
+  const context = vm.createContext({
+    document: {getElementById: get, querySelector: get, querySelectorAll: () => [], createElement: () => new Node()},
+    window: {scrollTo() {}, setInterval() {}},
+    Option: function(text, value) { this.textContent = text; this.value = value; },
+  });
+  const source = fs.readFileSync(path.join(__dirname, '../web/static/app.js'), 'utf8');
+  // Start requests explicitly so each response order is controlled by the test.
+  vm.runInContext(source.replace(/\nrefresh\(\);\nwindow\.setInterval\(refresh, 3000\);\s*$/, ''), context);
+  const run = code => vm.runInContext(code, context);
+  run('renderOverview = () => {}; setupStudio = () => {}; renderResults = () => {};');
+  const pending = [];
+  context.api = url => new Promise((resolve, reject) => pending.push({url, resolve, reject}));
+  return {run, get, pending};
+}
+const dataset = (id, status = 'ready') => ({dataset: {id, name: id, status, metadata: {
+  obs_columns: {condition: {values: ['A', 'B']}, subject: {values: ['one']}},
+}}, jobs: []});
+const state = {catalog: {}, datasets: [{id: 'A', name: 'A'}, {id: 'B', name: 'B'}], worker_running: true};
+
+test('out-of-order switches commit only the latest dataset and block submissions while loading', async () => {
+  const ui = app();
+  const a = ui.run('selectDataset("A")');
+  const b = ui.run('selectDataset("B")');
+  assert.equal(ui.get('run-button').disabled, true);
+  assert.equal(ui.get('pipeline-run').disabled, true);
+  assert.equal(ui.get('delete-button').disabled, true);
+  for (const form of ['analysis-form', 'pipeline-form']) await ui.get(form).onsubmit({preventDefault() {}});
+  assert.equal(ui.pending.length, 2); // No POST was issued during loading.
+  ui.pending[1].resolve(dataset('B')); await b;
+  ui.pending[0].resolve(dataset('A')); await a;
+  assert.equal(ui.run('activeId'), 'B');
+  assert.equal(ui.run('detail.dataset.id'), 'B');
+  assert.equal(ui.get('dataset-select').value, 'B');
+  assert.equal(ui.get('run-button').disabled, false);
+});
+
+test('failed latest switch retains the previous dataset and ignores an older late response', async () => {
+  const ui = app();
+  const first = ui.run('selectDataset("A")'); ui.pending[0].resolve(dataset('A')); await first;
+  const b = ui.run('selectDataset("B")');
+  const c = ui.run('selectDataset("C")');
+  ui.pending[2].reject(new Error('Unavailable'));
+  await assert.rejects(c, /Unavailable/);
+  ui.pending[1].resolve(dataset('B')); await b;
+  assert.equal(ui.run('activeId'), 'A');
+  assert.equal(ui.run('detail.dataset.id'), 'A');
+  assert.equal(ui.get('dataset-select').value, 'A');
+  assert.equal(ui.get('run-button').disabled, false);
+});
+
+test('poll responses cannot overwrite a newer dataset switch', async () => {
+  for (const phase of ['state', 'detail']) {
+    const ui = app();
+    const initial = ui.run('selectDataset("A")'); ui.pending[0].resolve(dataset('A')); await initial;
+    const poll = ui.run('refresh()');
+    if (phase === 'detail') {
+      ui.pending[1].resolve(state);
+      await new Promise(resolve => setImmediate(resolve));
+    }
+    const stale = ui.pending.at(-1);
+    const switchDataset = ui.run('selectDataset("B")');
+    ui.pending.at(-1).resolve(dataset('B')); await switchDataset;
+    stale.resolve(phase === 'state' ? state : dataset('A')); await poll;
+    assert.equal(ui.run('activeId'), 'B', phase);
+    assert.equal(ui.run('detail.dataset.id'), 'B', phase);
+    assert.equal(ui.get('dataset-select').value, 'B', phase);
+  }
+});
+
+test('an import becoming ready re-enables the run controls', async () => {
+  const ui = app();
+  const initial = ui.run('selectDataset("A")'); ui.pending[0].resolve(dataset('A', 'queued')); await initial;
+  assert.equal(ui.get('run-button').disabled, true);
+  const poll = ui.run('refresh()'); ui.pending[1].resolve(state);
+  await new Promise(resolve => setImmediate(resolve));
+  ui.pending[2].resolve(dataset('A')); await poll;
+  assert.equal(ui.get('run-button').disabled, false);
+  assert.equal(ui.get('pipeline-run').disabled, false);
+});
+
+test('pipeline settings survive navigation, but do not leak into another dataset or workflow', async () => {
+  const ui = app();
+  ui.run(`state.pipelines = {
+    paired: {label: 'Paired', description: '', steps: [], fields: [
+      {key:'group', label:'Group', kind:'obs'}, {key:'reference', label:'Reference', kind:'level'},
+      {key:'target', label:'Target', kind:'level'}, {key:'pair', label:'Subject', kind:'obs'},
+      {key:'test', label:'Test', kind:'choice', choices:['ttest_rel','WilcoxonSigned'], default:'ttest_rel'}]},
+    explore: {label:'Explore', description:'', steps:[], fields:[{key:'group', label:'Group', kind:'obs'}]}
+  }; pipelineName = 'paired';`);
+  const initial = ui.run('selectDataset("A")'); ui.pending[0].resolve(dataset('A')); await initial;
+  ui.get('pipeline-group').value = 'condition'; ui.get('pipeline-group').onchange();
+  ui.get('pipeline-reference').value = 'A'; ui.get('pipeline-target').value = 'B';
+  ui.get('pipeline-pair').value = 'subject'; ui.get('pipeline-test').value = 'WilcoxonSigned';
+  ui.get('pipeline-edit-selection').onclick();
+  ui.run('selectedFeatures = new Set(["gene1", "gene2"]); showView("pipelines");');
+  for (const [key, value] of Object.entries({group:'condition', reference:'A', target:'B', pair:'subject', test:'WilcoxonSigned'})) {
+    assert.equal(ui.get(`pipeline-${key}`).value, value);
+  }
+  assert.match(ui.get('pipeline-selection').textContent, /2 selected features/);
+  const next = ui.run('selectDataset("B")'); ui.pending[1].resolve(dataset('B')); await next;
+  assert.equal(ui.get('pipeline-group').value, '');
+  assert.equal(ui.get('pipeline-test').value, 'ttest_rel');
+  ui.run('pipelineName = "explore"; renderPipeline();');
+  assert.equal(ui.get('pipeline-fields').children.length, 1);
+});

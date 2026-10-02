@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block scripts %}<script src="{{ url_for('static', filename='app.js') }}" defer></script>{% endblock %}
+{% block body %}
+<div class="shell">
+  <aside class="sidebar">
+    <div class="eyebrow">WORKSPACE</div>
+    <button class="nav-item" id="nav-tutorial" type="button"><span>01</span> Tutorial</button>
+    <button class="nav-item active" id="nav-data" type="button"><span>02</span> Datasets</button>
+    <button class="nav-item" id="nav-analysis" type="button"><span>03</span> Analysis studio</button>
+    <button class="nav-item" id="nav-results" type="button"><span>04</span> Results & downloads</button>
+    <button class="nav-item" id="nav-pipelines" type="button"><span>05</span> Analysis pipelines</button>
+    <div class="sidebar-divider"></div>
+    <label class="eyebrow" for="dataset-select">ACTIVE DATASET</label>
+    <select id="dataset-select" aria-label="Active dataset"><option value="">No dataset loaded</option></select>
+    <div id="dataset-status" class="small muted">Load your data or start with the demo.</div>
+    <div class="sidebar-footer"><span class="status-dot"></span>{{ 'Hosted workspace' if public_mode else 'Running on your computer' }}<p class="small muted">{{ 'Uploaded files are processed on this server.' if public_mode else 'Your data stays on this computer.' }} Datasets expire after {{ retention }} hours while the worker runs.</p></div>
+  </aside>
+
+  <main class="workspace">
+    <div id="notice" role="status" aria-live="polite" hidden></div>
+    <div id="worker-notice" class="alert warning" hidden>The analysis worker is not running. Start the app with <code>python scripts/run_web.py</code>, or start its worker separately.</div>
+    <section id="view-tutorial" hidden>
+      <div class="page-heading"><div><div class="eyebrow">TUTORIAL · START HERE</div><h1>Understand your AnnData.</h1><p class="muted">A matrix of measurements, with the information that gives each row and column meaning.</p></div></div>
+      <div class="card tutorial-intro">
+        <div>
+          <h2>What is AnnData?</h2>
+          <p>AnnData means <strong>annotated data</strong>. It keeps measurements and their metadata together. Observations might be cells or samples; variables (called features in this app) might be genes, proteins, or metabolites.</p>
+          <dl class="tutorial-slots">
+            <dt><code>adata.X</code> · Measurements</dt><dd>A numeric matrix: <strong>rows are observations, columns are features</strong>.</dd>
+            <dt><code>adata.obs</code> · Observation metadata</dt><dd>One row per observation, aligned with X rows. Columns can describe treatment, subject, or batch.</dd>
+            <dt><code>adata.var</code> · Feature metadata</dt><dd>One row per feature, aligned with X columns. Columns can hold gene symbols or feature annotations.</dd>
+          </dl>
+          <p class="tutorial-note">In the demo, X has <strong>32 rows × 8 columns</strong>, obs has 32 rows, and var has 8 rows. Observation and feature identifiers keep these pieces aligned.</p>
+        </div>
+        <figure class="tutorial-figure">
+          <img src="{{ url_for('static', filename='images/anndata_schema.svg') }}" width="600" height="585" alt="AnnData structure: X and layers align to observation rows and variable columns; obs and var annotate those axes; obsm, varm, obsp, varp, and uns hold additional information.">
+          <figcaption>Diagram from the <a href="https://anndata.scverse.org/en/stable/" target="_blank" rel="noopener noreferrer">AnnData documentation</a>. © scverse and AnnData contributors. <a href="{{ url_for('static', filename='images/anndata-LICENSE.txt') }}">BSD 3-Clause license</a>.</figcaption>
+        </figure>
+      </div>
+      <div class="card tutorial-card">
+        <h2>Other parts of the structure</h2>
+        <dl class="tutorial-slots">
+          <dt><code>layers</code></dt><dd>Additional matrices with the same shape as X, such as counts or transformed measurements.</dd>
+          <dt><code>obsm</code> and <code>varm</code></dt><dd>Arrays aligned to observations or features, such as cell coordinates or gene loadings.</dd>
+          <dt><code>obsp</code> and <code>varp</code></dt><dd>Pairwise matrices between observations or between features, such as a neighbor graph.</dd>
+          <dt><code>uns</code></dt><dd>Unstructured metadata, such as analysis settings and color palettes.</dd>
+          <dt><code>raw</code></dt><dd>An optional saved X and its feature annotations. Its name does not guarantee unprocessed counts.</dd>
+        </dl>
+        <p class="small muted">The studio uses X, a layer, or raw as its matrix source. Storing an embedding or graph does not mean every AnnData field has a dedicated GUI analysis.</p>
+      </div>
+      <div class="card tutorial-card">
+        <h2>From a dataset to your first result</h2>
+        <ol class="tutorial-steps">
+          <li><h3>Load or try a dataset</h3><p>Open <strong>Datasets</strong> and choose <strong>Open demo dataset</strong>, or upload your own data. An <code>.h5ad</code> file preserves additional AnnData fields. A CSV bundle creates X, obs, and var from <code>adata.X.csv</code>, <code>adata.obs.csv</code>, and <code>adata.var.csv</code>.</p><p>For CSVs, put row identifiers in the first column of each file. X row IDs must match obs row IDs, and X feature headers must match var row IDs. The app aligns metadata by these identifiers.</p></li>
+          <li><h3>Inspect the structure</h3><p>Use the <strong>Observations</strong>, <strong>Features</strong>, and <strong>Matrix</strong> previews. Check dimensions, identifiers, and group labels before analyzing. CSV metadata starts as text; use <strong>Metadata types</strong> in the studio when a column should be numeric.</p></li>
+          <li><h3>Choose your measurements</h3><p>In <strong>Analysis studio</strong>, select a <strong>Matrix source</strong> and features. The first three features are selected initially. Filters keep only the chosen observations. Check whether your selected matrix contains counts, normalized values, or transformed values before choosing a method.</p></li>
+          <li><h3>Run a plot or statistical method</h3><p>Start with <strong>Histogram</strong> and select <strong>Run analysis</strong>. To compare groups in the paired demo, choose a paired test with <code>condition</code> as the group column, <code>Reference</code> and <code>Treatment</code> as the groups, and <code>subject</code> as the pairing column. Match the method to your study design.</p><p>Statistical tests use your selected feature set for false discovery rate (FDR) correction. Changing that set can change adjusted p-values. Plots that require feature-level statistics use supplied or previously computed results.</p></li>
+          <li><h3>Review and download</h3><p>Open <strong>Results &amp; downloads</strong> to inspect each run, check warnings, and download available figures, tables, settings, and reproduction scripts. Your source dataset stays unchanged. Download anything you want to keep before the workspace retention period ends.</p></li>
+        </ol>
+        <button type="button" class="primary" id="tutorial-start">Go to Datasets →</button>
+      </div>
+    </section>
+    <section id="view-data">
+      <div class="page-heading"><div><div class="eyebrow">FROM DATA TO DISCOVERY</div><h1>Your data. A clearer view.</h1><p class="muted">Explore annotated datasets, compare groups, and create scientific figures.</p></div><span class="tag">AnnData native</span></div>
+      <div class="load-grid">
+        <div class="card upload-card">
+          <div class="section-title"><span class="step">1</span><div><h2>Load a dataset</h2><p class="muted small">Choose a file format to get started.</p></div></div>
+          <form id="upload-form">
+            <div class="segmented" role="group" aria-label="Dataset format"><label><input type="radio" name="format" value="h5ad" checked> H5AD file</label><label><input type="radio" name="format" value="csv"> CSV bundle</label></div>
+            <div id="h5ad-input" class="upload-area"><span class="upload-glyph" aria-hidden="true">↥</span><label for="h5ad-file">Choose an AnnData file<input id="h5ad-file" type="file" name="h5ad" accept=".h5ad"></label><p class="small muted">Preserves layers, annotations, and embeddings.</p></div>
+            <div id="csv-input" hidden>
+              <label>Matrix · adata.X.csv<input type="file" name="X" accept=".csv"></label>
+              <label>Observations · adata.obs.csv<input type="file" name="obs" accept=".csv"></label>
+              <label>Features · adata.var.csv<input type="file" name="var" accept=".csv"></label>
+              <p class="small muted">First column: row identifiers. X rows match obs; X column headers match var. Metadata is loaded as text; choose numeric columns in the studio. Blank cells are missing values.</p>
+            </div>
+            <label>Dataset name <span class="muted">(optional)</span><input name="name" placeholder="e.g. Treatment response study" maxlength="160"></label>
+            <div class="form-footer"><span class="small muted">Up to {{ upload_mb }} MB per upload request</span><button type="submit" class="primary" id="load-button">Load dataset <span aria-hidden="true">→</span></button></div>
+          </form>
+        </div>
+        <div class="card demo-card"><div class="eyebrow">TAKE A LOOK AROUND</div><h2>A small study.<br> A good place to start.</h2><p>Try a synthetic paired study with treatment groups, subject IDs, and a transformed data layer.</p><div class="demo-stats"><div><strong>32</strong><span>observations</span></div><div><strong>8</strong><span>features</span></div></div><button type="button" class="secondary" id="demo-button">Open demo dataset →</button><p class="small muted">Simulated data. No upload required.</p></div>
+      </div>
+      <section id="dataset-overview" hidden>
+        <div class="section-heading"><h2 id="dataset-title">Dataset overview</h2><button type="button" class="quiet danger" id="delete-button">Delete dataset</button></div>
+        <div id="metrics" class="metrics"></div>
+        <div class="card"><div class="section-heading"><h3>Inspect your data</h3><div class="tabs" role="group" aria-label="Preview table"><button class="tab active" type="button" data-preview="obs">Observations</button><button class="tab" type="button" data-preview="var">Features</button><button class="tab" type="button" data-preview="X">Matrix</button></div></div><div id="preview-table" class="table-wrap"></div><p class="small muted">A bounded preview; the full dataset is used for your selected analysis.</p></div>
+        <button class="primary next-button" type="button" id="start-analysis">Continue to analysis studio →</button>
+      </section>
+      <div id="import-progress" class="card" hidden></div>
+    </section>
+
+    <section id="view-analysis" hidden>
+      <div class="page-heading"><div><div class="eyebrow">ANALYSIS STUDIO</div><h1>Ask your next question.</h1><p class="muted">Choose your data, configure a method, and run it explicitly.</p></div></div>
+      <p class="empty-state needs-data">Load a dataset to open the analysis studio.</p>
+      <form id="analysis-form" hidden>
+        <div class="studio-grid">
+          <div class="card selection-card"><h2>Data selection</h2>
+            <label>Matrix source<select id="matrix" name="matrix"></select></label>
+            <label>Search features<input type="search" id="feature-search" placeholder="Search identifiers…"></label>
+            <div class="section-heading compact"><span id="feature-count" class="small muted"></span><button type="button" class="quiet" id="features-all">All features</button><button type="button" class="quiet" id="features-clear">Clear</button></div>
+            <div id="feature-list" class="feature-list"></div>
+            <p class="small muted">Plot up to 24 features. Statistical tests use the selected feature set for FDR correction.</p>
+            <details><summary>Filter observations</summary><label>Metadata column<select id="filter-column" name="filter_column"></select></label><label>Keep values<select id="filter-values" name="filter_values" multiple size="4"></select></label></details>
+            <details><summary>Metadata types</summary><p class="small muted">CSV metadata starts as text. These choices affect this run only. Model APIs may additionally coerce numeric-looking predictors; this is recorded with results.</p><label>Convert to numeric<select id="numeric-columns" name="numeric_columns" multiple size="4"></select></label><label>Treat as categorical<select id="categorical-columns" name="categorical_columns" multiple size="4"></select></label></details>
+          </div>
+          <div class="card method-card"><h2>Method & settings</h2>
+            <label>Analysis<select id="operation" name="operation"></select></label>
+            <p id="method-description" class="small muted"></p>
+            <label id="source-label" hidden>Feature-level statistics<select id="source-job" name="source_job"></select></label>
+            <div id="method-fields" class="form-grid"></div>
+            <details id="appearance"><summary>Figure appearance</summary><label>Title<input name="title" maxlength="200" placeholder="Use the default title"></label><label>Palette<select name="palette"><option value="colorblind">Colorblind</option><option value="deep">Deep</option><option value="Set2">Set 2</option><option value="viridis">Viridis</option></select></label><label id="yscale-label">Datapoints y-axis<select name="yscale"><option>linear</option><option>log</option><option>symlog</option></select></label></details>
+            <div class="run-note">Your source dataset stays unchanged. Results retain the settings used for that run.</div>
+            <button class="primary wide" id="run-button" type="submit">Run analysis →</button>
+          </div>
+        </div>
+      </form>
+    </section>
+
+    <section id="view-results" hidden>
+      <div class="page-heading"><div><div class="eyebrow">RESULTS & DOWNLOADS</div><h1>See what your data says.</h1><p class="muted">Every run keeps its own settings, outputs, and analysis record.</p></div></div>
+      <div id="results-list"><p class="empty-state">Run an analysis to see results here.</p></div>
+    </section>
+    <section id="view-pipelines" hidden>
+      <div class="page-heading"><div><div class="eyebrow">ANALYSIS PIPELINES</div><h1>A workflow for your question.</h1><p class="muted">Run a set of related analyses with one shared data selection.</p></div></div>
+      <div id="pipeline-cards" class="pipeline-grid"></div>
+      <div class="card tutorial-card">
+        <h2 id="pipeline-title">Configure your workflow</h2>
+        <p id="pipeline-description" class="muted"></p>
+        <ol id="pipeline-steps" class="tutorial-steps"></ol>
+        <p id="pipeline-selection" class="tutorial-note"></p>
+        <button type="button" id="pipeline-edit-selection" class="quiet">Edit data selection in Analysis studio →</button>
+        <form id="pipeline-form" hidden>
+          <div id="pipeline-fields" class="form-grid"></div>
+          <div class="run-note">Distribution plots use the first 24 selected features at most. Means and tests use every selected feature. Descriptive plots and means show all groups retained by your filter; tests compare only your reference and target groups. FDR correction uses the tested feature set.</div>
+          <p class="small muted">Use independent tests for independent experimental units and paired tests for matched subjects. These workflows use your chosen matrix as supplied; they do not normalize data. Each step runs separately, so a failed step does not prevent the others from completing.</p>
+          <button type="submit" id="pipeline-run" class="primary next-button">Run pipeline →</button>
+        </form>
+      </div>
+    </section>
+    <footer class="workspace-footer"><span>AnnData Science Tools</span><span>Explore · Compare · Understand</span></footer>
+  </main>
+</div>
+{% endblock %}

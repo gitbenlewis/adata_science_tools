@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block body %}
+<main class="login-layout">
+  <div class="eyebrow">YOUR ANALYSIS WORKSPACE</div>
+  <h1>Welcome back.</h1>
+  <p class="muted">Sign in to access the datasets and results attached to your account.</p>
+  <form method="post" class="card login-card">
+    <input type="hidden" name="csrf" value="{{ session['csrf'] }}">
+    {% if error %}<p class="alert error" role="alert">{{ error }}</p>{% endif %}
+    <label>Username<input name="username" autocomplete="username" maxlength="80" required autofocus></label>
+    <label>Password<input name="password" type="password" autocomplete="current-password" maxlength="1024" required></label>
+    <button type="submit" class="primary">Sign in</button>
+  </form>
+  <p class="small muted">Accounts are created by the app administrator. Anonymous uploads stay in their original browser session when you sign in.</p>
+  {% if not required %}<a class="text-link" href="{{ url_for('index') }}">Continue without signing in →</a>{% endif %}
+</main>
+{% endblock %}

@@ -1,0 +1,2 @@
+# Install after the scientific environment in env_not_base.yaml.
+Flask>=3.1,<4

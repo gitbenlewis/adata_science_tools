@@ -33,6 +33,11 @@ This directory holds module-level documentation for public `adata_science_tools`
 - [`_venn_plots.md`](_venn_plots.md): public two-set, three-set, and gene-set enrichment Venn renderers, including the retained legacy enrichment API.
 - [`palettes.md`](palettes.md): named palette constants exposed as `adata_science_tools.palettes`.
 
+## Web application
+
+- [Flask web app](web.md): local startup, code-free analysis, optional login,
+  data formats, downloads, limits, and public deployment guidance.
+
 ## Notes
 
 - These pages document the current implementation in `adata_science_tools`, not an earlier design draft.

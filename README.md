@@ -41,6 +41,32 @@ This regenerates the deterministic PNG catalog in
 [`docs/assets/plotting_gallery`](docs/assets/plotting_gallery) and writes its run
 log under `scripts/logs/`.
 
+## Code-free analysis in your browser
+
+The optional Flask app loads `.h5ad` files or three CSVs (`adata.X.csv`,
+`adata.obs.csv`, `adata.var.csv`) and provides forms for plotting, group
+comparisons, linear/mixed models, and downloadable results.
+
+After activating the scientific environment, run from this repository:
+
+```bash
+python -m pip install -r config/requirements-web.txt
+python scripts/run_web.py
+```
+
+Open **http://127.0.0.1:5000** and select **Open demo dataset** or upload your
+own data. One command starts both the local app and its analysis worker.
+Optional username/password login is available:
+
+```bash
+python scripts/run_web.py --create-user scientist
+python scripts/run_web.py --require-login
+```
+
+See the [web app guide](docs/web.md) for supported analyses, input formats,
+privacy/retention behavior, configuration, and the future public deployment path
+for `adata-science-tools.com`. The local app is not publicly exposed.
+
 ## Simulated data example
 
 The repo includes a small config-driven simulated-data workflow in
