@@ -10,6 +10,7 @@ import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import numpy as np
+from ._feature_labels import _resolve_feature_labels
 import pandas as pd
 import seaborn as sns
 
@@ -73,12 +74,17 @@ def forest(
     ax: plt.Axes | None = None,
     figsize: tuple[float, float] | None = None,
     show: bool = True,
+    feature_label_fallback: str | None = None,
 ) -> tuple[plt.Figure, plt.Axes, pd.DataFrame]:
     """Plot supplied model estimates and confidence intervals.
 
     ``forest`` does not fit models or calculate inferential statistics. In
     ``log_odds`` and ``log_ratio`` modes, the supplied estimates and interval
     endpoints are exponentiated for display on a ratio scale.
+
+    feature_label_fallback : str | None, optional
+        Alternate label column in the same feature table; None preserves legacy
+        labels. See docs/feature_label_fallback.md for missing-value semantics.
     """
 
     if (adata is None) == (var_df is None):
@@ -503,6 +509,9 @@ def forest(
 
     selected_columns = list(dict.fromkeys(referenced_columns))
     selected_df = source_df.iloc[selected_positions][selected_columns].copy(deep=True)
+    resolved_labels = _resolve_feature_labels(
+        source_df, feature_label_col, feature_label_fallback
+    )
     selected_df.index = pd.RangeIndex(len(selected_df))
 
     if feature_label_char_limit is not None:
@@ -522,7 +531,8 @@ def forest(
     if feature_label_col is not None:
         for feature, label in zip(
             selected_feature_ids,
-            selected_df[feature_label_col].tolist(),
+            (resolved_labels.iloc[selected_positions].tolist() if resolved_labels is not None
+             else selected_df[feature_label_col].tolist()),
         ):
             if pd.api.types.is_scalar(label) and pd.isna(label):
                 continue

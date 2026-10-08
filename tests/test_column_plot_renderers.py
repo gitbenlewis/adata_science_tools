@@ -1848,6 +1848,7 @@ class ColumnPlotRendererTests(unittest.TestCase):
             if renderer_name == "barh_4X_dotplot_column":
                 expected_parameters.append("use_single_dotplot_colormap")
             expected_parameters.extend(tail_parameters)
+            expected_parameters.append("feature_label_fallback")
 
             with self.subTest(renderer=renderer_name):
                 self.assertEqual(
@@ -1897,7 +1898,7 @@ class ColumnPlotRendererTests(unittest.TestCase):
                 "dotplot_annotate_labels", "dotplot_annotate_fontsize",
                 "distribution_kind", "include_stripplot", "point_color_column",
                 "point_shape_column", "point_palette", "point_markers",
-                "point_jitter", "point_size",
+                "point_jitter", "point_size", "feature_label_fallback",
             ),
         )
 

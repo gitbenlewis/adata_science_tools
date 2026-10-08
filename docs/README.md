@@ -4,6 +4,8 @@ This directory holds module-level documentation for public `adata_science_tools`
 
 ## Available pages
 
+- [`feature_label_fallback.md`](feature_label_fallback.md): optional feature-display label resolution, supported APIs, source-table mapping, and a synthetic example.
+
 - [`_IO.md`](_IO.md): core dataset save and AnnData-to-DataFrame helpers used across the package.
 - [`_analytical_plots.md`](_analytical_plots.md): precomputed Kaplan–Meier and continuous-effect renderers with auditable returned tables.
 - [`_column_plots.md`](_column_plots.md): horizontal bar plots, log2 fold-change dotplots, and multi-panel composite figure builders.
