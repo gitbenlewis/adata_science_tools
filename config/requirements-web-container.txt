@@ -1,0 +1,16 @@
+# Direct runtime dependencies for the optional container, aligned with the tested
+# scientific environment. The native launcher still uses requirements-web.txt.
+Flask==3.1.3
+gunicorn==26.2.0
+anndata==0.11.4
+h5py==3.16.0
+numpy==2.2.6
+pandas==2.3.3
+scipy==1.15.2
+scikit-learn==1.7.2
+matplotlib==3.10.8
+matplotlib-venn==1.1.2
+seaborn==0.13.2
+statsmodels==0.14.6
+patsy==1.0.2
+PyYAML==6.0.3

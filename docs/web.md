@@ -6,7 +6,7 @@ functions. Start locally with one command after installing the dependencies.
 Public deployment to `adata-science-tools.com` is supported by the application
 structure but is **not configured or deployed by this change**.
 
-## Local quick start (macOS or Linux)
+## Local quick start without Docker (macOS or Linux)
 
 From the repository root, create the scientific environment as described in the
 [README](../README.md), then run:
@@ -43,6 +43,86 @@ when the worker restarts, and can be submitted again.
 
 The current worker uses POSIX file locking and is tested on macOS. Use Linux or
 WSL for Windows. Native Windows worker support is not implemented.
+
+## Optional Docker setup
+
+Docker is an alternative to the Python setup above. Both run the same application,
+analyses, tutorial, pipelines, and optional login. No Conda or host Python
+installation is needed for Docker. Install Docker with Compose (Docker Desktop
+includes both; Linux Engine installations need the Compose plugin), start its
+engine, and run from the repository root:
+
+```bash
+docker compose up --build
+```
+
+Open **http://127.0.0.1:5000**. The first build downloads a Python base image and
+the scientific dependencies. Later starts reuse the image. Windows users should
+use Linux containers. The image does not force an architecture; builds use the
+Docker engine's platform. Direct runtime dependencies are pinned in
+`config/requirements-web-container.txt`; the base image and transitive dependencies
+can receive updates, so this is not a complete reproducible dependency lock.
+
+The `web` service runs Gunicorn; `worker` runs the same analysis supervisor as the
+native launcher. Both run as UID 10001 and share the named `web-data` volume for
+datasets, results, SQLite accounts/jobs, and the generated local signing key.
+The worker starts after the web service is healthy. The container port is exposed
+only through the host's loopback interface.
+
+If port 5000 is occupied, choose another host port:
+
+```bash
+ADTL_WEB_PORT=5056 docker compose up --build
+```
+
+On PowerShell, use `$env:ADTL_WEB_PORT="5056"` before `docker compose up --build`.
+Native and Docker instances can run together on different ports; by default they
+have separate storage and accounts. Native `instance/web` is not copied into the
+image or automatically migrated into the volume.
+
+To run in the background, check status/logs, and stop:
+
+```bash
+docker compose up --build -d
+docker compose ps
+docker compose logs --tail=100 web worker
+docker compose down
+```
+
+`down` preserves the named volume. **`down --volumes` deletes its datasets,
+results, accounts, and signing key.** Rebuilding or recreating containers preserves
+the volume, subject to the app's normal retention policy. Keep the same Compose
+project name to reuse it. Back up the volume with both services stopped.
+
+### Docker login
+
+Create an account interactively while the web service is running:
+
+```bash
+docker compose exec web python scripts/run_web.py --create-user scientist
+```
+
+The account command prompts securely for the password. Login remains optional by
+default. To require it, recreate the services with:
+
+```bash
+ADTL_WEB_AUTH_REQUIRED=true docker compose up -d
+```
+
+Keep this setting on subsequent starts, either in your shell or in a local `.env`
+file next to `compose.yaml`. On PowerShell use
+`$env:ADTL_WEB_AUTH_REQUIRED="true"`. Set it to `false` to restore optional login.
+Use the same port setting if you changed `ADTL_WEB_PORT`.
+
+### Public deployment
+
+This Compose file is a local configuration. It does not publish the domain or
+configure HTTPS. For public hosting, use the deployment guidance below and an
+explicit deployment override for both services' environment, including
+`ADTL_WEB_PUBLIC_MODE`, `ADTL_WEB_TRUSTED_HOSTS`, and a shared protected
+`ADTL_WEB_SECRET_KEY`. Configure host-sized CPU/memory/disk limits and a trusted
+HTTPS reverse proxy. Keep a single worker and a local shared volume with this
+SQLite-backed design; do not scale it across hosts.
 
 ## Analysis pipelines
 
@@ -276,12 +356,13 @@ and [security guidance](https://flask.palletsprojects.com/en/stable/web-security
 With the scientific environment and optional web dependency installed:
 
 ```bash
-MPLBACKEND=Agg python -m pytest tests/test_web_data.py tests/test_web_analysis.py tests/test_web_app.py tests/test_web_pipelines.py
+MPLBACKEND=Agg python -m pytest tests/test_web_*.py
 ```
 
 Coverage includes CSV alignment and identifiers, H5AD validation, sparse/layer/raw
 selection, scientific API parity, each exposed renderer, complete upload/run/
-download flows, ownership checks, CSRF, login throttling, and retention cleanup.
+download flows, ownership checks, CSRF, login throttling, retention cleanup, and
+worker survival when a completed dataset is deleted before its subprocess exits.
 The Flask-specific suite skips when the optional Flask dependency is absent.
 
 Browser-state regression tests use Node.js's built-in test runner, with no npm
@@ -294,3 +375,18 @@ node --test tests/web_state.test.cjs
 These tests control response order to check dataset switching and background
 polling, block submissions during loading, and verify that pipeline settings
 survive navigation back from the studio.
+
+The same end-to-end smoke test can check either running app. It uses only the
+Python standard library, creates three disposable datasets, exercises imports,
+a paired pipeline and downloads, checks session isolation, then removes its data:
+
+```bash
+python scripts/smoke_web.py --url http://127.0.0.1:5000
+```
+
+For required login, add `--username scientist` and supply the password through
+`ADTL_SMOKE_PASSWORD`. Use `--keep --session /private/path/smoke.cookies` to retain
+test data and a private session cookie file; the script prints dataset IDs.
+After restarting the app, check persistence with
+`--session /private/path/smoke.cookies --verify-dataset DATASET_ID`.
+Treat that cookie file as a credential and remove it when finished.

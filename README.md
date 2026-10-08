@@ -67,6 +67,17 @@ See the [web app guide](docs/web.md) for supported analyses, input formats,
 privacy/retention behavior, configuration, and the future public deployment path
 for `adata-science-tools.com`. The local app is not publicly exposed.
 
+Alternatively, install Docker with Compose and run:
+
+```bash
+docker compose up --build
+```
+
+Open **http://127.0.0.1:5000**. Docker supplies the Python dependencies and starts
+the same app and worker. The native Python commands above remain fully supported;
+Docker is optional. See the [Docker instructions](docs/web.md#optional-docker-setup)
+for ports, persistent storage, and optional login.
+
 ## Simulated data example
 
 The repo includes a small config-driven simulated-data workflow in

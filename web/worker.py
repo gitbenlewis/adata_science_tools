@@ -200,9 +200,13 @@ def serve_worker(config):
                         child.kill()
                         child.wait()
                     store.finish(job["id"], error="Worker stopped or job exceeded the configured time limit. Reduce the selection and try again.")
-                elif store.job(job["id"])["status"] == "running":
-                    store.finish(job["id"], error="The analysis process exited before producing a result.")
-                if store.job(job["id"])["status"] == "failed" and json.loads(job["request"])["kind"] == "import":
+                else:
+                    result = store.job(job["id"])
+                    if result and result["status"] == "running":
+                        store.finish(job["id"], error="The analysis process exited before producing a result.")
+                # A completed dataset can be deleted while its child process exits.
+                result = store.job(job["id"])
+                if result and result["status"] == "failed" and json.loads(job["request"])["kind"] == "import":
                     with store.connect() as db:
                         db.execute("UPDATE datasets SET status='failed' WHERE id=?", (job["dataset_id"],))
     finally:

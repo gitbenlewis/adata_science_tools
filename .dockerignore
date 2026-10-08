@@ -1,0 +1,21 @@
+# Only runtime code enters the build context. Uploads, .git, credentials, examples,
+# caches, and local scientific environments stay on the host.
+**
+!Dockerfile
+!config/
+!config/requirements-web-container.txt
+!__init__.py
+!_io/
+!_io/**
+!_preprocessing/
+!_preprocessing/**
+!_plotting/
+!_plotting/**
+!_tools/
+!_tools/**
+!web/
+!web/**
+!scripts/
+!scripts/run_web.py
+**/__pycache__/
+**/*.pyc

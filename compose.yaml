@@ -1,0 +1,45 @@
+name: adata-science-tools
+
+x-app: &app
+  image: adata-science-tools-web:local
+  build: .
+  init: true
+  restart: unless-stopped
+  environment:
+    ADTL_WEB_DATA_ROOT: /data
+    ADTL_WEB_AUTH_REQUIRED: ${ADTL_WEB_AUTH_REQUIRED:-false}
+  volumes:
+    - web-data:/data
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+services:
+  web:
+    <<: *app
+    ports:
+      - "127.0.0.1:${ADTL_WEB_PORT:-5000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
+      interval: 10s
+      timeout: 10s
+      start_period: 30s
+      retries: 6
+  worker:
+    <<: *app
+    command: ["python", "scripts/run_web.py", "--worker"]
+    # The web service initializes SQLite and the shared local signing key first.
+    depends_on:
+      web:
+        condition: service_healthy
+    stop_grace_period: 15s
+    healthcheck:
+      test: ["CMD", "python", "-c", "import pathlib,time; p=pathlib.Path('/data/worker.heartbeat'); assert p.exists() and time.time()-p.stat().st_mtime < 15"]
+      interval: 10s
+      timeout: 10s
+      start_period: 30s
+      retries: 6
+
+volumes:
+  web-data:
