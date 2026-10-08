@@ -31,7 +31,7 @@ def build_pipeline(payload):
     if not isinstance(payload, dict) or not isinstance(payload.get("pipeline"), str) or payload["pipeline"] not in PIPELINES:
         raise ValueError("Choose a supported pipeline.")
     spec = PIPELINES[payload["pipeline"]]
-    selection_keys = {"matrix", "features", "filter_column", "filter_values", "numeric_columns", "categorical_columns"}
+    selection_keys = {"matrix", "features", "filter_column", "filter_values", "numeric_columns", "categorical_columns", "feature_label_column"}
     field_keys = {f["key"] for f in spec["fields"]}
     if set(payload) - (selection_keys | field_keys | {"pipeline"}):
         raise ValueError("Unrecognized pipeline parameters.")

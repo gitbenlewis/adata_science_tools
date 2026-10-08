@@ -14,6 +14,7 @@ from scipy import sparse
 
 from .. import _plotting as pl
 from .. import _tools as tl
+from .data import feature_labels
 
 
 def field(key, label, kind="obs", choices=None, default=None, required=False):
@@ -78,7 +79,7 @@ def validate_request(payload):
         raise ValueError("Choose a supported analysis.")
     spec = CATALOG[payload["operation"]]
     allowed = {"operation", "features", "matrix", "filter_column", "filter_values", "numeric_columns",
-               "categorical_columns", "source_job", "title", "palette", "yscale"}
+               "categorical_columns", "source_job", "title", "palette", "yscale", "feature_label_column"}
     allowed.update(f["key"] for f in spec["fields"])
     if set(payload) - allowed:
         raise ValueError("Unrecognized analysis parameters.")
@@ -92,6 +93,8 @@ def validate_request(payload):
                 raise ValueError(f"Invalid value for {key}.")
             if isinstance(value, str) and len(value) > 1000:
                 raise ValueError(f"{key} is too long.")
+    if "feature_label_column" in payload and not isinstance(payload["feature_label_column"], str):
+        raise ValueError("feature_label_column must be a column name.")
     for item in spec["fields"]:
         value = payload.get(item["key"], item["default"])
         if item["required"] and (value is None or value == "" or value == []):
@@ -162,8 +165,12 @@ def prepare_selection(adata, params, max_dense_bytes=256 * 1024**2):
     # Materialize only the selected matrix; do not copy unused layers, raw, or obsm.
     selected = x[mask][:, var.index.get_indexer(features)].copy()
     work = ad.AnnData(selected, obs=obs.loc[mask].copy(), var=var.loc[features].copy())
-    return work, {"n_obs": work.n_obs, "n_vars": work.n_vars,
-                  "matrix": matrix, "dense_bytes": estimate}
+    summary = {"n_obs": work.n_obs, "n_vars": work.n_vars, "matrix": matrix, "dense_bytes": estimate}
+    if params.get("feature_label_column"):
+        labels = feature_labels(var, params["feature_label_column"])
+        summary.update(feature_label_column=params["feature_label_column"],
+                       feature_labels={name: labels[name] for name in features})
+    return work, summary
 
 
 def group_value(series, value):
@@ -207,6 +214,15 @@ def run_analysis(adata, params, result_table=None, max_dense_bytes=256 * 1024**2
             if not a & b:
                 raise ValueError("There are no complete subject pairs.")
     table = result_table.loc[result_table.index.isin(work.var_names)].copy() if result_table is not None else work.var.copy()
+    labels = summary.get("feature_labels", {})
+    label_col = "__web_feature_label__"
+    while label_col in table or label_col in work.var:
+        label_col += "_"
+    # Display annotations live only in plotting copies, never in statistical inputs.
+    plot_work = work
+    if labels and op in {"histogram", "paired", "effects"}:
+        plot_work = work.copy()
+        plot_work.var[label_col] = pd.Series(labels)
     fig = None
     output = None
     kwargs = {}
@@ -218,11 +234,18 @@ def run_analysis(adata, params, result_table=None, max_dense_bytes=256 * 1024**2
                 raise ValueError("Bins must be an integer between 1 and 200.")
             kwargs = dict(var_names=work.var_names.tolist(), subset_obs_key=group, bins=int(bins),
                           palette=palette, title=title, show=False)
-            fig = pl.adata_histograms(work, **kwargs)[0]
+            if labels:
+                kwargs["subplot_title_var_col"] = label_col
+            fig, axes = pl.adata_histograms(plot_work, **kwargs)
+            if labels:
+                for identifier, axis in axes.items():
+                    axis.set_xlabel(labels[identifier])
         elif op == "datapoints":
             kwargs = dict(var_names=work.var_names.tolist(), x_by_obs_key=group, subset_obs_key=group,
                           boxplot=params["distribution"] == "box", violinplot=params["distribution"] == "violin",
                           palette=palette, title=title, yscale=params.get("yscale", "linear"), show=False)
+            if labels:
+                kwargs["feature_labels"] = labels
             fig, _, output = pl.datapoints(work, **kwargs)
         elif op == "paired":
             kwargs = dict(var_names=work.var_names.tolist(), groupby_key=group,
@@ -230,7 +253,9 @@ def run_analysis(adata, params, result_table=None, max_dense_bytes=256 * 1024**2
                           show_paired_difference=params["difference"] != "none",
                           paired_difference_mode="log2fc" if params["difference"] == "log2fc" else "difference",
                           palette=palette, title=title, show=False)
-            fig, _, output = pl.paired_datapoints(work, **kwargs)
+            if labels:
+                kwargs["subplot_title_var_col"] = label_col
+            fig, _, output = pl.paired_datapoints(plot_work, **kwargs)
         elif op == "correlation":
             frame = pd.DataFrame(index=work.obs_names)
             for axis in ("x", "y"):
@@ -246,7 +271,8 @@ def run_analysis(adata, params, result_table=None, max_dense_bytes=256 * 1024**2
             if group:
                 frame["group"] = work.obs[group]
             kwargs = dict(column_key_x="x", column_key_y="y", hue="group" if group else None,
-                          method=params["method"], xlabel=params["x"][4:], ylabel=params["y"][4:],
+                          method=params["method"], xlabel=labels.get(params["x"][4:], params["x"][4:]) if params["x"].startswith("var:") else params["x"][4:],
+                          ylabel=labels.get(params["y"][4:], params["y"][4:]) if params["y"].startswith("var:") else params["y"][4:],
                           axes_title=title, figsize=(8, 6), palette=palette, show=False)
             rendered = pl.corr_dotplot(frame, **kwargs)
             fig = rendered[0] if isinstance(rendered, tuple) else rendered.figure
@@ -260,7 +286,7 @@ def run_analysis(adata, params, result_table=None, max_dense_bytes=256 * 1024**2
             frame[response_col] = values.toarray().ravel() if sparse.issparse(values) else np.asarray(values).ravel()
             order = [group_value(frame[params["x"]], v.strip()) for v in params["order"].split(",")]
             kwargs = dict(x=params["x"], y=response_col, subject=pair, x_order=order,
-                          line_color_by=group, point_color_by=group, ylabel=params["y"], title=title, show=False)
+                          line_color_by=group, point_color_by=group, ylabel=labels.get(params["y"], params["y"]), title=title, show=False)
             rendered = pl.longitudinal_trajectories(frame, **kwargs)
             fig, output = rendered[0], rendered[-1] if isinstance(rendered[-1], pd.DataFrame) else frame
         elif op == "composition":
@@ -306,6 +332,9 @@ def run_analysis(adata, params, result_table=None, max_dense_bytes=256 * 1024**2
                 valid_p = table[params["pvalue"]].dropna()
                 if ((valid_p < 0) | (valid_p > 1)).any():
                     raise ValueError("P-value / FDR values must be between zero and one (or missing).")
+            plot_table = table.copy()
+            if labels:
+                plot_table[label_col] = pd.Series(labels)
             if op == "volcano":
                 cutoff = float(params["cutoff"])
                 effect_cutoff = float(params["effect_cutoff"])
@@ -320,7 +349,10 @@ def run_analysis(adata, params, result_table=None, max_dense_bytes=256 * 1024**2
                               dot_size_shrink_factor=len(table) / point_size,
                               legend_bbox_to_anchor=(1.45, 1), comparison_label="",
                               title_text=title, figsize=(8, 6))
-                fig = pl.volcano_plot_generic(table, **kwargs).figure
+                if labels:
+                    kwargs.update(feature_label_col=label_col, label_top_features=True,
+                                  label_layout="ranked_columns", label_features_char_limit=None)
+                fig = pl.volcano_plot_generic(plot_table, **kwargs).figure
             elif op == "qq":
                 kwargs = dict(pvalue_column=params["pvalue"], title=title, show=False)
                 rendered = pl.qqplot(table, **kwargs)
@@ -328,16 +360,20 @@ def run_analysis(adata, params, result_table=None, max_dense_bytes=256 * 1024**2
             elif op == "effects":
                 if not set(work.var_names).issubset(table.index):
                     raise ValueError("Some selected features have no statistical results. Select features present in the result table.")
-                work.var = table.loc[work.var_names].copy()
+                plot_work.var = plot_table.loc[work.var_names].copy()
                 kwargs = dict(feature_list=work.var_names.tolist(), comparison_col=group,
                               comparison_order=[ref, target], effect_column=params["effect"],
                               pvalue_column=params["pvalue"], distribution_kind=params["distribution"], fig_title=title)
-                rendered = pl.datapoints_effect_panels_column(work, **kwargs)
+                if labels:
+                    kwargs["feature_label_vars_col"] = label_col
+                rendered = pl.datapoints_effect_panels_column(plot_work, **kwargs)
                 fig = rendered[0]
             else:
                 kwargs = dict(feature_list=work.var_names.tolist(), estimate_col=params["effect"],
                               ci_low_col=params["ci_low"], ci_high_col=params["ci_high"], show=False)
-                rendered = pl.forest(var_df=table, **kwargs)
+                if labels:
+                    kwargs.update(feature_label_col=label_col, feature_label_char_limit=None)
+                rendered = pl.forest(var_df=plot_table, **kwargs)
                 fig = rendered[0]
             output = table
         elif op == "export":

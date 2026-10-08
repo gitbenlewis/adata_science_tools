@@ -27,7 +27,7 @@ function app() {
     return nodes.get(id);
   };
   const context = vm.createContext({
-    document: {getElementById: get, querySelector: get, querySelectorAll: () => [], createElement: () => new Node()},
+    document: {getElementById: get, querySelector: get, querySelectorAll: () => [], createElement: () => new Node(), createTextNode: text => ({textContent:text})},
     window: {scrollTo() {}, setInterval() {}},
     Option: function(text, value) { this.textContent = text; this.value = value; },
   });
@@ -64,6 +64,7 @@ test('out-of-order switches commit only the latest dataset and block submissions
 
 test('failed latest switch retains the previous dataset and ignores an older late response', async () => {
   const ui = app();
+  ui.run('loadFeatureLabels = async () => {};');
   const first = ui.run('selectDataset("A")'); ui.pending[0].resolve(dataset('A')); await first;
   const b = ui.run('selectDataset("B")');
   const c = ui.run('selectDataset("C")');
@@ -133,7 +134,7 @@ test('pipeline settings survive navigation, but do not leak into another dataset
 });
 
 
-test('COVID presets fill selections without submitting or leaking to other datasets', () => {
+test('COVID presets fill selections without submitting or leaking to other datasets', async () => {
   const ui = app();
   const presets = JSON.parse(fs.readFileSync(path.join(__dirname, '../web/static/examples/covid_proteomics/presets.json')));
   ui.run(`state.covid_presets = ${JSON.stringify(presets)};
@@ -141,11 +142,13 @@ test('COVID presets fill selections without submitting or leaking to other datas
     state.pipelines = {explore: {label:'Explore', description:'', steps:[], fields:[{key:'group', label:'Group', kind:'obs'}]}};
     detail = {dataset:{status:'ready', metadata:{format:'covid', obs_columns:{Day:{values:['0','3','7','E']}, COVID:{values:['0','1']}}}}, jobs:[]};
     activeId = 'covid'; renderFeatures = () => {}; renderMethod = () => {};
+    loadFeatureLabels = async (column) => { $('feature-label-column').value = column; };
     $('analysis-form').elements = {title:{}, palette:{}, yscale:{}};
     options($('numeric-columns'), ['Age cat'], false); $('numeric-columns').options[0].selected = true;
     options($('categorical-columns'), ['COVID'], false);`);
   for (const key of Object.keys(presets)) {
-    ui.run(`applyCovidPreset('${key}')`);
+    await ui.run(`applyCovidPreset('${key}')`);
+    assert.equal(ui.get('feature-label-column').value, 'gene_name');
     assert.deepEqual(JSON.parse(ui.run('JSON.stringify([...selectedFeatures])')), presets[key].parameters.features);
     assert.equal(ui.get('matrix').value, 'X');
     assert.equal(ui.get('filter-column').value, 'Day');
@@ -161,4 +164,68 @@ test('COVID presets fill selections without submitting or leaking to other datas
   ui.run("datasetLoading = false; detail.dataset.metadata.format = 'demo'; renderCovidPresets(); applyCovidPreset('histogram');");
   assert.equal(ui.get('covid-presets').hidden, true);
   assert.equal(ui.get('matrix').value, 'unchanged');
+});
+
+test('feature search matches names and IDs, selects all matches independently, and keeps selection', async () => {
+  const ui = app();
+  ui.run(`detail = {dataset:{status:'ready', metadata:{features:['a','b','c'], raw_features:['r'], obs_columns:{}}}};
+    activeId = 'A'; $('matrix').value = 'X'; selectedFeatures = new Set(['c']);
+    options($('feature-label-column'), [['','IDs'], ['symbol','symbol']], false, 'symbol');`);
+  const request = ui.run(`loadFeatureLabels('symbol')`);
+  assert.equal(ui.get('run-button').disabled, true);
+  await ui.get('analysis-form').onsubmit({preventDefault() {}});
+  assert.equal(ui.pending.length, 1);
+  ui.pending[0].resolve({columns:['symbol'], labels:{a:'IL6 [a]', b:'IL6 [b]', c:'TNF'}});
+  await request;
+  ui.get('feature-search').value = 'il6';
+  assert.deepEqual(JSON.parse(ui.run('JSON.stringify(matchingFeatures())')), ['a', 'b']);
+  ui.get('features-matches').onclick();
+  assert.deepEqual(JSON.parse(ui.run('JSON.stringify([...selectedFeatures])')), ['c', 'a', 'b']);
+  ui.get('features-clear').onclick();
+  ui.get('feature-search').value = 'b';
+  assert.deepEqual(JSON.parse(ui.run('JSON.stringify(matchingFeatures())')), ['b']);
+  ui.get('features-all').onclick();
+  assert.equal(ui.run('selectedFeatures.size'), 3);
+  const ids = ui.run(`loadFeatureLabels('')`);
+  ui.pending[1].resolve({columns:['symbol'], labels:{a:'a', b:'b', c:'c'}}); await ids;
+  assert.equal(ui.run('selectedFeatures.size'), 3);
+});
+
+test('stale label responses cannot overwrite newer column or matrix choices', async () => {
+  const ui = app();
+  ui.run(`detail = {dataset:{status:'ready', metadata:{features:['a','b'], raw_features:['r'], obs_columns:{}}}};
+    activeId = 'A'; $('matrix').value = 'X'; selectedFeatures = new Set(['a']);`);
+  const stale = ui.run(`loadFeatureLabels('old')`);
+  const latest = ui.run(`loadFeatureLabels('symbol')`);
+  ui.pending[1].resolve({columns:['symbol'], labels:{a:'New A', b:'New B'}}); await latest;
+  ui.pending[0].resolve({columns:['old'], labels:{a:'Old A', b:'Old B'}}); await stale;
+  assert.equal(ui.run(`featureLabels.get('a')`), 'New A');
+  assert.equal(ui.get('feature-label-column').value, 'symbol');
+  ui.get('matrix').value = 'raw';
+  const raw = ui.run(`loadFeatureLabels('symbol', true)`);
+  ui.pending[2].resolve({columns:['raw_symbol'], labels:{r:'r'}}); await raw;
+  assert.equal(ui.get('feature-label-column').value, '');
+  assert.match(ui.get('feature-label-status').textContent, /unavailable/);
+  assert.equal(ui.run(`featureLabels.get('r')`), 'r');
+  const pending = ui.run(`loadFeatureLabels('raw_symbol')`);
+  ui.run(`selectionVersion++; activeId = 'B'; featureLabels = new Map([['b','Dataset B']]);`);
+  ui.pending[3].resolve({columns:['raw_symbol'], labels:{r:'Old dataset'}}); await pending;
+  assert.equal(ui.run(`featureLabels.get('b')`), 'Dataset B');
+});
+
+
+test('pipeline summary refreshes after asynchronous label loading without resetting settings', async () => {
+  const ui = app();
+  ui.run(`state.pipelines = {explore: {label:'Explore', description:'', steps:[], fields:[{key:'group', label:'Group', kind:'obs'}]}};
+    detail = {dataset:{name:'Study', status:'ready', metadata:{features:['a'], obs_columns:{condition:{values:['A','B']}}}}};
+    activeId = 'A'; $('matrix').value = 'X'; selectedFeatures = new Set(['a']);
+    renderPipeline(); $('pipeline-group').value = 'condition';`);
+  assert.match(ui.get('pipeline-selection').textContent, /Feature labels: IDs/);
+  const request = ui.run(`loadFeatureLabels('symbol', true)`);
+  ui.pending[0].resolve({columns:['symbol'], labels:{a:'a'}});
+  await new Promise(resolve => setImmediate(resolve));
+  ui.pending[1].resolve({columns:['symbol'], labels:{a:'IL6'}});
+  await request;
+  assert.match(ui.get('pipeline-selection').textContent, /Feature labels: symbol/);
+  assert.equal(ui.get('pipeline-group').value, 'condition');
 });

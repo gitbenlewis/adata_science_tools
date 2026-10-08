@@ -423,3 +423,11 @@ Stage 3 adds `summary_included`, `marker_category`, `resolved_marker`,
 `resolved_marker_alpha`. `resolved_marker_facecolor` records an optional fixed
 style color; `rendered_marker_facecolor` records the actual inherited or open
 face used for the point. These are plain auditable values, not artist objects.
+
+### Display labels without changing feature identity
+
+Pass `feature_labels={"ENSG000001": "GENE1 [ENSG000001]"}` to `datapoints()`
+to label feature panels and feature ticks. Missing mapping entries use the
+original ID. Observation categories, grouping, axes dictionary keys, and returned
+data remain unchanged. Callers can include IDs in labels to distinguish duplicate
+names; the web app resolves this automatically from the chosen annotation column.

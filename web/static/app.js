@@ -12,6 +12,9 @@ let pipelineName = "explore";
 let pipelineFormKey = null;
 let selectionVersion = 0;
 let datasetLoading = false;
+let featureLabels = new Map();
+let labelRequestVersion = 0;
+let labelsLoading = false;
 
 function element(tag, text, className) {
   const node = document.createElement(tag);
@@ -109,9 +112,73 @@ function features() {
   if (!detail || detail.dataset.status !== "ready") return [];
   return $("matrix").value === "raw" ? detail.dataset.metadata.raw_features : detail.dataset.metadata.features;
 }
-function renderFeatures() {
+function featureText(id) {
+  const label = featureLabels.get(id) || id;
+  return label === id || label.endsWith(`[${id}]`) ? label : `${label} — ${id}`;
+}
+function matchingFeatures() {
   const query = $("feature-search").value.toLowerCase();
-  const matches = features().filter((f) => f.toLowerCase().includes(query));
+  return features().filter((id) => id.toLowerCase().includes(query) || (featureLabels.get(id) || "").toLowerCase().includes(query));
+}
+function relabelMethodFeatures() {
+  for (const field of state.catalog[$("operation").value]?.fields || []) {
+    const input = $(`param-${field.key}`);
+    if (field.kind === "feature") options(input, features().map((id) => [id, featureText(id)]));
+    if (field.kind === "variable") options(input, [...obsColumns().map((v) => [`obs:${v}`, `obs · ${v}`]), ...features().map((id) => [`var:${id}`, `feature · ${featureText(id)}`])]);
+  }
+}
+async function loadFeatureLabels(column = "", discover = false) {
+  const version = ++labelRequestVersion;
+  const datasetVersion = selectionVersion;
+  const id = activeId;
+  const matrix = $("matrix").value;
+  const current = () => version === labelRequestVersion && datasetVersion === selectionVersion && id === activeId;
+  labelsLoading = true;
+  $("feature-label-column").disabled = true;
+  $("features-matches").disabled = true;
+  featureLabels = new Map();
+  $("feature-label-status").textContent = "Loading feature labels…";
+  for (const button of ["run-button", "pipeline-run"]) $(button).disabled = true;
+  renderFeatures();
+  relabelMethodFeatures();
+  try {
+    const url = `/api/datasets/${id}/feature-labels?matrix=${encodeURIComponent(matrix)}`;
+    let result;
+    let unavailable = false;
+    if (discover) {
+      result = await api(url);
+      if (!current()) return;
+      unavailable = Boolean(column && !result.columns.includes(column));
+      if (unavailable) column = "";
+      options($("feature-label-column"), [["", "Feature ID (var_names)"], ...result.columns], false, column);
+    }
+    if (!discover || column) result = await api(`${url}&column=${encodeURIComponent(column)}`);
+    if (!current()) return;
+    featureLabels = new Map(Object.entries(result.labels));
+    $("feature-label-column").value = column;
+    $("feature-label-status").textContent = unavailable
+      ? "The previous label column is unavailable in this matrix. Showing feature IDs."
+      : column ? "Duplicate names include IDs. Missing names use IDs. Each feature remains separate." : "Search by feature ID, or choose an annotation column for recognizable names.";
+  } catch (error) {
+    if (!current()) return;
+    $("feature-label-column").value = "";
+    $("feature-label-status").textContent = "Labels could not be loaded. Showing feature IDs.";
+    notice(error.message, true);
+  } finally {
+    if (current()) {
+      labelsLoading = false;
+      $("feature-label-column").disabled = false;
+      $("features-matches").disabled = false;
+      renderFeatures();
+      relabelMethodFeatures();
+      renderPipeline();
+      for (const button of ["run-button", "pipeline-run"]) $(button).disabled = datasetLoading || labelsLoading || detail?.dataset.status !== "ready";
+    }
+  }
+}
+$("feature-label-column").onchange = () => loadFeatureLabels($("feature-label-column").value);
+function renderFeatures() {
+  const matches = matchingFeatures();
   $("feature-count").textContent = `${selectedFeatures.size} selected / ${features().length}`;
   $("feature-list").replaceChildren();
   for (const feature of matches.slice(0, 150)) {
@@ -120,15 +187,21 @@ function renderFeatures() {
     input.type = "checkbox";
     input.checked = selectedFeatures.has(feature);
     input.onchange = () => { input.checked ? selectedFeatures.add(feature) : selectedFeatures.delete(feature); $("feature-count").textContent = `${selectedFeatures.size} selected / ${features().length}`; };
-    label.append(input, document.createTextNode(feature));
+    label.append(input, document.createTextNode(featureText(feature)));
     $("feature-list").append(label);
   }
   if (matches.length > 150) $("feature-list").append(element("p", "Showing 150 matches. Search to narrow the list.", "small muted"));
 }
 $("feature-search").oninput = renderFeatures;
+$("features-matches").onclick = () => { for (const id of matchingFeatures()) selectedFeatures.add(id); renderFeatures(); };
 $("features-all").onclick = () => { selectedFeatures = new Set(features()); renderFeatures(); };
 $("features-clear").onclick = () => { selectedFeatures.clear(); renderFeatures(); };
-$("matrix").onchange = () => { selectedFeatures = new Set(features().slice(0, 3)); renderFeatures(); renderMethod(); };
+$("matrix").onchange = () => {
+  const available = new Set(features());
+  selectedFeatures = new Set([...selectedFeatures].filter((id) => available.has(id)));
+  renderMethod();
+  loadFeatureLabels($("feature-label-column").value, true);
+};
 function obsColumns() { return Object.keys(detail.dataset.metadata.obs_columns); }
 function refreshFilter() {
   const col = detail.dataset.metadata.obs_columns[$("filter-column").value];
@@ -169,8 +242,8 @@ function renderMethod() {
     } else {
       let values = [];
       if (["obs", "multi_obs"].includes(field.kind)) values = obsColumns();
-      if (field.kind === "feature") values = features();
-      if (field.kind === "variable") values = [...obsColumns().map((v) => [`obs:${v}`, `obs · ${v}`]), ...features().map((v) => [`var:${v}`, `feature · ${v}`])];
+      if (field.kind === "feature") values = features().map((id) => [id, featureText(id)]);
+      if (field.kind === "variable") values = [...obsColumns().map((v) => [`obs:${v}`, `obs · ${v}`]), ...features().map((v) => [`var:${v}`, `feature · ${featureText(v)}`])];
       if (field.kind === "choice") {
         const testLabels = {ttest_ind: "Welch's independent t-test", mannwhitneyu: "Mann–Whitney U test",
                             ttest_rel: "Paired t-test", WilcoxonSigned: "Wilcoxon signed-rank test"};
@@ -208,6 +281,7 @@ function setupStudio() {
   }
   $("operation").value = "histogram";
   renderMethod();
+  loadFeatureLabels("", true);
 }
 function renderResults() {
   const jobs = detail.jobs.filter((j) => j.request.kind === "analysis");
@@ -263,6 +337,8 @@ function renderResults() {
 }
 async function selectDataset(id) {
   const version = ++selectionVersion;
+  ++labelRequestVersion;
+  labelsLoading = false;
   datasetLoading = true;
   for (const button of ["run-button", "pipeline-run", "delete-button"]) $(button).disabled = true;
   $("dataset-status").textContent = "Loading selected dataset…";
@@ -274,6 +350,7 @@ async function selectDataset(id) {
     detail = nextDetail;
     $("dataset-select").value = id || "";
     lastJobs = "";
+    featureLabels = new Map();
     if (detail) { renderOverview(); setupStudio(); renderResults(); }
     else {
       $("covid-presets").hidden = true;
@@ -285,13 +362,14 @@ async function selectDataset(id) {
     renderPipeline(); renderCovidPresets();
   } catch (error) {
     if (version !== selectionVersion) return;
+    if (detail?.dataset.status === "ready") loadFeatureLabels($("feature-label-column").value, true);
     $("dataset-select").value = activeId || "";
     $("dataset-status").textContent = detail ? `${detail.dataset.name} · ${detail.dataset.status}` : "No dataset loaded.";
     throw error;
   } finally {
     if (version === selectionVersion) {
       datasetLoading = false;
-      for (const button of ["run-button", "pipeline-run"]) $(button).disabled = detail?.dataset.status !== "ready";
+      for (const button of ["run-button", "pipeline-run"]) $(button).disabled = labelsLoading || detail?.dataset.status !== "ready";
       $("delete-button").disabled = !activeId;
       renderCovidPresets();
     }
@@ -319,7 +397,7 @@ async function refresh() {
       renderOverview();
       if (!wasReady && detail.dataset.status === "ready") {
         setupStudio(); renderPipeline();
-        for (const button of ["run-button", "pipeline-run"]) $(button).disabled = false;
+        for (const button of ["run-button", "pipeline-run"]) $(button).disabled = labelsLoading;
         notice("Dataset loaded. Open the analysis studio to begin.");
       }
       renderResults();
@@ -361,7 +439,7 @@ function renderCovidPresets() {
     $("covid-preset-buttons").append(button);
   }
 }
-function applyCovidPreset(key) {
+async function applyCovidPreset(key) {
   if (datasetLoading || detail?.dataset.status !== "ready" || detail.dataset.metadata.format !== "covid") return;
   const preset = state.covid_presets[key];
   const params = preset.parameters;
@@ -388,6 +466,9 @@ function applyCovidPreset(key) {
     for (const key of ["title", "palette", "yscale"]) $("analysis-form").elements[key].value = params[key];
   }
   showView(preset.view);
+  const version = selectionVersion;
+  await loadFeatureLabels(params.feature_label_column || "", true);
+  if (version !== selectionVersion) return;
   notice(`${preset.label}: settings filled. Review the selection, then choose Run. Open Datasets to choose another COVID example.`);
 }
 $("demo-button").onclick = () => { const data = new FormData(); data.set("format", "demo"); loadDataset(data); };
@@ -399,11 +480,11 @@ async function deleteDataset() {
 $("delete-button").onclick = deleteDataset;
 $("analysis-form").onsubmit = async (event) => {
   event.preventDefault();
-  if (datasetLoading || detail?.dataset.status !== "ready") { notice("Wait for the selected dataset to load.", true); return; }
+  if (datasetLoading || labelsLoading || detail?.dataset.status !== "ready") { notice("Wait for the selected dataset and feature labels to load.", true); return; }
   if (!selectedFeatures.size) { notice("Select at least one feature.", true); return; }
   const form = new FormData(event.target);
   const operation = $("operation").value;
-  const payload = {operation, matrix: form.get("matrix"), features: [...selectedFeatures]};
+  const payload = {operation, matrix: form.get("matrix"), features: [...selectedFeatures], feature_label_column: $("feature-label-column").value};
   for (const key of ["filter_column", "title", "palette", "yscale"]) payload[key] = form.get(key) || "";
   for (const key of ["filter_values", "numeric_columns", "categorical_columns"]) payload[key] = form.getAll(key);
   if (state.catalog[operation].category === "Results") payload.source_job = form.get("source_job") || "";
@@ -413,7 +494,7 @@ $("analysis-form").onsubmit = async (event) => {
     await api(`/api/datasets/${activeId}/jobs`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload)});
     notice("Analysis submitted. You can keep exploring while it runs."); showView("results"); await refresh();
   } catch (error) { notice(error.message, true); }
-  finally { $("run-button").disabled = datasetLoading || detail?.dataset.status !== "ready"; }
+  finally { $("run-button").disabled = datasetLoading || labelsLoading || detail?.dataset.status !== "ready"; }
 };
 function renderPipeline() {
   const spec = state.pipelines?.[pipelineName];
@@ -434,7 +515,7 @@ function renderPipeline() {
   $("pipeline-form").hidden = !ready;
   $("pipeline-edit-selection").hidden = !ready;
   $("pipeline-selection").textContent = ready
-    ? `${detail.dataset.name} · ${$("matrix").selectedOptions[0]?.textContent} · ${selectedFeatures.size} selected features. Observation filter: ${$("filter-column").value ? `${$("filter-column").value} = ${[...$("filter-values").selectedOptions].map((o) => o.value).join(", ") || "no values selected"}` : "none"}. Numeric metadata: ${[...$("numeric-columns").selectedOptions].map((o) => o.value).join(", ") || "none"}. Categorical metadata: ${[...$("categorical-columns").selectedOptions].map((o) => o.value).join(", ") || "none"}.`
+    ? `${detail.dataset.name} · ${$("matrix").selectedOptions[0]?.textContent} · ${selectedFeatures.size} selected features. Feature labels: ${$("feature-label-column").value || "IDs"}. Observation filter: ${$("filter-column").value ? `${$("filter-column").value} = ${[...$("filter-values").selectedOptions].map((o) => o.value).join(", ") || "no values selected"}` : "none"}. Numeric metadata: ${[...$("numeric-columns").selectedOptions].map((o) => o.value).join(", ") || "none"}. Categorical metadata: ${[...$("categorical-columns").selectedOptions].map((o) => o.value).join(", ") || "none"}.`
     : "Load a dataset in Datasets to run a pipeline.";
   if (!ready) { pipelineFormKey = null; return; }
   const formKey = `${activeId}:${pipelineName}`;
@@ -462,11 +543,11 @@ function renderPipeline() {
 $("pipeline-edit-selection").onclick = () => showView("analysis");
 $("pipeline-form").onsubmit = async (event) => {
   event.preventDefault();
-  if (datasetLoading || detail?.dataset.status !== "ready") { notice("Wait for the selected dataset to load.", true); return; }
+  if (datasetLoading || labelsLoading || detail?.dataset.status !== "ready") { notice("Wait for the selected dataset and feature labels to load.", true); return; }
   if (!selectedFeatures.size) { notice("Select at least one feature in Analysis studio.", true); return; }
   const form = new FormData(event.target);
   const payload = {pipeline: pipelineName, features: [...selectedFeatures], matrix: $("matrix").value,
-                   filter_column: $("filter-column").value};
+                   filter_column: $("filter-column").value, feature_label_column: $("feature-label-column").value};
   for (const [key, id] of [["filter_values", "filter-values"], ["numeric_columns", "numeric-columns"], ["categorical_columns", "categorical-columns"]]) {
     payload[key] = [...$(id).selectedOptions].map((o) => o.value);
   }
@@ -477,7 +558,7 @@ $("pipeline-form").onsubmit = async (event) => {
     notice(`Pipeline submitted: ${result.job_ids.length} steps. Results retain the shared selection and pipeline run ID.`);
     showView("results"); await refresh();
   } catch (error) { notice(error.message, true); }
-  finally { $("pipeline-run").disabled = datasetLoading || detail?.dataset.status !== "ready"; }
+  finally { $("pipeline-run").disabled = datasetLoading || labelsLoading || detail?.dataset.status !== "ready"; }
 };
 refresh();
 window.setInterval(refresh, 3000);

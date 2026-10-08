@@ -116,8 +116,10 @@
         <div class="studio-grid">
           <div class="card selection-card"><h2>Data selection</h2>
             <label>Matrix source<select id="matrix" name="matrix"></select></label>
-            <label>Search features<input type="search" id="feature-search" placeholder="Search identifiers…"></label>
-            <div class="section-heading compact"><span id="feature-count" class="small muted"></span><button type="button" class="quiet" id="features-all">All features</button><button type="button" class="quiet" id="features-clear">Clear</button></div>
+            <label>Feature label column<select id="feature-label-column" name="feature_label_column"><option value="">Feature ID (var_names)</option></select></label>
+            <p id="feature-label-status" class="small muted" aria-live="polite"></p>
+            <label>Search features<input type="search" id="feature-search" placeholder="Search IDs or selected labels…"></label>
+            <div class="section-heading compact"><span id="feature-count" class="small muted"></span><button type="button" class="quiet" id="features-matches">Select matches</button><button type="button" class="quiet" id="features-all">Select all features</button><button type="button" class="quiet" id="features-clear">Clear</button></div>
             <div id="feature-list" class="feature-list"></div>
             <p class="small muted">Plot up to 24 features. Statistical tests use the selected feature set for FDR correction.</p>
             <details><summary>Filter observations</summary><label>Metadata column<select id="filter-column" name="filter_column"></select></label><label>Keep values<select id="filter-values" name="filter_values" multiple size="4"></select></label></details>

@@ -39,6 +39,20 @@ class WebAppTests(unittest.TestCase):
         self.assertEqual(self.store.job(job["id"])["status"], "complete", self.store.job(job["id"])["error"])
         return response.json["dataset_id"]
 
+    def test_feature_label_endpoint_supports_existing_datasets_and_is_owned(self):
+        dataset_id = self.demo()
+        # No new metadata schema or reimport is required for an existing dataset.
+        with self.store.connect() as db:
+            db.execute("UPDATE datasets SET metadata='{}' WHERE id=?", (dataset_id,))
+        url = f"/api/datasets/{dataset_id}/feature-labels"
+        self.assertEqual(self.client.get(url).json["columns"], ["label"])
+        self.assertEqual(self.client.get(url + "?matrix=layer:log1p&column=label").json["labels"]["feature_1"], "Marker 1")
+        for query in ("?column=absent", "?matrix=raw", "?matrix=layer:absent"):
+            self.assertEqual(self.client.get(url + query).status_code, 400)
+        stranger = self.app.test_client()
+        stranger.get("/")
+        self.assertEqual(stranger.get(url).status_code, 404)
+
     def test_upload_analysis_download_and_session_isolation(self):
         dataset_id = self.demo()
         response = self.client.post(f"/api/datasets/{dataset_id}/jobs", headers=self.headers(),
@@ -87,7 +101,7 @@ class WebAppTests(unittest.TestCase):
         for pipeline in ("explore", "independent", "paired"):
             with self.subTest(pipeline=pipeline):
                 payload = {"pipeline": pipeline, "features": ["feature_1", "feature_2"],
-                           "matrix": "layer:log1p", "group": "condition"}
+                           "matrix": "layer:log1p", "group": "condition", "feature_label_column": "label"}
                 if pipeline != "explore":
                     payload.update(reference="Reference", target="Treatment")
                 if pipeline == "paired":
@@ -107,6 +121,7 @@ class WebAppTests(unittest.TestCase):
                         self.assertEqual(record.json["pipeline"]["step"], step)
                         self.assertEqual(record.json["selection"]["matrix"], "layer:log1p")
                         self.assertEqual(record.json["selection"]["n_vars"], 2)
+                        self.assertEqual(record.json["selection"]["feature_labels"], {"feature_1": "Marker 1", "feature_2": "Marker 2"})
                         run_ids.add(record.json["pipeline"]["id"])
                 self.assertEqual(len(run_ids), 1)
         # A new page request retains all pipeline steps in the persisted dataset history.

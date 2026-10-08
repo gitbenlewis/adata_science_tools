@@ -20,7 +20,8 @@
       "bins": 25,
       "title": "Day 0: IL6, TNF and CXCL10 by COVID status",
       "palette": "colorblind",
-      "yscale": "linear"
+      "yscale": "linear",
+      "feature_label_column": "gene_name"
     }
   },
   "datapoints": {
@@ -44,7 +45,8 @@
       "distribution": "box",
       "title": "Day 0: IL6, TNF and CXCL10 by COVID status",
       "palette": "colorblind",
-      "yscale": "linear"
+      "yscale": "linear",
+      "feature_label_column": "gene_name"
     }
   },
   "day0": {
@@ -64,7 +66,8 @@
       "numeric_columns": [],
       "categorical_columns": [],
       "pipeline": "explore",
-      "group": "COVID"
+      "group": "COVID",
+      "feature_label_column": "gene_name"
     }
   },
   "visits": {
@@ -86,7 +89,8 @@
       "numeric_columns": [],
       "categorical_columns": [],
       "pipeline": "explore",
-      "group": "Day"
+      "group": "Day",
+      "feature_label_column": "gene_name"
     }
   }
 }

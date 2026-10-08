@@ -434,3 +434,26 @@ The preview PNGs use the same presets in
 root with `MPLBACKEND=Agg python scripts/build_web_covid_previews.py` in the scientific
 environment. The preview generator fixes its jitter seed; plot placement can still
 vary across Matplotlib versions.
+
+### Recognizable feature labels
+
+In Analysis studio, choose **Feature label column** (for example `gene_name` or
+`symbol`). Search matches both that column and the unique feature ID. **Select
+matches** adds all matching features, including matches beyond the first 150
+shown; **Select all features** selects the entire active matrix. Changing labels
+preserves your selection.
+
+Duplicate names remain separate measurements: `IL6 [OID20101]` and
+`IL6 [OID20563]` can be selected independently. Duplicate names are identified in
+the full active feature table, so selecting just one does not change its label.
+Missing, blank, or literal `nan` names fall back to IDs. Labels are not gene
+mapping or aggregation: calculations, exported tables, and matrix selection
+continue to use unique IDs. Display labels and the chosen column are recorded in
+the analysis record and reused by the reproduction script.
+
+X and layers use `adata.var`; raw uses `adata.raw.var`. When a column is unavailable
+after switching matrices, the app visibly falls back to IDs. Existing imported
+datasets work without reimporting. Leaving the label selector on **Feature ID
+(var_names)** preserves the original display behavior. COVID presets choose
+`gene_name`. Result plots join labels by ID; volcano plots with labels selected
+use the existing ranked annotation layout for top features.

@@ -160,6 +160,7 @@ def datapoints(
     df: pd.DataFrame | None = None,
     var_df: pd.DataFrame | None = None,
     var_names: Sequence[str] | None = None,
+    feature_labels: Mapping[str, str] | None = None,
     var_groupby_key: str | None = None,
     collapse_mode: Literal["stack", "aggregate", "all"] = "aggregate",
     collapse_func: Literal["mean", "median", "sum", "min", "max", "count"] = "mean",
@@ -242,7 +243,11 @@ def datapoints(
     allow_unused_params: bool = False,
     **params: Any,
 ) -> tuple[plt.Figure, dict[str, plt.Axes], pd.DataFrame]:
-    """Plot unpaired datapoints for selected variables from AnnData or a wide DataFrame."""
+    """Plot unpaired datapoints for selected variables from AnnData or a wide DataFrame.
+
+    ``feature_labels`` maps feature IDs to display text only. Selection, grouping,
+    returned tables, and axes dictionary keys retain their original identifiers.
+    """
 
     log = logger or LOGGER
     if log_level is not None:
@@ -1436,9 +1441,12 @@ def datapoints(
                 )
 
         if not uses_default_panel:
-            ax.set_title(panel_name)
+            ax.set_title((feature_labels or {}).get(panel_name, panel_name) if panel_by_x_variable and var_groupby_key is None else panel_name)
         elif panel_df["variable"].nunique() == 1:
-            ax.set_title(str(panel_df["variable"].iloc[0]))
+            identifier = str(panel_df["variable"].iloc[0])
+            ax.set_title((feature_labels or {}).get(identifier, identifier) if var_groupby_key is None else identifier)
+        if x_by_obs_key is None and var_groupby_key is None and feature_labels:
+            x_labels = [feature_labels.get(str(value), value) for value in x_labels]
         category_label = x_by_obs_key if x_by_obs_key is not None else "variable"
         if orientation == "vertical":
             ax.set_xticks(x_positions)

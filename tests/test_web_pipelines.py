@@ -11,7 +11,7 @@ class PipelineTests(unittest.TestCase):
         features = [f"feature_{i}" for i in range(30)]
         payload = dict(pipeline="independent", features=features, group="condition",
                        reference="A", target="B", test="mannwhitneyu", matrix="layer:counts",
-                       filter_column="batch", filter_values=["one"], numeric_columns=["age"])
+                       filter_column="batch", filter_values=["one"], numeric_columns=["age"], feature_label_column="symbol")
         steps = build_pipeline(payload)
         self.assertEqual(steps[0]["features"], features[:24])
         self.assertEqual(steps[1]["features"], features)
@@ -21,6 +21,7 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(step["matrix"], "layer:counts")
             self.assertEqual(step["filter_values"], ["one"])
             self.assertEqual(step["numeric_columns"], ["age"])
+            self.assertEqual(step["feature_label_column"], "symbol")
         self.assertEqual(payload["features"], features)
 
     def test_invalid_designs_and_parameters_are_rejected(self):

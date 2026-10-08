@@ -188,6 +188,16 @@ def create_app(config=None):
             job["result"] = json.loads(job["result"])
         return jsonify(dataset=data, jobs=jobs)
 
+    @app.get("/api/datasets/<dataset_id>/feature-labels")
+    def dataset_feature_labels(dataset_id):
+        from .data import read_feature_labels
+        data = owned_dataset(dataset_id)
+        if data["status"] != "ready":
+            raise ValueError("Wait for dataset validation to finish.")
+        return jsonify(read_feature_labels(store.directory(dataset_id) / "data.h5ad",
+                                           request.args.get("matrix", "X"),
+                                           request.args.get("column", "")))
+
     @app.delete("/api/datasets/<dataset_id>")
     def delete_dataset(dataset_id):
         owned_dataset(dataset_id)

@@ -76,12 +76,14 @@ def smoke(client, keep=False):
         dataset_id = uploaded["dataset_id"]
         created.append(dataset_id)
         client.wait(dataset_id, [uploaded["job_id"]])
-        print("Demo import passed.", flush=True)
+        labels = client.json(f"/api/datasets/{dataset_id}/feature-labels?matrix=layer:log1p&column=label")
+        assert labels["labels"]["feature_1"] == "Marker 1"
+        print("Demo import and feature-label lookup passed.", flush=True)
 
         response = client.json(f"/api/datasets/{dataset_id}/pipelines", data={
             "pipeline": "paired", "features": ["feature_1", "feature_2"], "matrix": "layer:log1p",
             "group": "condition", "reference": "Reference", "target": "Treatment",
-            "pair": "subject", "test": "ttest_rel",
+            "pair": "subject", "test": "ttest_rel", "feature_label_column": "label",
         })
         jobs = client.wait(dataset_id, response["job_ids"])
         assert len(jobs) == 3
@@ -89,6 +91,7 @@ def smoke(client, keep=False):
             base = f"/api/jobs/{job['id']}/files/"
             record = client.json(base + "analysis.json")
             assert record["selection"]["matrix"] == "layer:log1p"
+            assert record["selection"]["feature_labels"] == {"feature_1": "Marker 1", "feature_2": "Marker 2"}
             assert record["pipeline"]["total"] == 3
             assert client.request(base + "results.csv")
             if job["request"]["parameters"]["operation"] == "paired":

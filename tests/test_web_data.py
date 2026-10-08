@@ -11,7 +11,7 @@ from pandas.testing import assert_frame_equal
 from scipy import sparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from adata_science_tools.web.data import check_h5ad, load_csv_bundle, metadata, read_csv, validate_adata
+from adata_science_tools.web.data import check_h5ad, load_csv_bundle, metadata, read_csv, validate_adata, feature_labels, read_feature_labels
 from adata_science_tools.web.analysis import prepare_selection
 
 
@@ -22,6 +22,51 @@ class WebDataTests(unittest.TestCase):
 
     def tearDown(self):
         self.temp.cleanup()
+
+    def test_feature_labels_duplicates_missing_and_collision(self):
+        var = pd.DataFrame({"symbol": ["IL6", "IL6", None, "  ", " NaN ", "IL6 [a]", "c"]},
+                           index=list("abcdefg"))
+        before = var.copy()
+        labels = feature_labels(var, "symbol")
+        self.assertEqual(labels["b"], "IL6 [b]")
+        self.assertEqual(labels["a"], "IL6 [a] [a]")
+        for identifier in "cde":
+            self.assertEqual(labels[identifier], identifier)
+        self.assertEqual(labels["f"], "IL6 [a]")
+        self.assertEqual(labels["g"], "c [g]")
+        self.assertEqual(len(set(labels.values())), len(var))
+        assert_frame_equal(var, before)
+        self.assertEqual(feature_labels(var), dict(zip(var.index, var.index)))
+        with self.assertRaisesRegex(ValueError, "Unknown feature label"):
+            feature_labels(var, "absent")
+
+    def test_label_lookup_reads_annotations_only_and_uses_raw(self):
+        from unittest.mock import patch
+        data = ad.AnnData(np.ones((2, 3)), var=pd.DataFrame(
+            {"symbol": pd.Categorical(["IL6", "IL6", "TNF"])}, index=["a", "b", "c"]))
+        data.raw = data.copy()
+        data = data[:, ["a", "c"]].copy()
+        data.var = pd.DataFrame({"other": ["A", "C"]}, index=data.var_names)
+        data.layers["counts"] = data.X.copy()
+        path = self.root / "labels.h5ad"
+        data.write_h5ad(path)
+        original = ad.io.read_elem
+        reads = []
+        def read(elem):
+            reads.append(elem.name)
+            return original(elem)
+        with patch.object(ad.io, "read_elem", side_effect=read):
+            result = read_feature_labels(path, "raw", "symbol")
+        self.assertEqual(result["columns"], ["symbol"])
+        self.assertEqual(result["labels"], {"a": "IL6 [a]", "b": "IL6 [b]", "c": "TNF"})
+        self.assertEqual(reads, ["/raw/var/_index", "/raw/var/symbol"])
+        self.assertEqual(read_feature_labels(path, "layer:counts", "other")["labels"], {"a": "A", "c": "C"})
+        for matrix, column in [("X", "symbol"), ("layer:absent", "other")]:
+            with self.assertRaises(ValueError):
+                read_feature_labels(path, matrix, column)
+        work, summary = prepare_selection(data, dict(operation="export", matrix="raw", features=["a"], feature_label_column="symbol"))
+        self.assertEqual(summary["feature_labels"], {"a": "IL6 [a]"})
+        self.assertEqual(work.var_names.tolist(), ["a"])
 
     def write_bundle(self):
         (self.root / "X.csv").write_text(',001,NA\n0002,1,2\n0001,3,\n')

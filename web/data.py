@@ -117,6 +117,52 @@ def metadata(adata):
                                                          columns=adata.var_names[:8]))}}
 
 
+def feature_labels(var, column=""):
+    """Resolve display text across the full matrix feature table, before selection."""
+    if not var.index.is_unique:
+        raise ValueError("Feature identifiers must be unique in the chosen matrix.")
+    if not column:
+        return dict(zip(var.index, var.index))
+    if column not in var.columns:
+        raise ValueError(f"Unknown feature label column: {column}")
+    labels = var[column].astype("string")
+    missing = labels.isna() | labels.str.strip().str.lower().isin(["", "nan"])
+    labels = labels.mask(missing, pd.Series(var.index, index=var.index)).astype(str)
+    duplicated = labels.duplicated(keep=False) & ~missing
+    reserved = set(labels[~duplicated])
+    used = set()
+    resolved = {}
+    for identifier, label in labels.items():
+        candidate = f"{label} [{identifier}]" if duplicated.loc[identifier] else label
+        # An annotation can itself look like a disambiguated label.
+        while candidate in used or (duplicated.loc[identifier] and candidate in reserved):
+            candidate += f" [{identifier}]"
+        resolved[identifier] = candidate
+        used.add(candidate)
+    return resolved
+
+
+def read_feature_labels(path, matrix="X", column=""):
+    """Read only feature IDs and one annotation column; never load expression arrays."""
+    with h5py.File(path, "r") as handle:
+        if matrix == "raw":
+            if "raw" not in handle or "var" not in handle["raw"]:
+                raise ValueError("This dataset has no raw matrix.")
+            group = handle["raw/var"]
+        else:
+            if matrix != "X" and not (matrix.startswith("layer:") and matrix[6:] in handle.get("layers", {})):
+                raise ValueError("Unknown matrix source.")
+            group = handle["var"]
+        columns = list(group.attrs["column-order"])
+        if column and column not in columns:
+            raise ValueError(f"Unknown feature label column: {column}")
+        index = pd.Index(ad.io.read_elem(group[group.attrs["_index"]]))
+        var = pd.DataFrame(index=index)
+        if column:
+            var[column] = ad.io.read_elem(group[column])
+        return {"columns": columns, "labels": feature_labels(var, column)}
+
+
 def sha256(path):
     digest = hashlib.sha256()
     with open(path, "rb") as handle:

@@ -49,6 +49,30 @@ class DatapointsTests(unittest.TestCase):
         adata.raw = ad.AnnData(X=x_matrix + 5000.0, obs=obs.copy(), var=var.copy())
         return adata
 
+    def test_feature_display_labels_preserve_data_geometry_and_facet_identity(self):
+        from pandas.testing import assert_frame_equal
+        data = self.make_adata()
+        labels = {"A_v1": "GENE_A [A_v1]", "A_v2": "GENE_A [A_v2]", "A": "Do not rename batch A"}
+        for orientation in ("vertical", "horizontal"):
+            for extra in ({}, {"x_by_obs_key": "condition"}, {"subplot_by_obs_key": "batch"}):
+                with self.subTest(orientation=orientation, extra=extra):
+                    kwargs = dict(var_names=["A_v1", "A_v2"], show=False, orientation=orientation, **extra)
+                    plain_fig, plain_axes, plain = adtl.datapoints(data, **kwargs)
+                    fig, axes, result = adtl.datapoints(data, feature_labels=labels, **kwargs)
+                    assert_frame_equal(plain, result)
+                    self.assertEqual(list(axes), list(plain_axes))
+                    for key in axes:
+                        if extra.get("subplot_by_obs_key"):
+                            self.assertEqual(axes[key].get_title(), plain_axes[key].get_title())
+                        for before, after in zip(plain_axes[key].collections, axes[key].collections):
+                            np.testing.assert_array_equal(before.get_offsets(), after.get_offsets())
+                    texts = [t.get_text() for t in fig.findobj(matplotlib.text.Text)]
+                    self.assertIn("GENE_A [A_v1]", texts)
+                    self.assertIn("GENE_A [A_v2]", texts)
+                    self.assertNotIn("Do not rename batch A", texts)
+                    plt.close(plain_fig)
+                    plt.close(fig)
+
     def test_exported_from_package_root(self):
         self.assertTrue(hasattr(adtl, "datapoints"))
         self.assertTrue(hasattr(adtl.pl, "datapoints"))
