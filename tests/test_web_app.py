@@ -171,5 +171,28 @@ class WebAppTests(unittest.TestCase):
         self.assertEqual(response.headers["X-Content-Type-Options"], "nosniff")
 
 
+    def test_covid_downloads_and_import_are_available(self):
+        from adata_science_tools.web.examples import COVID_DIRECTORY, COVID_PRESETS
+        from adata_science_tools.web.data import sha256
+        response = self.client.get("/")
+        self.assertIn(b"Open COVID example", response.data)
+        self.assertEqual(self.client.get("/api/state").json["covid_presets"], COVID_PRESETS)
+        for filename in ("covid_proteomics.h5ad", "X.csv", "obs.csv", "var.csv", "histogram.png", "datapoints.png"):
+            with self.client.get("/static/examples/covid_proteomics/" + filename) as response:
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.data, (COVID_DIRECTORY / filename).read_bytes())
+        response = self.client.post("/api/datasets", data={"format": "covid"}, headers=self.headers())
+        self.assertEqual(response.status_code, 202)
+        job = self.store.claim()
+        execute_job(self.temp.name, job["id"], self.app.config["MAX_DENSE_BYTES"], self.app.config["MAX_IMPORT_BYTES"])
+        self.assertEqual(self.store.job(job["id"])["status"], "complete")
+        dataset = self.client.get("/api/datasets/" + response.json["dataset_id"]).json["dataset"]
+        self.assertEqual(dataset["metadata"]["format"], "covid")
+        self.assertEqual(dataset["metadata"]["n_obs"], 784)
+        self.assertEqual(dataset["metadata"]["n_vars"], 1429)
+        self.assertEqual(dataset["metadata"]["input_sha256"]["h5ad"], sha256(COVID_DIRECTORY / "covid_proteomics.h5ad"))
+        self.assertTrue((COVID_DIRECTORY / "covid_proteomics.h5ad").exists())
+
+
 if __name__ == "__main__":
     unittest.main()

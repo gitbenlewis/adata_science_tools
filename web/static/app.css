@@ -850,3 +850,10 @@ details p {
     grid-template-columns:repeat(3,minmax(0,1fr));
   }
 }
+
+.covid-examples { margin-top: 24px; }
+.example-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.example-previews { display: grid; grid-template-columns: 1fr; gap: 20px; margin-top: 20px; }
+.example-previews figure { margin: 0; }
+.example-previews img { width: 100%; height: auto; }
+.example-previews figcaption { font-size: .85rem; color: var(--muted); }

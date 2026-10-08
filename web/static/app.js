@@ -74,6 +74,7 @@ function table(node, data) {
 }
 function renderOverview() {
   const dataset = detail.dataset;
+  renderCovidPresets();
   const ready = dataset.status === "ready";
   $("dataset-overview").hidden = !ready;
   $("analysis-form").hidden = !ready;
@@ -275,12 +276,13 @@ async function selectDataset(id) {
     lastJobs = "";
     if (detail) { renderOverview(); setupStudio(); renderResults(); }
     else {
+      $("covid-presets").hidden = true;
       $("dataset-overview").hidden = true; $("analysis-form").hidden = true; $("import-progress").hidden = true;
       document.querySelector(".needs-data").hidden = false;
       $("dataset-status").textContent = "Load your data or start with the demo.";
       $("results-list").replaceChildren(element("p", "Run an analysis to see results here.", "empty-state"));
     }
-    renderPipeline();
+    renderPipeline(); renderCovidPresets();
   } catch (error) {
     if (version !== selectionVersion) return;
     $("dataset-select").value = activeId || "";
@@ -291,6 +293,7 @@ async function selectDataset(id) {
       datasetLoading = false;
       for (const button of ["run-button", "pipeline-run"]) $(button).disabled = detail?.dataset.status !== "ready";
       $("delete-button").disabled = !activeId;
+      renderCovidPresets();
     }
   }
 }
@@ -325,14 +328,14 @@ async function refresh() {
   finally { pollBusy = false; }
 }
 async function loadDataset(form) {
-  $("load-button").disabled = true; $("demo-button").disabled = true;
+  $("load-button").disabled = true; $("demo-button").disabled = true; $("covid-button").disabled = true;
   try {
     const result = await api("/api/datasets", {method: "POST", body: form});
     notice("Upload received. Validating your dataset…");
     await selectDataset(result.dataset_id);
     await refresh();
   } catch (error) { notice(error.message, true); }
-  finally { $("load-button").disabled = false; $("demo-button").disabled = false; }
+  finally { $("load-button").disabled = false; $("demo-button").disabled = false; $("covid-button").disabled = false; }
 }
 $("upload-form").onsubmit = (event) => {
   event.preventDefault();
@@ -346,6 +349,47 @@ $("upload-form").onsubmit = (event) => {
   }
   loadDataset(data);
 };
+$("covid-button").onclick = () => { const data = new FormData(); data.set("format", "covid"); loadDataset(data); };
+function renderCovidPresets() {
+  const ready = !datasetLoading && detail?.dataset.status === "ready" && detail.dataset.metadata.format === "covid";
+  $("covid-presets").hidden = !ready;
+  if (!ready || $("covid-preset-buttons").childElementCount) return;
+  for (const [key, preset] of Object.entries(state.covid_presets || {})) {
+    const button = element("button", preset.label, "secondary");
+    button.type = "button";
+    button.onclick = () => applyCovidPreset(key);
+    $("covid-preset-buttons").append(button);
+  }
+}
+function applyCovidPreset(key) {
+  if (datasetLoading || detail?.dataset.status !== "ready" || detail.dataset.metadata.format !== "covid") return;
+  const preset = state.covid_presets[key];
+  const params = preset.parameters;
+  $("matrix").value = params.matrix;
+  selectedFeatures = new Set(params.features);
+  $("feature-search").value = "";
+  renderFeatures();
+  $("filter-column").value = params.filter_column;
+  refreshFilter();
+  for (const [id, values] of [["filter-values", params.filter_values], ["numeric-columns", params.numeric_columns], ["categorical-columns", params.categorical_columns]]) {
+    for (const option of $(id).options) option.selected = values.includes(option.value);
+  }
+  if (preset.view === "pipelines") {
+    pipelineName = params.pipeline;
+    pipelineFormKey = null;
+    renderPipeline();
+    $("pipeline-group").value = params.group;
+    $("pipeline-group").onchange();
+  } else {
+    $("operation").value = params.operation;
+    renderMethod();
+    for (const field of state.catalog[params.operation].fields) $(`param-${field.key}`).value = params[field.key] ?? field.default ?? "";
+    refreshLevels();
+    for (const key of ["title", "palette", "yscale"]) $("analysis-form").elements[key].value = params[key];
+  }
+  showView(preset.view);
+  notice(`${preset.label}: settings filled. Review the selection, then choose Run. Open Datasets to choose another COVID example.`);
+}
 $("demo-button").onclick = () => { const data = new FormData(); data.set("format", "demo"); loadDataset(data); };
 async function deleteDataset() {
   if (datasetLoading || !activeId || !window.confirm("Delete this dataset and all its results from the app?")) return;

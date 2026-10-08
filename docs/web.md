@@ -390,3 +390,47 @@ test data and a private session cookie file; the script prints dataset IDs.
 After restarting the app, check persistence with
 `--session /private/path/smoke.cookies --verify-dataset DATASET_ID`.
 Treat that cookie file as a credential and remove it when finished.
+
+## COVID proteomics example
+
+The **Datasets** page includes four downloads and **Open COVID example**, which
+loads a private workspace copy without uploading a file. Both native and Docker
+installations include these assets; no network download is required at runtime.
+
+The files are unchanged copies of the repository's Olink example for
+[PMID 33969320](https://pubmed.ncbi.nlm.nih.gov/33969320/), under
+`example_PMID_33969320/input_files/example_dataset_PMID_33969320/olink_PMID_33969320.*`.
+The full dataset has 784 samples from 383 participants and 1,429 protein features.
+H5AD is 9.23 MiB; X.csv is 7.43 MiB; obs.csv is 0.07 MiB; var.csv is 0.12 MiB.
+Download the H5AD or all three CSV components and use the existing upload controls.
+No downsampling, imputation, normalization, or ID changes are applied. CSV imports
+retain metadata as text; H5AD retains the original metadata types.
+
+After **Open COVID example** finishes, its card offers four editable presets:
+
+- Day-0 histograms and grouped datapoints, with 383 independent participants
+  (COVID `1`: 305; non-COVID `0`: 78).
+- An **Explore groups** pipeline with the same day-0 selection.
+- An **Explore groups** pipeline grouped by visit, retaining days `0`, `3`, and `7`
+  (741 samples). It excludes the event-coded `E` visit. Repeated measurements and
+  different participant counts make this a descriptive view, not an independent
+  group test or a paired-change estimate.
+
+The presets select IL6 (`OID20101`), TNF (`OID20074`), and CXCL10 (`OID20697`) as
+illustrative assays, not by significance. Multiple Olink assays can share a gene
+name; the assay IDs remain the feature identities. Measurements are supplied NPX
+on a log2 scale. Presets keep X unchanged and use linear plot axes. These presets
+run only descriptive analyses. In particular, ratios of mean NPX are not ordinary
+protein fold changes; do not interpret a generic ratio-derived fold-change column
+that way if you later choose a differential test.
+
+Preset buttons fill the selection and settings, then open Analysis studio or
+Analysis pipelines. Review them and select **Run analysis** or **Run pipeline**.
+No job is submitted automatically. The preset menu appears only for an active
+built-in COVID example and does not overwrite settings during background polling.
+
+The preview PNGs use the same presets in
+`web/static/examples/covid_proteomics/presets.json`. Rebuild them from the repository
+root with `MPLBACKEND=Agg python scripts/build_web_covid_previews.py` in the scientific
+environment. The preview generator fixes its jitter seed; plot placement can still
+vary across Matplotlib versions.

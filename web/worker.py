@@ -39,6 +39,12 @@ def execute_job(root, job_id, max_dense_bytes, max_import_bytes):
             elif format_name == "csv":
                 inputs = {name: sha256(directory / name) for name in ("X.csv", "obs.csv", "var.csv")}
                 data = load_csv_bundle(directory)
+            elif format_name == "covid":
+                from .examples import COVID_DIRECTORY
+                source = COVID_DIRECTORY / "covid_proteomics.h5ad"
+                inputs["h5ad"] = sha256(source)
+                check_h5ad(source, max_import_bytes)
+                data = ad.read_h5ad(source)
             else:
                 data = demo_dataset()
             validate_adata(data)

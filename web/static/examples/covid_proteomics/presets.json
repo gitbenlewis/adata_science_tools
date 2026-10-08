@@ -1,0 +1,92 @@
+{
+  "histogram": {
+    "label": "Day-0 histograms",
+    "view": "analysis",
+    "parameters": {
+      "matrix": "X",
+      "features": [
+        "OID20101",
+        "OID20074",
+        "OID20697"
+      ],
+      "filter_column": "Day",
+      "filter_values": [
+        "0"
+      ],
+      "numeric_columns": [],
+      "categorical_columns": [],
+      "operation": "histogram",
+      "group": "COVID",
+      "bins": 25,
+      "title": "Day 0: IL6, TNF and CXCL10 by COVID status",
+      "palette": "colorblind",
+      "yscale": "linear"
+    }
+  },
+  "datapoints": {
+    "label": "Day-0 grouped datapoints",
+    "view": "analysis",
+    "parameters": {
+      "matrix": "X",
+      "features": [
+        "OID20101",
+        "OID20074",
+        "OID20697"
+      ],
+      "filter_column": "Day",
+      "filter_values": [
+        "0"
+      ],
+      "numeric_columns": [],
+      "categorical_columns": [],
+      "operation": "datapoints",
+      "group": "COVID",
+      "distribution": "box",
+      "title": "Day 0: IL6, TNF and CXCL10 by COVID status",
+      "palette": "colorblind",
+      "yscale": "linear"
+    }
+  },
+  "day0": {
+    "label": "Pipeline: explore day-0 groups",
+    "view": "pipelines",
+    "parameters": {
+      "matrix": "X",
+      "features": [
+        "OID20101",
+        "OID20074",
+        "OID20697"
+      ],
+      "filter_column": "Day",
+      "filter_values": [
+        "0"
+      ],
+      "numeric_columns": [],
+      "categorical_columns": [],
+      "pipeline": "explore",
+      "group": "COVID"
+    }
+  },
+  "visits": {
+    "label": "Pipeline: explore visits",
+    "view": "pipelines",
+    "parameters": {
+      "matrix": "X",
+      "features": [
+        "OID20101",
+        "OID20074",
+        "OID20697"
+      ],
+      "filter_column": "Day",
+      "filter_values": [
+        "0",
+        "3",
+        "7"
+      ],
+      "numeric_columns": [],
+      "categorical_columns": [],
+      "pipeline": "explore",
+      "group": "Day"
+    }
+  }
+}

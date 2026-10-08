@@ -91,5 +91,50 @@ class WebDataTests(unittest.TestCase):
         self.assertEqual(metadata(data)["n_vars"], 2)
 
 
+class CovidExampleTests(unittest.TestCase):
+    def test_download_formats_preserve_the_repository_data(self):
+        from adata_science_tools.web.examples import COVID_DIRECTORY
+        source = Path(__file__).resolve().parents[1] / 'example_PMID_33969320/input_files/example_dataset_PMID_33969320/olink_PMID_33969320.h5ad'
+        bundled = COVID_DIRECTORY / 'covid_proteomics.h5ad'
+        from adata_science_tools.web.data import sha256
+        self.assertEqual(sha256(source), sha256(bundled))
+        check_h5ad(bundled, 512 * 1024**2)
+        h5ad = ad.read_h5ad(bundled)
+        csv = load_csv_bundle(COVID_DIRECTORY)
+        for data in (h5ad, csv):
+            validate_adata(data)
+            self.assertEqual(data.shape, (784, 1429))
+        self.assertEqual(csv.obs_names.tolist(), h5ad.obs_names.tolist())
+        self.assertEqual(csv.var_names.tolist(), h5ad.var_names.tolist())
+        np.testing.assert_allclose(csv.X, h5ad.X, rtol=1e-14, atol=1e-14, equal_nan=True)
+        for name in ('obs', 'var'):
+            assert_frame_equal(getattr(csv, name).astype('string'), getattr(h5ad, name).astype('string'), check_index_type=False, check_names=False)
+
+    def test_presets_run_with_explicit_observation_and_feature_selections(self):
+        import matplotlib.pyplot as plt
+        from adata_science_tools.web.examples import COVID_DIRECTORY, COVID_PRESETS
+        from adata_science_tools.web.analysis import run_analysis
+        from adata_science_tools.web.pipelines import build_pipeline
+        data = ad.read_h5ad(COVID_DIRECTORY / 'covid_proteomics.h5ad')
+        original = data.X.copy()
+        for key, preset in COVID_PRESETS.items():
+            params = preset['parameters']
+            steps = build_pipeline(dict(params)) if preset['view'] == 'pipelines' else [params]
+            for step in steps:
+                with self.subTest(preset=key, operation=step['operation']):
+                    selected, _ = prepare_selection(data, step)
+                    if key != 'visits':
+                        self.assertTrue(selected.obs['Public ID'].is_unique)
+                        self.assertEqual(selected.obs.COVID.value_counts().to_dict(), {'1': 305, '0': 78})
+                    result = run_analysis(data, step)
+                    self.assertEqual(result['summary']['n_obs'], 741 if key == 'visits' else 383)
+                    self.assertEqual(result['summary']['n_vars'], 3)
+                    self.assertEqual(result['summary']['matrix'], 'X')
+                    if step['operation'] != 'average':
+                        self.assertIsNotNone(result['figure'])
+                    plt.close('all')
+        np.testing.assert_equal(data.X, original)
+
+
 if __name__ == "__main__":
     unittest.main()

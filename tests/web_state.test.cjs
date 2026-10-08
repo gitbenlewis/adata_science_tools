@@ -131,3 +131,34 @@ test('pipeline settings survive navigation, but do not leak into another dataset
   ui.run('pipelineName = "explore"; renderPipeline();');
   assert.equal(ui.get('pipeline-fields').children.length, 1);
 });
+
+
+test('COVID presets fill selections without submitting or leaking to other datasets', () => {
+  const ui = app();
+  const presets = JSON.parse(fs.readFileSync(path.join(__dirname, '../web/static/examples/covid_proteomics/presets.json')));
+  ui.run(`state.covid_presets = ${JSON.stringify(presets)};
+    state.catalog = {histogram: {fields:[{key:'group'}, {key:'bins'}]}, datapoints: {fields:[{key:'group'}, {key:'distribution'}]}};
+    state.pipelines = {explore: {label:'Explore', description:'', steps:[], fields:[{key:'group', label:'Group', kind:'obs'}]}};
+    detail = {dataset:{status:'ready', metadata:{format:'covid', obs_columns:{Day:{values:['0','3','7','E']}, COVID:{values:['0','1']}}}}, jobs:[]};
+    activeId = 'covid'; renderFeatures = () => {}; renderMethod = () => {};
+    $('analysis-form').elements = {title:{}, palette:{}, yscale:{}};
+    options($('numeric-columns'), ['Age cat'], false); $('numeric-columns').options[0].selected = true;
+    options($('categorical-columns'), ['COVID'], false);`);
+  for (const key of Object.keys(presets)) {
+    ui.run(`applyCovidPreset('${key}')`);
+    assert.deepEqual(JSON.parse(ui.run('JSON.stringify([...selectedFeatures])')), presets[key].parameters.features);
+    assert.equal(ui.get('matrix').value, 'X');
+    assert.equal(ui.get('filter-column').value, 'Day');
+    assert.deepEqual(ui.get('filter-values').options.filter(o => o.selected).map(o => o.value), presets[key].parameters.filter_values);
+    assert.equal(ui.get('numeric-columns').options[0].selected, false);
+    const control = presets[key].view === 'analysis' ? 'param-group' : 'pipeline-group';
+    assert.equal(ui.get(control).value, presets[key].parameters.group);
+  }
+  assert.equal(ui.pending.length, 0);
+  ui.run('datasetLoading = true;');
+  ui.get('matrix').value = 'unchanged'; ui.run("applyCovidPreset('histogram')");
+  assert.equal(ui.get('matrix').value, 'unchanged');
+  ui.run("datasetLoading = false; detail.dataset.metadata.format = 'demo'; renderCovidPresets(); applyCovidPreset('histogram');");
+  assert.equal(ui.get('covid-presets').hidden, true);
+  assert.equal(ui.get('matrix').value, 'unchanged');
+});

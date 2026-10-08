@@ -14,6 +14,7 @@ from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .store import Store
+from .examples import COVID_PRESETS
 
 
 def create_app(config=None):
@@ -150,17 +151,17 @@ def create_app(config=None):
         heartbeat = store.root / "worker.heartbeat"
         alive = heartbeat.exists() and time.time() - heartbeat.stat().st_mtime < 15
         datasets = [{k: d[k] for k in ("id", "name", "created", "status")} for d in store.datasets(owner())]
-        return jsonify(datasets=datasets, catalog=CATALOG, pipelines=PIPELINES, worker_running=alive, username=session.get("username"))
+        return jsonify(datasets=datasets, catalog=CATALOG, pipelines=PIPELINES, covid_presets=COVID_PRESETS, worker_running=alive, username=session.get("username"))
 
     @app.post("/api/datasets")
     def upload():
         format_name = request.form.get("format")
-        if format_name not in {"h5ad", "csv", "demo"}:
-            raise ValueError("Choose H5AD, CSV bundle, or demo.")
-        required = {"h5ad": ["h5ad"], "csv": ["X", "obs", "var"], "demo": []}[format_name]
+        if format_name not in {"h5ad", "csv", "demo", "covid"}:
+            raise ValueError("Choose H5AD, CSV bundle, or an example dataset.")
+        required = {"h5ad": ["h5ad"], "csv": ["X", "obs", "var"], "demo": [], "covid": []}[format_name]
         if any(key not in request.files or not request.files[key].filename for key in required):
             raise ValueError("Upload all required files before loading the dataset.")
-        name = request.form.get("name", "").strip() or ("Synthetic paired study" if format_name == "demo" else "Uploaded dataset")
+        name = request.form.get("name", "").strip() or ({"demo": "Synthetic paired study", "covid": "COVID proteomics · PMID 33969320"}.get(format_name, "Uploaded dataset"))
         dataset_id = store.create_dataset(owner(), name, app.config["MAX_DATASETS"], app.config["MAX_TOTAL_DATASETS"])
         try:
             for key in required:

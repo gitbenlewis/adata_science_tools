@@ -80,6 +80,26 @@
         </div>
         <div class="card demo-card"><div class="eyebrow">TAKE A LOOK AROUND</div><h2>A small study.<br> A good place to start.</h2><p>Try a synthetic paired study with treatment groups, subject IDs, and a transformed data layer.</p><div class="demo-stats"><div><strong>32</strong><span>observations</span></div><div><strong>8</strong><span>features</span></div></div><button type="button" class="secondary" id="demo-button">Open demo dataset →</button><p class="small muted">Simulated data. No upload required.</p></div>
       </div>
+      <section class="card covid-examples" aria-labelledby="covid-heading">
+        <div class="eyebrow">REAL-DATA EXAMPLE · PMID 33969320</div>
+        <h2 id="covid-heading">COVID proteomics</h2>
+        <p>Explore the repository’s full Olink study: 784 samples from 383 participants and 1,429 protein features. Measurements, missing values, and annotations are preserved.</p>
+        <p><a href="https://pubmed.ncbi.nlm.nih.gov/33969320/" target="_blank" rel="noopener">Study and source citation</a> · COVID codes: 0 = non-COVID, 1 = COVID. Values are supplied Olink NPX on a log2 scale; keep the plot axis linear.</p>
+        <div class="example-actions">
+          <button type="button" class="primary" id="covid-button">Open COVID example →</button>
+          {% for filename, label in [('covid_proteomics.h5ad', 'H5AD · 9.23 MiB'), ('X.csv', 'X.csv · 7.43 MiB'), ('obs.csv', 'obs.csv · 0.07 MiB'), ('var.csv', 'var.csv · 0.12 MiB')] %}
+          <a class="secondary" download href="{{ url_for('static', filename='examples/covid_proteomics/' ~ filename) }}">{{ label }}</a>
+          {% endfor %}
+        </div>
+        <div class="example-previews">
+          <figure><img loading="lazy" src="{{ url_for('static', filename='examples/covid_proteomics/histogram.png') }}" alt="Day-0 IL6, TNF and CXCL10 histograms grouped by COVID status"><figcaption>Day-0 distributions · 383 participants</figcaption></figure>
+          <figure><img loading="lazy" src="{{ url_for('static', filename='examples/covid_proteomics/datapoints.png') }}" alt="Day-0 IL6, TNF and CXCL10 datapoints and boxplots grouped by COVID status"><figcaption>Day-0 grouped datapoints · 305 COVID and 78 non-COVID</figcaption></figure>
+        </div>
+        <p class="small muted">Previews use IL6 (OID20101), TNF (OID20074), and CXCL10 (OID20697), chosen as illustrative assays, not by significance. Download either the H5AD or all three CSV components. Open the COVID example to fill editable graph and pipeline settings; nothing runs automatically.</p>
+        <div id="covid-presets" hidden><h3>Try an example</h3><div id="covid-preset-buttons" class="example-actions"></div>
+          <p class="small muted">Day-0 examples use one sample per participant. The visits pipeline shows descriptive distributions and means at days 0, 3, and 7, with repeated measurements and changing participant counts; it does not test independent groups or estimate paired changes. The full dataset remains available.</p>
+        </div>
+      </section>
       <section id="dataset-overview" hidden>
         <div class="section-heading"><h2 id="dataset-title">Dataset overview</h2><button type="button" class="quiet danger" id="delete-button">Delete dataset</button></div>
         <div id="metrics" class="metrics"></div>
