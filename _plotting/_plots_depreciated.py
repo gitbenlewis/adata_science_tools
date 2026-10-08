@@ -1,3 +1,4 @@
+from ._feature_labels import _resolve_feature_labels
 import matplotlib.pyplot as plt
 
 
@@ -34,6 +35,7 @@ def volcano_plot_sns_single_comparison_generic(
         dot_size_shrink_factor: int | None = 300,
         savefig: bool | None = False,
         file_name: str | None = 'volcano_plot.png',
+        feature_label_fallback: str | None = None,
                      ):
 
     """
@@ -98,6 +100,10 @@ def volcano_plot_sns_single_comparison_generic(
     - A 'Marker' column distinguishes in-range vs. out-of-range points.
     - Two plotting modes: (1) hue by significance or (2) hue by custom column.
     - Out-of-range values are clipped for visualization clarity.
+
+    feature_label_fallback : str | None, optional
+        Alternate label column in the same feature table; None preserves legacy
+        labels. See docs/feature_label_fallback.md for missing-value semantics.
     """
 
     # -------------------------
@@ -132,6 +138,13 @@ def volcano_plot_sns_single_comparison_generic(
     # Input data checks and setup
     # -------------------------
     df = _df.copy()
+    resolved_labels = _resolve_feature_labels(
+        df, feature_label_col, feature_label_fallback
+    )
+    display_label_col = feature_label_col
+    if resolved_labels is not None:
+        display_label_col = object()
+        df[display_label_col] = resolved_labels
     print(df.shape)
 
     # If no custom hue column is given, default to "Significance"
@@ -279,21 +292,21 @@ def volcano_plot_sns_single_comparison_generic(
         for line in range(0, n_top_features):
             p.text(df.sort_values(by=padj_col)[l2fc_col].to_list()[line],
                    df.sort_values(by=padj_col)['-log10(padj)'].to_list()[line],
-                   df.sort_values(by=padj_col)[feature_label_col].to_list()[line],
+                   df.sort_values(by=padj_col)[display_label_col].to_list()[line],
                    horizontalalignment='left', size='small', color='black')
 
         # Label top genes by most negative log2FC
         for line in range(0, int(n_top_features/2)):
             p.text(df.sort_values(by=l2fc_col)[l2fc_col].to_list()[line],
                    df.sort_values(by=l2fc_col)['-log10(padj)'].to_list()[line],
-                   df.sort_values(by=l2fc_col)[feature_label_col].to_list()[line],
+                   df.sort_values(by=l2fc_col)[display_label_col].to_list()[line],
                    horizontalalignment='left', size='small', color='black')
 
         # Label top genes by most positive log2FC
         for line in range(0, int(n_top_features/2)):
             p.text(df.sort_values(by=l2fc_col, ascending=False)[l2fc_col].to_list()[line],
                    df.sort_values(by=l2fc_col, ascending=False)['-log10(padj)'].to_list()[line],
-                   df.sort_values(by=l2fc_col, ascending=False)[feature_label_col].to_list()[line],
+                   df.sort_values(by=l2fc_col, ascending=False)[display_label_col].to_list()[line],
                    horizontalalignment='left', size='small', color='black')
 
     # -------------------------
@@ -304,6 +317,7 @@ def volcano_plot_sns_single_comparison_generic(
         print(f"Saved plot to {file_name}")
 
     return p
+
 
 import numpy as np
 import pandas as pd
@@ -513,6 +527,7 @@ def plot_paired_point_anndata(
     figsize=(10, 6),
     color_list=["#88CCEE", "#AA4499", "#117733", "#44AA99", "#332288", "#999933", "#DDCC77", "#661100", "#CC6677", "#882255"],
     jump_n_colors=0,
+    feature_label_fallback: str | None = None,
 ):
     """
     Plots `x_col` vs. a single feature's intensity (RFU) from an AnnData object.
@@ -520,6 +535,8 @@ def plot_paired_point_anndata(
     If `subplotby` is provided, the plot is split into two vertical subplots.
     Otherwise, a single plot is generated.
     Allows optional jittering and connecting lines between repeated measures.
+    feature_label_fallback optionally resolves labels from adata.var; see
+    docs/feature_label_fallback.md. Feature selection remains unchanged.
     """
     import matplotlib.pyplot as plt
     from matplotlib.lines import Line2D
@@ -540,9 +557,14 @@ def plot_paired_point_anndata(
     feature_idx = adata.var_names.get_loc(feature_name)
     df[analyte_label] = adata.layers[layer][:, feature_idx].ravel()
 
-    # Extract display name for feature
+    # Resolve display text independently of feature selection.
+    resolved_labels = _resolve_feature_labels(
+        adata.var, feature_name_label_col, feature_label_fallback
+    )
     if feature_name_label_col and feature_name_label_col in adata.var.columns:
-        feature_name_label = str(adata.var.loc[feature_name, feature_name_label_col])[:40]
+        label_value = (resolved_labels.loc[feature_name] if resolved_labels is not None
+                       else adata.var.loc[feature_name, feature_name_label_col])
+        feature_name_label = str(label_value)[:40]
     else:
         feature_name_label = feature_name
 
@@ -785,7 +807,7 @@ def plot_column_of_bar_h_2groups_GEX_adata(
         legend: bool = True,
         barh_legend_bbox_to_anchor: tuple[int, int] | None = (0.5, -.05),
         savefig: bool = False,
-        file_name: str = 'test_plot.png'):
+        file_name: str = 'test_plot.png', feature_label_fallback: str | None = None):
     
     ############ prep input tables / parse adata ############
     if feature_list is None:
@@ -828,8 +850,12 @@ def plot_column_of_bar_h_2groups_GEX_adata(
     df_obs_x = pd.concat([_obs_df, df_obs_x], axis=1)
 
     # Build feature labels for subplot y-labels
+    resolved_labels = _resolve_feature_labels(
+        _var_df, feature_label_vars_col, feature_label_fallback
+    )
     if (feature_label_vars_col is not None) and (feature_label_vars_col in _var_df.columns):
-        _bar_feature_label_series = _var_df[feature_label_vars_col]
+        _bar_feature_label_series = (resolved_labels if resolved_labels is not None
+                                 else _var_df[feature_label_vars_col])
         _bar_feature_label_series = _bar_feature_label_series.where(
             _bar_feature_label_series.notna(), _var_df.index.to_series()
         ).astype(str)
@@ -933,6 +959,7 @@ def plot_column_of_bar_h_2groups_GEX_adata(
     plt.show()
     return fig, axes
 
+
 '''
 # example usage
 ### input parameters
@@ -1020,7 +1047,7 @@ def plot_column_of_bar_h_2groups_with_l2fc_dotplot_GEX_adata(
         dotplot_annotate_xy: tuple[float, float] | None = (0.8, 1.2),
         dotplot_annotate_fontsize: int | None = None,
         # 
-        ):
+        feature_label_fallback: str | None = None):
     
     #from .. import anndata_io as adio not needed wrote new io code here
 
@@ -1108,8 +1135,12 @@ def plot_column_of_bar_h_2groups_with_l2fc_dotplot_GEX_adata(
     _color_norm = plt.Normalize(vmin=log10_thresh, vmax=max(size_max, log10_thresh), clip=True)
     # #) Build feature labels for dotplot and bar labels
     # If feature_label_vars_col provided and present, use it; otherwise fallback to index
+    resolved_labels = _resolve_feature_labels(
+        _var_df, feature_label_vars_col, feature_label_fallback
+    )
     if (feature_label_vars_col is not None) and (feature_label_vars_col in _var_df.columns):
-        _feature_label_series = _var_df[feature_label_vars_col]
+        _feature_label_series = (resolved_labels if resolved_labels is not None
+                                 else _var_df[feature_label_vars_col])
         # Fill NaNs in provided label column with the index values
         _feature_label_series = _feature_label_series.where(
             _feature_label_series.notna(), _var_df.index.to_series()
@@ -1409,7 +1440,8 @@ def l2fc_pvalue_dotplot_protein_metabolite(
     bbox_to_anchor=(0.5, -0.25),
     plot_title='Target_vs_Reference l2fc ((target)/(ref))',
     savefig=False,
-    file_name='test_plot.png'
+    file_name='test_plot.png',
+    feature_label_fallback: str | None = None
 ):
     """
     Create a ring-overlay dot plot of selected metabolites from 'diff_tests'.
@@ -1450,6 +1482,10 @@ def l2fc_pvalue_dotplot_protein_metabolite(
     file_name : str
         File name for saving (default 'test_plot.png').
 
+    feature_label_fallback : str | None
+        Alternate display-label column in diff_tests. Existing categorical
+        coordinates are retained; see docs/feature_label_fallback.md.
+
     Returns
     -------
     None (displays plot or saves figure).
@@ -1466,8 +1502,19 @@ def l2fc_pvalue_dotplot_protein_metabolite(
         columns2keep = [index_column, analyte_label_column, analyte_label, pval_col, l2fc_col]
         columns2keep_labels = [index_column, analyte_label_column, analyte_label, pval_label, x_axis_label]
 
+    resolved_labels = _resolve_feature_labels(
+        diff_tests, analyte_label_column, feature_label_fallback
+    )
+    # Keep the legacy coordinate categories separate from display labels.
+    display_column = object()
+    if resolved_labels is not None:
+        columns2keep.append(display_column)
+        columns2keep_labels.append(display_column)
+
     # 1) Copy and prepare DataFrame
     df = diff_tests.copy()
+    if resolved_labels is not None:
+        df[display_column] = resolved_labels.astype(str).str[:40]
     df[index_column] = df[index_column].astype(str)
     # Make truncated metabolite name (40 chars)
     df[analyte_label] = df[analyte_label_column].astype(str).str[:40]
@@ -1540,6 +1587,18 @@ def l2fc_pvalue_dotplot_protein_metabolite(
         legend="brief",
         ax=ax,
     )
+
+    if resolved_labels is not None:
+        # Preserve categorical coordinates, including any legacy overlap.
+        # Multiple feature IDs may already share one legacy category. Keep
+        # all distinct display labels without moving or dropping their points.
+        labels = df.groupby(analyte_label, sort=False)[display_column].agg(
+            lambda values: " / ".join(dict.fromkeys(values))
+        ).to_dict()
+        ax.set_yticks(ax.get_yticks(), [
+            labels.get(tick.get_text(), tick.get_text())
+            for tick in ax.get_yticklabels()
+        ])
 
     # Vertical line at x=0
     ax.axvline(x=0, color="red", linestyle="--")
@@ -1624,7 +1683,8 @@ def l2fc_pvalue_dotplot_gex(
     dotplot_set_xaxis_lims=None,
     plot_title='Target_vs_Reference l2fc ((target)/(ref))',
     savefig=False,
-    file_name='test_plot.png'
+    file_name='test_plot.png',
+    feature_label_fallback: str | None = None
     
 ):
     """
@@ -1666,6 +1726,10 @@ def l2fc_pvalue_dotplot_gex(
     file_name : str
         File name for saving (default 'test_plot.png').
 
+    feature_label_fallback : str | None
+        Alternate display-label column in diff_tests. Existing categorical
+        coordinates are retained; see docs/feature_label_fallback.md.
+
     Returns
     -------
     None (displays plot or saves figure).
@@ -1682,8 +1746,19 @@ def l2fc_pvalue_dotplot_gex(
         columns2keep = [index_column, analyte_label_column, analyte_label, pval_col, l2fc_col]
         columns2keep_labels = [index_column, analyte_label_column, analyte_label, pval_label, x_axis_label]
 
+    resolved_labels = _resolve_feature_labels(
+        diff_tests, analyte_label_column, feature_label_fallback
+    )
+    # Keep the legacy coordinate categories separate from display labels.
+    display_column = object()
+    if resolved_labels is not None:
+        columns2keep.append(display_column)
+        columns2keep_labels.append(display_column)
+
     # 1) Copy and prepare DataFrame
     df = diff_tests.copy()
+    if resolved_labels is not None:
+        df[display_column] = resolved_labels.astype(str).str[:40]
     df[index_column] = df[index_column].astype(str)
     # Make truncated metabolite name (40 chars)
     df[analyte_label] = df[analyte_label_column].astype(str).str[:40]
@@ -1760,6 +1835,18 @@ def l2fc_pvalue_dotplot_gex(
         # x limits and ticks
     if dotplot_set_xaxis_lims is not None:
         ax.set_xlim(dotplot_set_xaxis_lims)
+
+    if resolved_labels is not None:
+        # Preserve categorical coordinates, including any legacy overlap.
+        # Multiple feature IDs may already share one legacy category. Keep
+        # all distinct display labels without moving or dropping their points.
+        labels = df.groupby(analyte_label, sort=False)[display_column].agg(
+            lambda values: " / ".join(dict.fromkeys(values))
+        ).to_dict()
+        ax.set_yticks(ax.get_yticks(), [
+            labels.get(tick.get_text(), tick.get_text())
+            for tick in ax.get_yticklabels()
+        ])
 
     # Vertical line at x=0
     ax.axvline(x=0, color="red", linestyle="--")

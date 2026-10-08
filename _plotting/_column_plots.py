@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 ####### START ############. _column plots (horizontal bar / l2fc dotplots ) ###################.###################.###################.###################.
 import matplotlib.pyplot as plt
 import seaborn as sns
+from ._feature_labels import _resolve_feature_labels
 import pandas as pd
 import anndata  # or use the quoted type hint instead
 from matplotlib.colors import to_rgba as _to_rgba
@@ -568,6 +569,7 @@ def datapoints_effect_panels_column(
         footer: str | None = None,
         savefig: bool = False,
         file_name: str = "datapoints_effect_panels_column.png",
+        feature_label_fallback: str | None = None,
 ):
     """Plot grouped observations beside supplied feature-level effects.
 
@@ -595,6 +597,10 @@ def datapoints_effect_panels_column(
     tuple[matplotlib.figure.Figure, numpy.ndarray]
         Figure and an ``(n_features, 1 + n_effect_panels)`` axes array. When
         ``effect_panels`` is omitted, the shape remains ``(n_features, 2)``.
+
+    feature_label_fallback : str | None, optional
+        Alternate label column in the same feature table; None preserves legacy
+        labels. See docs/feature_label_fallback.md for missing-value semantics.
     """
     if not feature_list:
         raise ValueError("feature_list must be provided and non-empty.")
@@ -865,6 +871,9 @@ def datapoints_effect_panels_column(
 
     selected_obs = source_obs.loc[:, required_obs_columns].copy()
     selected_var = source_var.loc[feature_list, required_var_columns].copy()
+    resolved_labels = _resolve_feature_labels(
+        source_var, feature_label_vars_col, feature_label_fallback
+    )
 
     feature_value_columns = {}
     reserved_columns = set(selected_obs.columns)
@@ -1073,7 +1082,8 @@ def datapoints_effect_panels_column(
         )
         feature_label = feature
         if feature_label_vars_col is not None:
-            label_value = selected_var.loc[feature, feature_label_vars_col]
+            label_value = (resolved_labels.loc[feature] if resolved_labels is not None
+                           else selected_var.loc[feature, feature_label_vars_col])
             if pd.notna(label_value):
                 feature_label = label_value
         feature_label = str(feature_label)
@@ -1500,6 +1510,7 @@ def barh_column(
         point_markers: dict | None = None,
         point_jitter: float | None = None,
         point_size: float | None = None,
+        feature_label_fallback: str | None = None,
         ):
     """
     adata_science_tools.barh_column()
@@ -1604,6 +1615,10 @@ def barh_column(
         barh_legend_bbox_to_anchor=(0.5, -0.02),
     )
     -------#
+
+    feature_label_fallback : str | None, optional
+        Alternate label column in the same feature table; None preserves legacy
+        labels. See docs/feature_label_fallback.md for missing-value semantics.
     """
     
     
@@ -1654,8 +1669,12 @@ def barh_column(
     df_obs_x = pd.concat([_obs_df, df_obs_x], axis=1)
 
     # Build feature labels for subplot y-labels
+    resolved_labels = _resolve_feature_labels(
+        _var_df, feature_label_vars_col, feature_label_fallback
+    )
     if (feature_label_vars_col is not None) and (feature_label_vars_col in _var_df.columns):
-        _bar_feature_label_series = _var_df[feature_label_vars_col]
+        _bar_feature_label_series = (resolved_labels if resolved_labels is not None
+                                 else _var_df[feature_label_vars_col])
         _bar_feature_label_series = _bar_feature_label_series.where(
             _bar_feature_label_series.notna(), _var_df.index.to_series()
         ).astype(str)
@@ -1799,8 +1818,14 @@ def l2fc_dotplot_single(
     dotplot_annotate: bool = False,
     dotplot_annotate_fontsize: int | None = None,
     tight_layout_rect_arg: tuple[float, float, float, float] | None = None,
+    feature_label_fallback: str | None = None,
 ):
-    """Single-axis l2fc dotplot with one row per feature."""
+    """Single-axis l2fc dotplot with one row per feature.
+
+    feature_label_fallback : str | None, optional
+        Alternate label column in the same feature table; None preserves legacy
+        labels. See docs/feature_label_fallback.md for missing-value semantics.
+    """
     if not feature_list:
         raise ValueError("feature_list must be provided and non-empty.")
     _var_df = var_df.copy() if var_df is not None else (
@@ -1821,8 +1846,12 @@ def l2fc_dotplot_single(
     _var_df[size_metric_col] = np.where(_pvals > 0.5, 0.0, _var_df[log10pval_label])
 
     plot_df = _var_df.loc[feature_list].copy()
+    resolved_labels = _resolve_feature_labels(
+        _var_df, feature_label_vars_col, feature_label_fallback
+    )
     if feature_label_vars_col and feature_label_vars_col in _var_df.columns:
-        _labels_series = _var_df[feature_label_vars_col]
+        _labels_series = (resolved_labels if resolved_labels is not None
+                                 else _var_df[feature_label_vars_col])
         lbls = _labels_series.where(_labels_series.notna(), _var_df.index.to_series()).astype(str)
     else:
         if feature_label_vars_col and feature_label_vars_col not in _var_df.columns:
@@ -1832,7 +1861,9 @@ def l2fc_dotplot_single(
         lbls = lbls.str.slice(0, int(feature_label_char_limit))
     label_map = lbls.to_dict()
     label_order = [label_map.get(f, str(f)) for f in feature_list]
-    plot_df["dotplot_feature_name"] = pd.Categorical(label_order, categories=label_order, ordered=True)
+    plot_df["dotplot_feature_name"] = label_order if feature_label_fallback is not None else pd.Categorical(
+        label_order, categories=label_order, ordered=True
+    )
     # explicit numeric y positions so feature_list[0] appears at the top
     plot_df["dotplot_y"] = list(range(len(plot_df)))[::-1]
 
@@ -1960,6 +1991,7 @@ def l2fc_dotplot_single(
     return fig, ax
 
 
+
 def l2fc_dotplot_column(
         # shared parameters
         adata: anndata.AnnData | None = None,
@@ -2000,6 +2032,7 @@ def l2fc_dotplot_column(
         dotplot_ci_marker_size: float = 5,
         dotplot_ci_color: str = "black",
         dotplot_reference_value: float | None = 0,
+        feature_label_fallback: str | None = None,
     ):
     """
     adata_science_tools.l2fc_dotplot_column()
@@ -2120,6 +2153,10 @@ def l2fc_dotplot_column(
         dotplot_annotate_fontsize=None,
     )
     -------#
+
+    feature_label_fallback : str | None, optional
+        Alternate label column in the same feature table; None preserves legacy
+        labels. See docs/feature_label_fallback.md for missing-value semantics.
     """
 
     # Validate inputs and assemble var_df
@@ -2206,8 +2243,12 @@ def l2fc_dotplot_column(
         _color_norm = plt.Normalize(vmin=log10_thresh, vmax=max(size_max, log10_thresh), clip=True)
 
     # Feature labels
+    resolved_labels = _resolve_feature_labels(
+        _var_df, feature_label_vars_col, feature_label_fallback
+    )
     if (feature_label_vars_col is not None) and (feature_label_vars_col in _var_df.columns):
-        _feature_label_series = _var_df[feature_label_vars_col]
+        _feature_label_series = (resolved_labels if resolved_labels is not None
+                                 else _var_df[feature_label_vars_col])
         _feature_label_series = _feature_label_series.where(_feature_label_series.notna(), _var_df.index.to_series()).astype(str)
     else:
         if feature_label_vars_col is not None and feature_label_vars_col not in _var_df.columns:
@@ -2431,6 +2472,7 @@ def l2fc_dotplot_column(
     return fig, (axes_list[0] if n == 1 else axes_list)
 
 
+
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
@@ -2508,6 +2550,7 @@ def barh_l2fc_dotplot_column(
         point_jitter: float | None = None,
         point_size: float | None = None,
         # 
+        feature_label_fallback: str | None = None,
         ):
     """
     adata_science_tools.barh_l2fc_dotplot_column()
@@ -2668,6 +2711,10 @@ def barh_l2fc_dotplot_column(
         dotplot_annotate_fontsize=None,
     )
     -------#
+
+    feature_label_fallback : str | None, optional
+        Alternate label column in the same feature table; None preserves legacy
+        labels. See docs/feature_label_fallback.md for missing-value semantics.
     """
     
     #from .. import anndata_io as adio not needed wrote new io code here
@@ -2773,8 +2820,12 @@ def barh_l2fc_dotplot_column(
     _color_norm = plt.Normalize(vmin=log10_thresh, vmax=max(size_max, log10_thresh), clip=True)
     # #) Build feature labels for dotplot and bar labels
     # If feature_label_vars_col provided and present, use it; otherwise fallback to index
+    resolved_labels = _resolve_feature_labels(
+        _var_df, feature_label_vars_col, feature_label_fallback
+    )
     if (feature_label_vars_col is not None) and (feature_label_vars_col in _var_df.columns):
-        _feature_label_series = _var_df[feature_label_vars_col]
+        _feature_label_series = (resolved_labels if resolved_labels is not None
+                                 else _var_df[feature_label_vars_col])
         # Fill NaNs in provided label column with the index values
         _feature_label_series = _feature_label_series.where(
             _feature_label_series.notna(), _var_df.index.to_series()
@@ -3426,6 +3477,7 @@ def barh_dotplot_dotplot_column(
         point_markers: dict | None = None,
         point_jitter: float | None = None,
         point_size: float | None = None,
+        feature_label_fallback: str | None = None,
         ):
     """
     barh_dotplot_dotplot_column()
@@ -3433,6 +3485,10 @@ def barh_dotplot_dotplot_column(
     Compose three-column figure with one barplot column and two dotplot columns per feature.
     Use `hue_palette_color_list` to override bar colors when provided.
     ------#
+
+    feature_label_fallback : str | None, optional
+        Alternate label column in the same feature table; None preserves legacy
+        labels. See docs/feature_label_fallback.md for missing-value semantics.
     """
     if feature_list is None:
         raise ValueError("feature_list must be provided.")
@@ -3487,8 +3543,12 @@ def barh_dotplot_dotplot_column(
         palette = sns.color_palette('tab10', n_colors=len(categories))
     color_map = dict(zip(categories, palette))
 
+    resolved_labels = _resolve_feature_labels(
+        _var_df, feature_label_vars_col, feature_label_fallback
+    )
     if (feature_label_vars_col is not None) and (feature_label_vars_col in _var_df.columns):
-        _feature_label_series = _var_df[feature_label_vars_col]
+        _feature_label_series = (resolved_labels if resolved_labels is not None
+                                 else _var_df[feature_label_vars_col])
         _feature_label_series = _feature_label_series.where(
             _feature_label_series.notna(), _var_df.index.to_series()
         ).astype(str)
@@ -3857,6 +3917,7 @@ def barh_dotplot_dotplot_column(
     plt.show()
     return fig, subfigs
 
+
  
 #### great parameters for 15 rows with  barh_dotplot_dotplot_column
 '''
@@ -4037,9 +4098,14 @@ def barh_dotplot_dotplot_dotplot_column(
         point_markers: dict | None = None,
         point_jitter: float | None = None,
         point_size: float | None = None,
+        feature_label_fallback: str | None = None,
     ):
     """Four-column layout: bar column + three dotplot columns.
     Use `hue_palette_color_list` to override bar colors when provided.
+
+    feature_label_fallback : str | None, optional
+        Alternate label column in the same feature table; None preserves legacy
+        labels. See docs/feature_label_fallback.md for missing-value semantics.
     """
     if feature_list is None:
         raise ValueError("feature_list must be provided.")
@@ -4079,9 +4145,14 @@ def barh_dotplot_dotplot_dotplot_column(
         palette = sns.color_palette('tab10', n_colors=len(categories))
     color_map = dict(zip(categories, palette))
 
+    resolved_labels = _resolve_feature_labels(
+        _var_df, feature_label_vars_col, feature_label_fallback
+    )
     if (feature_label_vars_col is not None) and (feature_label_vars_col in _var_df.columns):
-        _feature_label_series = _var_df[feature_label_vars_col].where(
-            _var_df[feature_label_vars_col].notna(), _var_df.index.to_series()
+        _feature_label_series = (resolved_labels if resolved_labels is not None
+                                 else _var_df[feature_label_vars_col]).where(
+            (resolved_labels if resolved_labels is not None
+             else _var_df[feature_label_vars_col]).notna(), _var_df.index.to_series()
         ).astype(str)
     else:
         _feature_label_series = _var_df.index.to_series().astype(str)
@@ -4515,9 +4586,14 @@ def barh_4X_dotplot_column(
         point_markers: dict | None = None,
         point_jitter: float | None = None,
         point_size: float | None = None,
+        feature_label_fallback: str | None = None,
     ):
     """Five-column layout: bar column + four dotplot columns.
     Use `hue_palette_color_list` to override bar colors when provided.
+
+    feature_label_fallback : str | None, optional
+        Alternate label column in the same feature table; None preserves legacy
+        labels. See docs/feature_label_fallback.md for missing-value semantics.
     """
     if feature_list is None:
         raise ValueError("feature_list must be provided.")
@@ -4557,9 +4633,14 @@ def barh_4X_dotplot_column(
         palette = sns.color_palette('tab10', n_colors=len(categories))
     color_map = dict(zip(categories, palette))
 
+    resolved_labels = _resolve_feature_labels(
+        _var_df, feature_label_vars_col, feature_label_fallback
+    )
     if (feature_label_vars_col is not None) and (feature_label_vars_col in _var_df.columns):
-        _feature_label_series = _var_df[feature_label_vars_col].where(
-            _var_df[feature_label_vars_col].notna(), _var_df.index.to_series()
+        _feature_label_series = (resolved_labels if resolved_labels is not None
+                                 else _var_df[feature_label_vars_col]).where(
+            (resolved_labels if resolved_labels is not None
+             else _var_df[feature_label_vars_col]).notna(), _var_df.index.to_series()
         ).astype(str)
     else:
         _feature_label_series = _var_df.index.to_series().astype(str)

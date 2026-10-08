@@ -8,6 +8,7 @@ import anndata
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D as _Line2D
 import numpy as np
+from ._feature_labels import _resolve_feature_labels
 import pandas as pd
 
 from . import palettes
@@ -22,6 +23,7 @@ def _add_ranked_volcano_labels(
         l2fc_col: str,
         pvalue_col: str,
         feature_label_col: str,
+        display_label_col: object,
         n_top_features: int,
         label_top_features_fontsize: int | None,
         label_features_char_limit: int | None,
@@ -36,7 +38,9 @@ def _add_ranked_volcano_labels(
             "effect": df[l2fc_col].to_numpy(copy=False),
             "pvalue": df[pvalue_col].to_numpy(copy=False),
             "plot_y": df["-log10(pvalue)"].to_numpy(copy=False),
-            "display_label": display_labels.to_numpy(copy=False),
+            "display_label": df[display_label_col].map(
+                lambda value: "" if value is None else str(value)
+            ).to_numpy(copy=False),
             "normalized_label": display_labels.str.casefold().to_numpy(copy=False),
             "source_order": np.arange(df.shape[0]),
         }
@@ -258,6 +262,7 @@ def volcano_plot_generic(
         show_deg_counts_in_legend: bool = True,
         label_threshold_regions: bool = False,
         save_deg_counts_csv: bool = False,
+        feature_label_fallback: str | None = None,
                      ):
 
     """
@@ -357,6 +362,10 @@ def volcano_plot_generic(
     - A 'Marker' column distinguishes in-range vs. out-of-range points.
     - Two plotting modes: (1) hue by significance or (2) hue by custom column.
     - Out-of-range values are clipped for visualization clarity.
+
+    feature_label_fallback : str | None, optional
+        Alternate label column in the same feature table; None preserves legacy
+        labels. See docs/feature_label_fallback.md for missing-value semantics.
     """
 
     # -------------------------
@@ -448,6 +457,13 @@ def volcano_plot_generic(
     # Input data checks and setup
     # -------------------------
     df = _df.copy()
+    resolved_labels = _resolve_feature_labels(
+        df, feature_label_col, feature_label_fallback
+    )
+    display_label_col = feature_label_col
+    if resolved_labels is not None:
+        display_label_col = object()
+        df[display_label_col] = resolved_labels
     print(df.shape)
 
     # If no custom hue column is given, default to "Significance"
@@ -712,6 +728,7 @@ def volcano_plot_generic(
             l2fc_col=l2fc_col,
             pvalue_col=pvalue_col,
             feature_label_col=feature_label_col,
+            display_label_col=display_label_col,
             n_top_features=n_top_features,
             label_top_features_fontsize=label_top_features_fontsize,
             label_features_char_limit=label_features_char_limit,
@@ -742,21 +759,21 @@ def volcano_plot_generic(
         for line in range(0, n_top_features):
             p.text(df.sort_values(by=pvalue_col)[l2fc_col].to_list()[line],
                    df.sort_values(by=pvalue_col)['-log10(pvalue)'].to_list()[line],
-                   _truncate_label(df.sort_values(by=pvalue_col)[feature_label_col].to_list()[line]),
+                   _truncate_label(df.sort_values(by=pvalue_col)[display_label_col].to_list()[line]),
                    **label_kwargs)
 
         # Label top genes by most negative log2FC
         for line in range(0, int(n_top_features/2)):
             p.text(df.sort_values(by=l2fc_col)[l2fc_col].to_list()[line],
                    df.sort_values(by=l2fc_col)['-log10(pvalue)'].to_list()[line],
-                   _truncate_label(df.sort_values(by=l2fc_col)[feature_label_col].to_list()[line]),
+                   _truncate_label(df.sort_values(by=l2fc_col)[display_label_col].to_list()[line]),
                    **label_kwargs)
 
         # Label top genes by most positive log2FC
         for line in range(0, int(n_top_features/2)):
             p.text(df.sort_values(by=l2fc_col, ascending=False)[l2fc_col].to_list()[line],
                    df.sort_values(by=l2fc_col, ascending=False)['-log10(pvalue)'].to_list()[line],
-                   _truncate_label(df.sort_values(by=l2fc_col, ascending=False)[feature_label_col].to_list()[line]),
+                   _truncate_label(df.sort_values(by=l2fc_col, ascending=False)[display_label_col].to_list()[line]),
                    **label_kwargs)
 
     if label_threshold_regions:
@@ -774,6 +791,7 @@ def volcano_plot_generic(
             print(f"Saved DEG counts to {csv_file_name}")
 
     return p
+
 
 import numpy as np
 import pandas as pd
@@ -978,6 +996,7 @@ def timeseries_paired_datapoints(
     figsize=(10, 6),
     color_list=["#88CCEE", "#AA4499", "#117733", "#44AA99", "#332288", "#999933", "#DDCC77", "#661100", "#CC6677", "#882255"],
     jump_n_colors=0,
+    feature_label_fallback: str | None = None,
 ):
     """
     Plots `x_col` vs. a single feature's intensity (RFU) from an AnnData object.
@@ -985,6 +1004,8 @@ def timeseries_paired_datapoints(
     If `subplotby` is provided, the plot is split into two vertical subplots.
     Otherwise, a single plot is generated.
     Allows optional jittering and connecting lines between repeated measures.
+    feature_label_fallback optionally resolves labels from adata.var; see
+    docs/feature_label_fallback.md. Feature selection remains unchanged.
     """
     import matplotlib.pyplot as plt
     from matplotlib.lines import Line2D
@@ -1005,9 +1026,14 @@ def timeseries_paired_datapoints(
     feature_idx = adata.var_names.get_loc(feature_name)
     df[analyte_label] = adata.layers[layer][:, feature_idx].ravel()
 
-    # Extract display name for feature
+    # Resolve display text independently of feature selection.
+    resolved_labels = _resolve_feature_labels(
+        adata.var, feature_name_label_col, feature_label_fallback
+    )
     if feature_name_label_col and feature_name_label_col in adata.var.columns:
-        feature_name_label = str(adata.var.loc[feature_name, feature_name_label_col])[:40]
+        label_value = (resolved_labels.loc[feature_name] if resolved_labels is not None
+                       else adata.var.loc[feature_name, feature_name_label_col])
+        feature_name_label = str(label_value)[:40]
     else:
         feature_name_label = feature_name
 
