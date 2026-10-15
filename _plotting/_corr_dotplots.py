@@ -3,6 +3,7 @@
 import warnings
 from collections.abc import Mapping as _Mapping, Sequence
 from numbers import Real as _Real
+from types import SimpleNamespace
 from typing import Any, Literal
 
 import anndata
@@ -115,11 +116,25 @@ def _try_compute_corr_and_fit(
     x_vals: pd.Series,
     y_vals: pd.Series,
     method: Literal["spearman", "pearson"],
-) -> tuple[Any | None, float | None, float | None]:
-    try:
-        return _compute_corr_and_fit(x_vals, y_vals, method)
-    except Exception:
-        return None, None, None
+) -> tuple[Any | None, float | None, float | None, str | None]:
+    """Return subgroup estimates and a reason for known unavailable estimates.
+
+    Unexpected calculation errors propagate; input values are never filtered here.
+    """
+    if len(x_vals) < 2:
+        return None, None, None, "insufficient observations (need at least 2)"
+    if not np.isfinite(x_vals).all() or not np.isfinite(y_vals).all():
+        return None, None, None, "non-finite input"
+    if (x_vals == x_vals.iloc[0]).all():
+        return None, None, None, "constant x"
+    if (y_vals == y_vals.iloc[0]).all():
+        # Only the horizontal line is estimable, not correlation or R².
+        fit = SimpleNamespace(slope=0.0, intercept=float(y_vals.iloc[0]), rvalue=np.nan)
+        return fit, None, None, "constant y"
+    fit, corr_value, corr_pvalue = _compute_corr_and_fit(x_vals, y_vals, method)
+    if not np.isfinite([fit.slope, fit.intercept]).all():
+        return None, corr_value, corr_pvalue, "non-finite regression result"
+    return fit, corr_value, corr_pvalue, None
 
 
 def _fit_line_coordinates(
@@ -185,22 +200,38 @@ def _format_subset_stats_line(
     fit: Any | None,
     corr_value: float | None,
     corr_pvalue: float | None,
+    unavailable_reason: str | None = None,
 ) -> str:
-    if fit is None or corr_value is None or corr_pvalue is None:
-        return f"{label}: fit unavailable"
-
-    corr_label = method.capitalize()
+    if fit is None:
+        return f"{label}: fit unavailable: {unavailable_reason or 'non-finite result'}"
+    if corr_value is None or not np.isfinite(corr_value):
+        corr_text = f"correlation unavailable: {unavailable_reason or 'non-finite result'}"
+    else:
+        corr_text = f"{method.capitalize()} Corr = {corr_value:.3f}"
+        if corr_pvalue is None or not np.isfinite(corr_pvalue):
+            corr_text += " pvalue unavailable: non-finite result"
+        else:
+            corr_text += f" pvalue = {corr_pvalue:.6f}"
+    r_squared = (
+        f"R^2: {fit.rvalue ** 2:.3f}" if np.isfinite(fit.rvalue)
+        else f"R^2 unavailable: {unavailable_reason or 'non-finite result'}"
+    )
     return (
-        f"{label}: {corr_label} Corr = {corr_value:.3f} pvalue = {corr_pvalue:.6f} "
-        f"y = {fit.intercept:.3f} + {fit.slope:.3f}x R^2: {fit.rvalue ** 2:.3f}"
+        f"{label}: {corr_text} "
+        f"y = {fit.intercept:.3f} + {fit.slope:.3f}x {r_squared}"
     )
 
 
 def _format_subset_fit_legend_label(
     label: str,
-    corr_value: float,
-    corr_pvalue: float,
+    corr_value: float | None,
+    corr_pvalue: float | None,
+    unavailable_reason: str | None = None,
 ) -> str:
+    if corr_value is None or not np.isfinite(corr_value):
+        return f"{label}\ncorrelation unavailable: {unavailable_reason or 'non-finite result'}"
+    if corr_pvalue is None or not np.isfinite(corr_pvalue):
+        return f"{label}\nCorr={corr_value:.3f}, p unavailable: non-finite result"
     return f"{label}\nCorr={corr_value:.3f},p={corr_pvalue:.2e}"
 
 
@@ -815,7 +846,7 @@ def corr_dotplot(
             group_df = working_df.loc[subset_series == subset_value]
             group_x = group_df[column_key_x]
             group_y = group_df[column_key_y]
-            group_fit, group_corr_value, group_corr_pvalue = _try_compute_corr_and_fit(
+            group_fit, group_corr_value, group_corr_pvalue, group_reason = _try_compute_corr_and_fit(
                 group_x,
                 group_y,
                 method,
@@ -836,6 +867,7 @@ def corr_dotplot(
                     group_corr_value,
                     group_corr_pvalue,
                     f"{subset_key}={subset_value}",
+                    group_reason,
                     group_coordinates,
                 )
             )
@@ -1040,6 +1072,7 @@ def corr_dotplot(
             group_corr_value,
             group_corr_pvalue,
             group_label,
+            group_reason,
             group_coordinates,
         ) in subset_fit_results:
             if group_fit is not None and show_fit:
@@ -1055,6 +1088,7 @@ def corr_dotplot(
                             group_label,
                             group_corr_value,
                             group_corr_pvalue,
+                            group_reason,
                         ),
                         use_data_range=use_data_range_for_fit,
                         x_scale=xscale,
@@ -1069,6 +1103,7 @@ def corr_dotplot(
                     group_fit,
                     group_corr_value,
                     group_corr_pvalue,
+                    group_reason,
                 )
             )
 
