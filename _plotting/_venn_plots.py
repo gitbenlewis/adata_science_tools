@@ -1,8 +1,6 @@
 '''  _venn_plots.py '''
 # module at _plotting/_venn_plots.py
 import matplotlib.pyplot as plt
-from matplotlib_venn import venn2
-from matplotlib_venn import venn3
 import pandas as pd
 
 __all__ = [
@@ -41,6 +39,12 @@ def venn_plot_2list(list1, list2,  set_label_list, plot_title,show_plot=True,ret
 
     if show_plot:
             # Create the Venn diagram
+        try:
+            from matplotlib_venn import venn2
+        except ModuleNotFoundError as exc:
+            if exc.name != "matplotlib_venn":
+                raise
+            raise ImportError("Install matplotlib-venn to use Venn plotting.") from exc
         venn2([set1, set2, ], set_labels=labels_with_totals)
         # font size on title
         plt.title(f'{plot_title}\n\n', fontsize=16)
@@ -86,6 +90,12 @@ def venn_plot_3list(list1, list2, list3, set_label_list, plot_title,show_plot=Fa
 
     if show_plot:
             # Create the Venn diagram
+        try:
+            from matplotlib_venn import venn3
+        except ModuleNotFoundError as exc:
+            if exc.name != "matplotlib_venn":
+                raise
+            raise ImportError("Install matplotlib-venn to use Venn plotting.") from exc
         venn3([set1, set2, set3], set_labels=labels_with_totals)
         # font size on title
         plt.title(f'{plot_title}\n\n', fontsize=16)
@@ -102,6 +112,12 @@ def geneset_enrichment_venn(universe, geneset, hits,
                             shift_overlap=True,
                             shift_overlap_labely=0.1):
     from scipy.stats import hypergeom
+    try:
+        from matplotlib_venn import venn2
+    except ModuleNotFoundError as exc:
+        if exc.name != "matplotlib_venn":
+            raise
+        raise ImportError("Install matplotlib-venn to use Venn plotting.") from exc
 
     universe = set(universe)
     geneset = set(geneset) & universe
@@ -164,6 +180,12 @@ def geneset_enrichemnt_ol_ven_M_n_N_x(
             ' hypergeometric p-value =', pvalue
             '''
             from scipy.stats import hypergeom
+            try:
+                from matplotlib_venn import venn2
+            except ModuleNotFoundError as exc:
+                if exc.name != "matplotlib_venn":
+                    raise
+                raise ImportError("Install matplotlib-venn to use Venn plotting.") from exc
 
             # Cast to sets
             M_set, n_set, N_set = set(M_set), set(n_set), set(N_set)

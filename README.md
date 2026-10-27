@@ -31,6 +31,23 @@ If `not_base` already exists, update it in place instead of deleting it:
 conda env update -f config/env_not_base.yaml -n not_base
 ```
 
+### Standalone Python dependencies
+
+Use `config/env_not_base.yaml` for the complete scientific environment. Core
+Python functionality uses AnnData, NumPy, pandas, SciPy, Matplotlib, seaborn,
+statsmodels, patsy, PyYAML, and scikit-learn (AnnData also depends on h5py).
+
+`matplotlib-venn` is optional: package import, unrelated plots, and overlap-table
+calls with `show_plot=False` work without it. Rendering any Venn diagram requires:
+
+```bash
+python -m pip install matplotlib-venn
+```
+
+A missing Venn dependency produces installation guidance when rendering is
+requested. Flask is needed only for the web app; its dependencies are listed in
+`config/requirements-web.txt`. The container includes `matplotlib-venn` already.
+
 ### Run the self-contained plotting gallery
 
 ```bash

@@ -1,5 +1,8 @@
 from contextlib import redirect_stdout
 import inspect
+import os
+import subprocess
+import textwrap
 from io import StringIO
 from pathlib import Path
 import sys
@@ -35,6 +38,55 @@ class VennPlotTests(unittest.TestCase):
 
     def tearDown(self):
         plt.close("all")
+
+    def test_package_and_nonvenn_plotting_without_optional_dependency(self):
+        code = textwrap.dedent("""
+            import importlib.abc
+            import sys
+            attempts = []
+            missing_name = "matplotlib_venn"
+            class BlockVenn(importlib.abc.MetaPathFinder):
+                def find_spec(self, fullname, path=None, target=None):
+                    if fullname == 'matplotlib_venn' or fullname.startswith('matplotlib_venn.'):
+                        attempts.append(fullname)
+                        raise ModuleNotFoundError(f"No module named {missing_name!r}", name=missing_name)
+            sys.meta_path.insert(0, BlockVenn())
+            import adata_science_tools as adtl
+            import pandas as pd
+            import matplotlib.pyplot as plt
+            fig, _ = adtl.adata_histograms(df=pd.DataFrame({'a':[1.,2.,3.]}), var_names=['a'], show=False)
+            fig.canvas.draw()
+            plt.close(fig)
+            assert len(adtl.venn_plot_2list([1], [2], ['a','b'], '', show_plot=False)) == 3
+            assert len(adtl.venn_plot_3list([1], [2], [3], ['a','b','c'], '', return_df=True)) == 7
+            assert not attempts, attempts
+            calls = [
+                lambda: adtl.venn_plot_2list([1], [2], ['a','b'], ''),
+                lambda: adtl.venn_plot_3list([1], [2], [3], ['a','b','c'], '', show_plot=True),
+                lambda: adtl.geneset_enrichment_venn([1,2,3], [1,2], [2,3]),
+                lambda: adtl.geneset_enrichemnt_ol_ven_M_n_N_x([1,2,3], [1,2], [2,3]),
+            ]
+            for call in calls:
+                try:
+                    call()
+                except ImportError as exc:
+                    assert str(exc) == 'Install matplotlib-venn to use Venn plotting.'
+                    assert isinstance(exc.__cause__, ModuleNotFoundError)
+                else:
+                    raise AssertionError('Rendering must require matplotlib-venn')
+            assert len(attempts) == 4
+            missing_name = 'another_dependency'
+            for call in calls:
+                try:
+                    call()
+                except ModuleNotFoundError as exc:
+                    assert exc.name == missing_name
+                else:
+                    raise AssertionError('Unrelated import errors must propagate')
+        """)
+        result = subprocess.run([sys.executable, "-c", code], cwd=REPO_PARENT,
+                                env={**os.environ, "MPLBACKEND": "Agg"}, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_public_exports_preserve_function_signatures(self):
         expected_parameters = {
@@ -130,7 +182,7 @@ class VennPlotTests(unittest.TestCase):
     def test_venn_plot_2list_can_skip_rendering_and_dataframe_return(self):
         with (
             mock.patch(
-                "adata_science_tools._plotting._venn_plots.venn2"
+                "matplotlib_venn.venn2"
             ) as venn2,
             mock.patch.object(plt, "show") as show,
         ):
@@ -221,7 +273,7 @@ class VennPlotTests(unittest.TestCase):
         diagram.get_label_by_id.return_value = None
         with (
             mock.patch(
-                "adata_science_tools._plotting._venn_plots.venn2",
+                "matplotlib_venn.venn2",
                 return_value=diagram,
             ),
             mock.patch.object(plt, "show") as show,
