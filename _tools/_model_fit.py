@@ -93,8 +93,6 @@ def _ensure_list(x, name):
 
 
 def _make_model_formula_rhs(predictors):
-    if not predictors:
-        return ""
     return " + ".join(f'Q("{predictor}")' for predictor in predictors)
 
 
@@ -553,7 +551,7 @@ def old_fit_smf_ols_models_and_summarize_adata(
     results[num_cols] = results[num_cols].apply(pd.to_numeric)
 
     # add adata.var columns to the results dataframe if specified
-    if add_adata_var_column_key_list is not None and adata is not None:
+    if add_adata_var_column_key_list is not None:
         # add adata.var columns to the results dataframe
         for var_col_key in add_adata_var_column_key_list:
             if var_col_key in adata.var.columns:
@@ -563,7 +561,7 @@ def old_fit_smf_ols_models_and_summarize_adata(
                 print(f"Warning: '{var_col_key}' not found in adata.var columns. Skipping this column.")
 
     # add results to adata.uns if specified
-    if save_result_to_adata_uns_as_dict and adata is not None:
+    if save_result_to_adata_uns_as_dict:
         key=f'OLS_model_results_{model_name}'
         if 'ols_model_results' not in adata.uns:
             adata.uns['ols_model_results'] = {}
@@ -677,7 +675,7 @@ def fit_smf_ols_models_and_summarize_adata(
         results[num_cols] = results[num_cols].apply(pd.to_numeric)
 
     # add adata.var columns to the results dataframe if specified
-    if add_adata_var_column_key_list and work_adata is not None:
+    if add_adata_var_column_key_list:
         for var_col_key in add_adata_var_column_key_list:
             if var_col_key in work_adata.var.columns:
                 var_col_values = work_adata.var[var_col_key]
@@ -687,7 +685,7 @@ def fit_smf_ols_models_and_summarize_adata(
                 print(f"Warning: '{var_col_key}' not found in work_adata.var columns. Skipping this column.")
 
     # add results to work_adata.uns if specified
-    if save_result_to_adata_uns_as_dict and work_adata is not None:
+    if save_result_to_adata_uns_as_dict:
         key = f'OLS_model_results_{model_name}'
         if 'ols_model_results' not in work_adata.uns:
             work_adata.uns['ols_model_results'] = {}
@@ -906,7 +904,7 @@ def old_fit_smf_mixedlm_models_and_summarize_adata(
     results[num_cols] = results[num_cols].apply(pd.to_numeric)
 
     # add adata.var columns to the results dataframe if specified
-    if add_adata_var_column_key_list is not None and adata is not None:
+    if add_adata_var_column_key_list is not None:
         # add adata.var columns to the results dataframe
         for var_col_key in add_adata_var_column_key_list:
             if var_col_key in adata.var.columns:
@@ -916,7 +914,7 @@ def old_fit_smf_mixedlm_models_and_summarize_adata(
                 print(f"Warning: '{var_col_key}' not found in adata.var columns. Skipping this column.")
 
     # add results to adata.uns if specified
-    if save_result_to_adata_uns_as_dict and adata is not None:
+    if save_result_to_adata_uns_as_dict:
         key=f'mixedlm_model_results_{model_name}'
         if 'mixedlm_model_results' not in adata.uns:
             adata.uns['mixedlm_model_results'] = {}
@@ -1040,7 +1038,7 @@ def fit_smf_mixedlm_models_and_summarize_adata(
         results[num_cols] = results[num_cols].apply(pd.to_numeric)
 
     # add adata.var columns to the results dataframe if specified
-    if add_adata_var_column_key_list and work_adata is not None:
+    if add_adata_var_column_key_list:
         for var_col_key in add_adata_var_column_key_list:
             if var_col_key in work_adata.var.columns:
                 var_col_values = work_adata.var[var_col_key]
@@ -1049,7 +1047,7 @@ def fit_smf_mixedlm_models_and_summarize_adata(
                 print(f"Warning: '{var_col_key}' not found in work_adata.var columns. Skipping this column.")
 
     # add results to work_adata.uns if specified
-    if save_result_to_adata_uns_as_dict and work_adata is not None:
+    if save_result_to_adata_uns_as_dict:
         key = f'mixedlm_model_results_{model_name}'
         if 'mixedlm_model_results' not in work_adata.uns:
             work_adata.uns['mixedlm_model_results'] = {}
