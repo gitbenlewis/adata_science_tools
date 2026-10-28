@@ -11,8 +11,6 @@ from typing import Any
 import anndata as ad
 import numpy as np
 import pandas as pd
-import yaml
-from patsy import dmatrix
 
 from .._io._IO import save_dataset
 from .._preprocessing._adata_row_operations import CFG_filter_adata_by_obs
@@ -108,6 +106,8 @@ def _build_training_design_matrix(
     predictors: list[str],
     formula_rhs: str,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
+    from patsy import dmatrix
+
     predictor_df = _coerce_predictor_frame(adata.obs, predictors)
     complete_cases = predictor_df.dropna(axis=0, how="any")
     if complete_cases.empty:
@@ -198,6 +198,8 @@ def _coerce_expectation_df_input(
 
 
 def _load_model_spec_yaml(model_spec_path: str | Path) -> dict[str, Any]:
+    import yaml
+
     model_spec_path = Path(model_spec_path)
     try:
         with model_spec_path.open("r", encoding="utf-8") as handle:
@@ -554,6 +556,8 @@ def save_expectation_model_files(
     model_spec_path: str | Path | None = None,
 ) -> tuple[Path, Path]:
     """Save an expectation coefficient table and model_spec YAML sidecar."""
+    import yaml
+
     if not isinstance(expectation_df, pd.DataFrame):
         raise TypeError("expectation_df must be a pandas.DataFrame.")
     resolved_model_spec = _resolve_model_spec_input(expectation_df, model_spec)
@@ -592,6 +596,8 @@ def _build_prediction_design(
     model_spec: dict[str, Any],
     baseline: dict[str, Any] | None = None,
 ) -> pd.DataFrame:
+    from patsy import dmatrix
+
     predictors = list(model_spec["predictors"])
     predictor_df = _prepare_prediction_frame(adata, predictors, baseline=baseline)
     design_terms = list(model_spec["design_terms"])

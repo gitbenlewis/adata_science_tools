@@ -10,14 +10,9 @@ from concurrent.futures import ThreadPoolExecutor as _ThreadPoolExecutor
 from contextlib import contextmanager as _contextmanager
 import pandas as pd
 import numpy as np
-import patsy
-import statsmodels.api as sm
-import statsmodels.formula.api as smf
 from pathlib import Path
 from scipy.stats import chi2
-from statsmodels.stats.multitest import multipletests
 import warnings
-import yaml
 import threading as _threading
 
 
@@ -143,6 +138,8 @@ def _build_model_fit_model_spec(
 
 
 def _save_model_spec_yaml(model_spec, save_path):
+    import yaml
+
     model_spec_path = _model_spec_yaml_path(save_path)
     with model_spec_path.open("w", encoding="utf-8") as handle:
         yaml.safe_dump(model_spec, handle, sort_keys=False)
@@ -173,7 +170,9 @@ def fit_smf_ols_models_and_summarize_wide(
         include_fdr=True,
         threads: int = 1,
     ):
+    import patsy
     import statsmodels.api as sm
+    from statsmodels.stats.multitest import multipletests
     import statsmodels.formula.api as smf
 
     threads = _validate_threads(threads)
@@ -734,6 +733,7 @@ def fit_smf_mixedlm_models_and_summarize_wide(
         threads: int = 1,
     ):
     import statsmodels.api as sm
+    from statsmodels.stats.multitest import multipletests
     import statsmodels.formula.api as smf
 
     if predictors is None or len(predictors) == 0:

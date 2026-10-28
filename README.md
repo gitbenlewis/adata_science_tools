@@ -34,8 +34,23 @@ conda env update -f config/env_not_base.yaml -n not_base
 ### Standalone Python dependencies
 
 Use `config/env_not_base.yaml` for the complete scientific environment. Core
-Python functionality uses AnnData, NumPy, pandas, SciPy, Matplotlib, seaborn,
-statsmodels, patsy, PyYAML, and scikit-learn (AnnData also depends on h5py).
+plotting uses AnnData, NumPy, pandas, SciPy, Matplotlib, and seaborn
+(AnnData also depends on h5py). Modeling dependencies are loaded when used:
+
+- `statsmodels` and `patsy`: OLS and mixed-effects fitting; `statsmodels` also
+  supplies multiple-testing correction for differential tests.
+- `patsy`: expectation-model design matrices and prediction.
+- `PyYAML`: reading or writing model-specification YAML files; in-memory modeling
+  and plotting do not require it.
+- `scikit-learn`: feature-standardization utilities.
+
+For the complete modeling functionality:
+
+```bash
+python -m pip install statsmodels patsy PyYAML scikit-learn
+```
+
+Importing ADTL and using unrelated plots does not require these modeling packages.
 
 `matplotlib-venn` is optional: package import, unrelated plots, and overlap-table
 calls with `show_plot=False` work without it. Rendering any Venn diagram requires:

@@ -11,6 +11,9 @@ import anndata as ad
 import numpy as np
 import pandas as pd
 import yaml
+import patsy
+import statsmodels.api as sm
+import statsmodels.formula.api as smf
 from statsmodels.stats.multitest import multipletests
 
 
@@ -237,14 +240,14 @@ class ModelFitSidecarTests(unittest.TestCase):
             serial = adtl.fit_smf_ols_models_and_summarize_wide(wide_df, threads=1, **kwargs)
             with (
                 mock.patch.object(
-                    MODEL_FIT_MODULE.smf,
+                    smf,
                     "ols",
-                    wraps=MODEL_FIT_MODULE.smf.ols,
+                    wraps=smf.ols,
                 ) as formula_ols,
                 mock.patch.object(
-                    MODEL_FIT_MODULE.sm,
+                    sm,
                     "OLS",
-                    wraps=MODEL_FIT_MODULE.sm.OLS,
+                    wraps=sm.OLS,
                 ) as direct_ols,
             ):
                 parallel = adtl.fit_smf_ols_models_and_summarize_wide(
@@ -304,9 +307,9 @@ class ModelFitSidecarTests(unittest.TestCase):
             "model_name": "cached_ols",
             "include_fdr": True,
         }
-        real_formula_ols = MODEL_FIT_MODULE.smf.ols
-        real_direct_ols = MODEL_FIT_MODULE.sm.OLS
-        real_dmatrix = MODEL_FIT_MODULE.patsy.dmatrix
+        real_formula_ols = smf.ols
+        real_direct_ols = sm.OLS
+        real_dmatrix = patsy.dmatrix
         real_insert = pd.DataFrame.insert
         real_to_numeric = MODEL_FIT_MODULE.pd.to_numeric
         prepared_predictor_frames = []
@@ -324,17 +327,17 @@ class ModelFitSidecarTests(unittest.TestCase):
 
         with (
             mock.patch.object(
-                MODEL_FIT_MODULE.smf,
+                smf,
                 "ols",
                 wraps=real_formula_ols,
             ) as serial_formula_ols,
             mock.patch.object(
-                MODEL_FIT_MODULE.sm,
+                sm,
                 "OLS",
                 wraps=real_direct_ols,
             ) as serial_direct_ols,
             mock.patch.object(
-                MODEL_FIT_MODULE.patsy,
+                patsy,
                 "dmatrix",
                 wraps=real_dmatrix,
             ) as serial_dmatrix,
@@ -348,17 +351,17 @@ class ModelFitSidecarTests(unittest.TestCase):
         with (
             pd.option_context("mode.copy_on_write", True),
             mock.patch.object(
-                MODEL_FIT_MODULE.smf,
+                smf,
                 "ols",
                 wraps=real_formula_ols,
             ) as threaded_formula_ols,
             mock.patch.object(
-                MODEL_FIT_MODULE.sm,
+                sm,
                 "OLS",
                 wraps=real_direct_ols,
             ) as threaded_direct_ols,
             mock.patch.object(
-                MODEL_FIT_MODULE.patsy,
+                patsy,
                 "dmatrix",
                 wraps=real_dmatrix,
             ) as threaded_dmatrix,
@@ -419,9 +422,9 @@ class ModelFitSidecarTests(unittest.TestCase):
         x = np.linspace(-2.0, 2.0, n_obs)
         feature_a = 20.0 + 2.0 * x + np.resize([0.0, 1.0, 3.0, 1.0], n_obs)
         feature_b = 30.0 - 1.5 * x + np.resize([2.0, 0.0, 1.0, 4.0], n_obs)
-        real_formula_ols = MODEL_FIT_MODULE.smf.ols
-        real_direct_ols = MODEL_FIT_MODULE.sm.OLS
-        real_dmatrix = MODEL_FIT_MODULE.patsy.dmatrix
+        real_formula_ols = smf.ols
+        real_direct_ols = sm.OLS
+        real_dmatrix = patsy.dmatrix
 
         for dtype in (np.float64, np.float32, np.int64, np.uint16, "Float64", "Int64"):
             with self.subTest(dtype=dtype):
@@ -450,17 +453,17 @@ class ModelFitSidecarTests(unittest.TestCase):
 
                 with (
                     mock.patch.object(
-                        MODEL_FIT_MODULE.smf,
+                        smf,
                         "ols",
                         wraps=real_formula_ols,
                     ) as formula_ols,
                     mock.patch.object(
-                        MODEL_FIT_MODULE.sm,
+                        sm,
                         "OLS",
                         wraps=real_direct_ols,
                     ) as direct_ols,
                     mock.patch.object(
-                        MODEL_FIT_MODULE.patsy,
+                        patsy,
                         "dmatrix",
                         wraps=real_dmatrix,
                     ) as dmatrix,
@@ -494,7 +497,7 @@ class ModelFitSidecarTests(unittest.TestCase):
         wide_df["x_duplicate"] = 2.0 * wide_df["x"]
         predictors = ["x", "x_duplicate", "group"]
         model_name = "summary_once"
-        real_ols = MODEL_FIT_MODULE.smf.ols
+        real_ols = smf.ols
         expected_model = real_ols(
             'Q("feature_a") ~ Q("x") + Q("x_duplicate") + Q("group")',
             wide_df,
@@ -534,7 +537,7 @@ class ModelFitSidecarTests(unittest.TestCase):
             return FitProxy(real_ols(*args, **kwargs))
 
         with mock.patch.object(
-            MODEL_FIT_MODULE.smf,
+            smf,
             "ols",
             side_effect=tracked_ols,
         ):
@@ -616,14 +619,14 @@ class ModelFitSidecarTests(unittest.TestCase):
         )
         with (
             mock.patch.object(
-                MODEL_FIT_MODULE.smf,
+                smf,
                 "ols",
-                wraps=MODEL_FIT_MODULE.smf.ols,
+                wraps=smf.ols,
             ) as formula_ols,
             mock.patch.object(
-                MODEL_FIT_MODULE.sm,
+                sm,
                 "OLS",
-                wraps=MODEL_FIT_MODULE.sm.OLS,
+                wraps=sm.OLS,
             ) as direct_ols,
         ):
             threaded = adtl.fit_smf_ols_models_and_summarize_wide(
@@ -659,12 +662,12 @@ class ModelFitSidecarTests(unittest.TestCase):
 
         with (
             mock.patch.object(
-                MODEL_FIT_MODULE.smf,
+                smf,
                 "ols",
-                wraps=MODEL_FIT_MODULE.smf.ols,
+                wraps=smf.ols,
             ) as formula_ols,
             mock.patch.object(
-                MODEL_FIT_MODULE.sm,
+                sm,
                 "OLS",
                 side_effect=failing_direct_ols,
             ) as direct_ols,
@@ -693,7 +696,7 @@ class ModelFitSidecarTests(unittest.TestCase):
             threads=1,
             **kwargs,
         )
-        real_dmatrix = MODEL_FIT_MODULE.patsy.dmatrix
+        real_dmatrix = patsy.dmatrix
 
         class FailingDesignFrame(pd.DataFrame):
             def to_numpy(self, *args, **kwargs):
@@ -704,19 +707,19 @@ class ModelFitSidecarTests(unittest.TestCase):
 
         with (
             mock.patch.object(
-                MODEL_FIT_MODULE.patsy,
+                patsy,
                 "dmatrix",
                 side_effect=dmatrix_with_failing_array,
             ) as dmatrix,
             mock.patch.object(
-                MODEL_FIT_MODULE.smf,
+                smf,
                 "ols",
-                wraps=MODEL_FIT_MODULE.smf.ols,
+                wraps=smf.ols,
             ) as formula_ols,
             mock.patch.object(
-                MODEL_FIT_MODULE.sm,
+                sm,
                 "OLS",
-                wraps=MODEL_FIT_MODULE.sm.OLS,
+                wraps=sm.OLS,
             ) as direct_ols,
         ):
             threaded = adtl.fit_smf_ols_models_and_summarize_wide(
@@ -1035,8 +1038,8 @@ class ModelFitSidecarTests(unittest.TestCase):
     def test_rhs_warning_disables_threaded_ols_design_cache(self):
         wide_df = self._make_wide_frame()
         features = ["feature_a", "feature_b"]
-        real_ols = MODEL_FIT_MODULE.smf.ols
-        real_dmatrix = MODEL_FIT_MODULE.patsy.dmatrix
+        real_ols = smf.ols
+        real_dmatrix = patsy.dmatrix
 
         def dmatrix_with_warning(formula, *args, **kwargs):
             if formula == 'Q("x")':
@@ -1049,19 +1052,19 @@ class ModelFitSidecarTests(unittest.TestCase):
 
         with (
             mock.patch.object(
-                MODEL_FIT_MODULE.patsy,
+                patsy,
                 "dmatrix",
                 side_effect=dmatrix_with_warning,
             ) as dmatrix,
             mock.patch.object(
-                MODEL_FIT_MODULE.smf,
+                smf,
                 "ols",
                 side_effect=ols_with_warning,
             ) as formula_ols,
             mock.patch.object(
-                MODEL_FIT_MODULE.sm,
+                sm,
                 "OLS",
-                wraps=MODEL_FIT_MODULE.sm.OLS,
+                wraps=sm.OLS,
             ) as direct_ols,
         ):
             results = adtl.fit_smf_ols_models_and_summarize_wide(
@@ -1086,7 +1089,7 @@ class ModelFitSidecarTests(unittest.TestCase):
         wide_df["feature_c"] = 0.5 + 0.3 * wide_df["x"] + 0.01 * np.arange(len(wide_df))
         features = ["feature_a", "feature_b", "feature_c"]
         barrier = threading.Barrier(3)
-        real_ols = MODEL_FIT_MODULE.sm.OLS
+        real_ols = sm.OLS
         previous_showwarning = warnings.showwarning
 
         class WarningFitProxy:
@@ -1107,7 +1110,7 @@ class ModelFitSidecarTests(unittest.TestCase):
                 feature,
             )
 
-        with mock.patch.object(MODEL_FIT_MODULE.sm, "OLS", side_effect=ols_with_warning):
+        with mock.patch.object(sm, "OLS", side_effect=ols_with_warning):
             results = adtl.fit_smf_ols_models_and_summarize_wide(
                 wide_df,
                 feature_columns=features,
