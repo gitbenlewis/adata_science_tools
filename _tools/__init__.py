@@ -16,3 +16,5 @@ from ._diff_test import *
 from ._expectation_based_covar_correction import *
 from ._model_fit import *
 from ._tools import *
+from ._paired_ratio_inference import paired_ratio_inference
+from ._survival import estimate_right_censored, summarize_km, compare_survival, SurvivalInputError

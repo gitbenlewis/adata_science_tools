@@ -4,6 +4,9 @@ This directory holds module-level documentation for public `adata_science_tools`
 
 ## Available pages
 
+- [`_paired_ratio_inference.md`](_paired_ratio_inference.md): paired geometric mean ratios, log-ratio t intervals, and explicitly versioned Wilcoxon policy.
+- [`_survival.md`](_survival.md): right-censored Kaplan–Meier estimation, risk/censor tables, named median conventions, and two-group log-rank comparisons.
+
 - [`feature_label_fallback.md`](feature_label_fallback.md): optional feature-display label resolution, supported APIs, source-table mapping, and a synthetic example.
 
 - [`_IO.md`](_IO.md): core dataset save and AnnData-to-DataFrame helpers used across the package.

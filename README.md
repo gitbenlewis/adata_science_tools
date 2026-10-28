@@ -5,6 +5,7 @@
 - Published docs: [gitbenlewis.github.io/adata_science_tools](https://gitbenlewis.github.io/adata_science_tools/)
 - Source docs: [docs/README.md](docs/README.md)
 - Plotting gallery: [deterministic renderer examples](docs/plotting_gallery.md)
+- Statistical inference: [paired ratios](docs/_paired_ratio_inference.md) and [right-censored survival](docs/_survival.md), with [synthetic CSV examples](example_statistical_inference/).
 - Start with [simulation helpers](docs/_simulate_data.md) and [correlation dotplots](docs/_corr_dotplots.md).
 
 Data-science tools that operate on `AnnData` objects.

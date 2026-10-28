@@ -5,7 +5,8 @@ This page covers the general utility implemented in
 `adata_science_tools.average_feature_expression`. Other public `_tools`
 submodules have dedicated pages for [differential testing](_diff_test.md),
 [expectation-based correction](_expectation_based_covar_correction.md), and
-[model fitting](_model_fit.md).
+[model fitting](_model_fit.md), [paired-ratio inference](_paired_ratio_inference.md),
+and [right-censored survival analysis](_survival.md).
 
 ## `average_feature_expression`
 

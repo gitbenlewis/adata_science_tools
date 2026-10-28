@@ -1,0 +1,4 @@
+site,subject,reference,target
+synthetic_a,S1,1,2
+synthetic_a,S2,1,4
+synthetic_b,S1,1,8
