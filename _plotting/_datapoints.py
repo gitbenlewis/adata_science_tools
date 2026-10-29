@@ -1648,10 +1648,10 @@ def paired_datapoints(
     figsize: tuple[float, float] | None = None,
     wspace: float | None = None,
     hspace: float | None = None,
-    sharey: bool = False,
-    ylims: Sequence[float] | None = None,
+    sharey: bool | Literal["row", "col", "all", "none"] = False,
+    ylims: Sequence[float | None] | Mapping[str, Sequence[float | None]] | None = None,
     x_reference_lines: Sequence[Mapping[str, Any]] | None = None,
-    ylabel: str | None = None,
+    ylabel: str | Mapping[str, str] | None = None,
     xlabel: str | None = None,
     title: str | None = None,
     title_axes_top: float | None = None,
@@ -1676,6 +1676,9 @@ def paired_datapoints(
     logger: logging.Logger | None = None,
     log_level: int | str | None = None,
     allow_unused_params: bool = False,
+    panel_annotations: Mapping[str, Any] | None = None,
+    subplot_title_style: Mapping[str, Any] | None = None,
+    xtick_label_style: Mapping[str, Any] | None = None,
     **params: Any,
 ) -> tuple[plt.Figure, dict[str, plt.Axes], pd.DataFrame]:
     """Plot paired reference and target datapoints from AnnData or a wide DataFrame."""
@@ -1753,14 +1756,6 @@ def paired_datapoints(
         raise ValueError("'slope_color_threshold' must be a finite non-negative number.")
     if subset_obs_key is not None and subset_var_key is not None:
         raise ValueError("Provide only one of 'subset_obs_key' or 'subset_var_key'.")
-    if ylims is not None:
-        ylims_tuple = tuple(ylims)
-        if len(ylims_tuple) != 2:
-            raise ValueError("'ylims' must contain exactly two values.")
-        if ylims_tuple[0] >= ylims_tuple[1]:
-            raise ValueError("'ylims' lower bound must be less than upper bound.")
-    else:
-        ylims_tuple = None
     if paired_difference_ylims is not None:
         paired_difference_ylims_tuple = tuple(paired_difference_ylims)
         if (
@@ -2255,6 +2250,59 @@ def paired_datapoints(
                 for subplot_value in subplot_panel_values
             ]
 
+    # Resolve against displayed identifiers (including facet names), never titles.
+    panel_options = {}
+    for option_name, option in (("panel_annotations", panel_annotations),
+                                ("subplot_title_style", subplot_title_style),
+                                ("xtick_label_style", xtick_label_style)):
+        option = dict(option or {})
+        if option_name == "panel_annotations":
+            defaults = dict(option.pop("defaults", {}))
+            overrides = option
+        else:
+            overrides = dict(option.pop("panels", {}))
+            defaults = option
+        unknown = set(overrides) - set(plot_panel_names)
+        if unknown:
+            raise ValueError(f"Unknown panel keys in {option_name}: {sorted(unknown)}")
+        panel_options[option_name] = {
+            name: {**defaults, **dict(overrides.get(name, {}))}
+            for name in plot_panel_names
+        }
+    for option_name, option in (("ylabel", ylabel), ("ylims", ylims)):
+        if isinstance(option, Mapping):
+            unknown = set(option) - set(plot_panel_names)
+            if unknown:
+                raise ValueError(f"Unknown panel keys in {option_name}: {sorted(unknown)}")
+    panel_limits = {}
+    for name in plot_panel_names:
+        limits = ylims.get(name) if isinstance(ylims, Mapping) else ylims
+        limits = (None, None) if limits is None else tuple(limits)
+        if len(limits) != 2 or any(
+            value is not None and (not isinstance(value, _Real) or not np.isfinite(value))
+            for value in limits
+        ) or (None not in limits and limits[0] >= limits[1]):
+            raise ValueError("'ylims' must contain two finite increasing bounds or None.")
+        panel_limits[name] = limits
+    plot_columns = min(ncols, len(plot_panel_names))
+    sharing_groups = {}
+    for index, name in enumerate(plot_panel_names):
+        group = (0 if sharey is True or sharey == "all" else
+                 index // plot_columns if sharey == "row" else
+                 index % plot_columns if sharey == "col" else index)
+        sharing_groups.setdefault(group, []).append(name)
+    for names in sharing_groups.values():
+        resolved = []
+        for side in (0, 1):
+            bounds = {panel_limits[name][side] for name in names} - {None}
+            if len(bounds) > 1:
+                raise ValueError("Conflicting ylims within a shared-axis group.")
+            resolved.append(next(iter(bounds), None))
+        if None not in resolved and resolved[0] >= resolved[1]:
+            raise ValueError("Shared ylims must be increasing.")
+        for name in names:
+            panel_limits[name] = tuple(resolved)
+
     for panel_name in selected_panel_names:
         panel_raw_vars = group_to_variant_names[panel_name]
         panel_label = str(panel_name)
@@ -2483,7 +2531,6 @@ def paired_datapoints(
     fig, axes_array = plt.subplots(plot_nrows, plot_ncols, figsize=figsize, squeeze=False, sharey=sharey)
     axes_flat = axes_array.ravel()
     axes_by_panel: dict[str, plt.Axes] = {}
-    shared_difference_ax: plt.Axes | None = None
     difference_axes: list[plt.Axes] = []
     finite_difference_axes: list[plt.Axes] = []
     rng = np.random.default_rng(random_seed)
@@ -2570,6 +2617,8 @@ def paired_datapoints(
         if orientation == "vertical"
         else ("value", "_jittered_x")
     )
+    difference_by_panel = {}
+    annotation_artists = []
     for plot_idx, panel_name in enumerate(plot_panel_names):
         ax = axes_flat[plot_idx]
         axes_by_panel[panel_name] = ax
@@ -2592,10 +2641,13 @@ def paired_datapoints(
                 difference_panel_df["value"].to_numpy(dtype=float)
             ).any():
                 finite_difference_axes.append(difference_ax)
-            if sharey and paired_difference_sharey and shared_difference_ax is not None:
-                difference_ax.sharey(shared_difference_ax)
-            elif sharey and paired_difference_sharey:
-                shared_difference_ax = difference_ax
+            difference_by_panel[panel_name] = difference_ax
+            if paired_difference_sharey:
+                group_names = next(names for names in sharing_groups.values() if panel_name in names)
+                previous = next((difference_by_panel[name] for name in group_names
+                                 if name != panel_name and name in difference_by_panel), None)
+                if previous is not None:
+                    difference_ax.sharey(previous)
 
         distribution_targets = []
         if boxplot or violinplot:
@@ -2803,6 +2855,7 @@ def paired_datapoints(
             subplot_title_kwargs["y"] = subplot_title_y
         if subplot_title_fontsize is not None:
             subplot_title_kwargs["fontsize"] = subplot_title_fontsize
+        subplot_title_kwargs.update(panel_options["subplot_title_style"][panel_name])
         ax.set_title(panel_title, **subplot_title_kwargs)
         if show_paired_difference:
             ax.set_xticks([1, 2, 3])
@@ -2820,16 +2873,32 @@ def paired_datapoints(
             ax.yaxis.set_inverted(True)
         default_xlabel = groupby_key if orientation == "vertical" else "value"
         ax.set_xlabel(default_xlabel if xlabel is None else xlabel, fontsize=axis_label_fontsize)
+        panel_ylabel = ylabel.get(panel_name) if isinstance(ylabel, Mapping) else ylabel
         ax.set_ylabel(
-            ylabel or ("value" if orientation == "vertical" else groupby_key),
+            panel_ylabel or ("value" if orientation == "vertical" else groupby_key),
             fontsize=axis_label_fontsize,
         )
         if tick_label_fontsize is not None:
             ax.tick_params(axis="both", labelsize=tick_label_fontsize)
             if difference_ax is not None:
                 difference_ax.tick_params(axis="y", labelsize=tick_label_fontsize)
-        if ylims_tuple is not None:
-            ax.set_ylim(ylims_tuple)
+        for tick in ax.get_xticklabels():
+            tick.set(**panel_options["xtick_label_style"][panel_name])
+        annotation = dict(panel_options["panel_annotations"][panel_name])
+        text = annotation.pop("text", None)
+        if text is not None:
+            placement = annotation.pop("placement", "center")
+            if placement not in {"left", "center", "right"}:
+                raise ValueError("Annotation placement must be left, center or right.")
+            annotation.setdefault("fontsize", 10)
+            annotation.setdefault("bbox", {"facecolor": "white", "edgecolor": "none", "alpha": .9})
+            reserved = {"xy", "xycoords", "xytext", "textcoords", "ha", "va", "horizontalalignment", "verticalalignment", "annotation_clip"} & annotation.keys()
+            if reserved:
+                raise ValueError(f"Annotation positioning is controlled by placement; unsupported keys: {sorted(reserved)}")
+            artist = ax.annotate(str(text), xy=({"left": 0, "center": .5, "right": 1}[placement], 1),
+                                 xycoords="axes fraction", xytext=(0, 6), textcoords="offset points",
+                                 ha=placement, va="bottom", annotation_clip=False, **annotation)
+            annotation_artists.append((panel_name, ax, artist))
         if difference_ax is not None:
             difference_ax.set_ylabel(
                 resolved_difference_ylabel,
@@ -2935,10 +3004,22 @@ def paired_datapoints(
             )
             legend_entries_to_style.append((legend_obj, axis_legend_entries))
 
+    # Apply limits only after every shared panel has contributed its data limits.
+    for name, ax in axes_by_panel.items():
+        if panel_limits[name] != (None, None):
+            ax.set_ylim(panel_limits[name])
+
     if difference_axes:
         if paired_difference_ylims_tuple is not None:
             for difference_ax in difference_axes:
                 difference_ax.set_ylim(paired_difference_ylims_tuple)
+        elif paired_difference_sharey and sharey in {"row", "col"}:
+            for names in sharing_groups.values():
+                group_axes = [difference_by_panel[name] for name in names if name in difference_by_panel]
+                if group_axes:
+                    limit = max(max(abs(v) for v in ax.get_ylim()) for ax in group_axes)
+                    for ax in group_axes:
+                        ax.set_ylim(-limit, limit)
         elif paired_difference_sharey:
             autoscaled_difference_axes = finite_difference_axes or difference_axes[:1]
             difference_limit = max(
@@ -3025,6 +3106,20 @@ def paired_datapoints(
                     legend_text.set_color("red")
                     legend_text.set_fontweight("bold")
 
+    # Annotations occupy a measured strip outside the data rectangle. This also
+    # protects points on twin axes and honors explicit display limits unchanged.
+    if annotation_artists:
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        for panel_name, ax, artist in annotation_artists:
+            height = artist.get_window_extent(renderer).height * 72 / fig.dpi
+            # set_title resets some properties; keep the caller's complete style.
+            title_style = dict(panel_options["subplot_title_style"][panel_name])
+            if subplot_title_y is not None:
+                title_style.setdefault("y", subplot_title_y)
+            title_style.setdefault("fontsize", ax.title.get_fontsize())
+            title_style["pad"] = max(height + 16, title_style.get("pad", 0))
+            ax.set_title(ax.get_title(), **title_style)
     plt.tight_layout()
     subplot_adjust_kwargs: dict[str, float] = {}
     if title_axes_top is not None:
