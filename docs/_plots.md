@@ -54,6 +54,12 @@ def volcano_plot_generic(
         show_deg_counts_in_legend: bool = True,
         label_threshold_regions: bool = False,
         save_deg_counts_csv: bool = False,
+        feature_label_fallback: str | None = None,
+        labels: dict | None = None,
+        group_styles: dict | None = None,
+        overflow: dict | None = None,
+        legend: dict | None = None,
+        return_rendering_data: bool = False,
                      ):
 
 ```
@@ -120,6 +126,8 @@ ax = adtl.volcano_plot_generic(
 
 ### Important behavior
 
+The following describes existing calls; opt-in rendering differences are documented below.
+
 - Input is a plain `DataFrame`; the function does not currently accept `AnnData` directly.
 - Missing p-values are filled with `1`, and the plot uses a derived `-log10(pvalue)` column.
 - If `hue_column` is not provided, the plot colors points by an internal `Significance` category with levels `Not Significant`, `alpha=0.2`, `alpha=0.1`, and `alpha=0.05`.
@@ -146,6 +154,66 @@ ax = adtl.volcano_plot_generic(
 - The function prints the copied `DataFrame` shape and the save path when saving.
 - Axis limits default to high quantiles of the current data when `xlimit` or `ylimit` are not supplied.
 - The implementation was updated to use `pvalue_col`; the older `padj`-based variant is legacy.
+
+
+### Explicit labels, category styling, and overflow (opt-in)
+
+Existing calls and the Axes-only return remain unchanged when no new controls
+are supplied. Any new control enables the display-only renderer. No differential
+expression, category inference, or threshold changes are performed. Dictionaries
+are copied and the source DataFrame is not modified.
+
+- `labels={"ids": ["F1", "F2"], "display_col": "name"}` selects stable index
+  IDs. Use `id_col` for a unique, nonmissing ID column, or replace `ids` with
+  `column` naming a boolean selection column (nullable values mean false).
+  Explicit selection replaces automatic top-N selection regardless of
+  `label_top_features`, `n_top_features`, or hue eligibility. Unknown IDs and
+  ambiguous identities raise errors. Missing/blank/"nan" display names fall back
+  to the ID; duplicate display names do not merge identities. Without
+  `display_col`, IDs are displayed. Existing truncation, font size, and
+  `label_layout="inline" | "ranked_columns"` options apply. Selected invalid or
+  hidden observations are not labeled.
+- `group_styles={"A": {"color": "red", "marker": "o", "size": 64,
+  "alpha": .8, "edgecolor": "black", "edgewidth": .5}}` styles categories from
+  `hue_column` (or significance categories). Size is area in points squared.
+  Dictionary insertion order defines category order; remaining categories follow
+  categorical dtype order or first occurrence. A two-item tuple/list in the hue
+  column makes one half-filled marker. Geometry, alpha and edges come from the
+  first category in category order, independent of tuple order. Both category
+  colors are retained; points are not duplicated. Split markers must support half
+  fills (e.g. o, s, D, ^); incompatible markers error rather than dropping a color.
+  Missing categories use gray. Baseline palette colors remain attached to their
+  categories when style or legend order changes; only explicit color overrides
+  change them. Rendering is batched by resolved style, not one artist per feature.
+- `overflow={"enabled": True, "marker": "D"}` places outside points at exact
+  boundaries. Only strict inequalities count as clipping, not equality. Overflow
+  shape overrides category shape but retains category colors and split fill.
+  Both clipping flags may be true. Boundary symbols are not cut in half by the
+  axes patch. This is the opt-in renderer's default; `enabled=False` instead
+  omits outside points. Raw values are never changed.
+- `legend` controls the combined legend: `visible`, category `order`,
+  `ncols`, `loc`, `bbox_to_anchor`, `title`, `fontsize`, `markerscale`,
+  `labelspacing`, `columnspacing`, `handletextpad`, and `borderaxespad`.
+  Unlisted categories follow requested entries; unknown/repeated entries error.
+  Legend order does not change marker styling. Threshold/count/status entries
+  follow categories. Dictionary properties override matching legacy options.
+- `return_rendering_data=True` returns `(ax, DataFrame)`, with one row per
+  input in source order/index: feature ID, raw effect/probability and transformed
+  y, display coordinates, validity, explicit selection, rendering/clipping flags,
+  display label, memberships and marker. Invalid observations produce no artist.
+
+The opt-in renderer accepts probabilities in [0, 1]. Zero retains raw probability
+0 and displays as −log10(the smallest positive float), approximately 323.3, subject
+to the display limit. Missing, nonnumeric, infinite, negative, or >1 probabilities
+and nonfinite effects are not drawn/labeled, never becoming strong significance.
+Automatic empty/degenerate limits fall back to 1; explicit limits must be positive
+and finite. Existing non-opt-in probability behavior is unchanged for compatibility.
+Use sufficiently large figures for long inline text; ranked columns offer
+deterministic placement with leaders.
+
+Complete public-API-only synthetic example, including PNG/PDF/SVG export and
+metadata: [scripts/example_volcano_rendering.py](../scripts/example_volcano_rendering.py).
+
 
 ## `qqplot`
 
