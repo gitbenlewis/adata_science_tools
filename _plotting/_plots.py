@@ -263,6 +263,11 @@ def volcano_plot_generic(
         label_threshold_regions: bool = False,
         save_deg_counts_csv: bool = False,
         feature_label_fallback: str | None = None,
+        labels: dict | None = None,
+        group_styles: dict | None = None,
+        overflow: dict | None = None,
+        legend: dict | None = None,
+        return_rendering_data: bool = False,
                      ):
 
     """
@@ -351,6 +356,15 @@ def volcano_plot_generic(
         Save the canonical count table beside the saved figure using a ``.csv``
         suffix. Requires ``savefig=True``.
 
+    labels, group_styles, overflow, legend : dict | None, optional
+        Opt-in explicit ID/boolean-column labels, category marker styles,
+        boundary markers and combined-legend controls. See docs/_plots.md.
+        Invalid probabilities are omitted; zero uses the smallest positive float
+        for display only. Calls without new options retain existing behavior.
+    return_rendering_data : bool, optional
+        Return (Axes, rendering DataFrame) with raw/display coordinates and
+        clipping flags; default False retains the Axes-only return.
+
     Returns
     -------
     matplotlib.axes._subplots.AxesSubplot
@@ -429,6 +443,14 @@ def volcano_plot_generic(
     if save_deg_counts_csv and file_name is None:
         raise ValueError("save_deg_counts_csv=True requires file_name.")
 
+    label_options = labels
+    extended_rendering = any(option is not None for option in
+                             (labels, group_styles, overflow, legend)) or return_rendering_data
+    rendering_data = None
+    if extended_rendering:
+        from ._volcano_rendering import prepare_rendering, draw_rendering
+        rendering_data = prepare_rendering(_df, l2fc_col, pvalue_col, labels)
+
     # -------------------------
     # Define custom color palettes
     # -------------------------
@@ -481,7 +503,11 @@ def volcano_plot_generic(
     # Preprocessing: p-value transformations and significance flags
     # -------------------------
     # Fill missing pvalue values with 1 (max nonsignificance)
-    df[pvalue_col] = df[pvalue_col].fillna(1)
+    if extended_rendering:
+        df[l2fc_col] = rendering_data.raw_x.where(rendering_data.valid).to_numpy()
+        df[pvalue_col] = pd.to_numeric(df[pvalue_col], errors="coerce").where(rendering_data.valid.to_numpy())
+    else:
+        df[pvalue_col] = df[pvalue_col].fillna(1)
 
     deg_count_table = None
     if threshold_count_features_active:
@@ -494,7 +520,7 @@ def volcano_plot_generic(
         )
 
     # Add -log10(pvalue) column for y-axis
-    df['-log10(pvalue)'] = -np.log10(df[pvalue_col].replace(0, np.nextafter(0, 1)))
+    df['-log10(pvalue)'] = (rendering_data.raw_y.to_numpy() if extended_rendering else -np.log10(df[pvalue_col].replace(0, np.nextafter(0, 1))))
 
     # Add boolean columns for multiple alpha thresholds (0.2, 0.1, 0.05)
     df['alpha=0.2'] = ((df[pvalue_col] < 0.2) & (abs(df[l2fc_col]) >= log2FoldChange_threshold))
@@ -520,8 +546,8 @@ def volcano_plot_generic(
     # -------------------------
     # Axis limit calculations
     # -------------------------
-    xlimit_was_auto_resolved = not xlimit
-    ylimit_was_auto_resolved = not ylimit
+    xlimit_was_auto_resolved = (xlimit is None) if extended_rendering else not xlimit
+    ylimit_was_auto_resolved = (ylimit is None) if extended_rendering else not ylimit
 
     # Y-axis limit: 99th percentile of -log10(pvalue) among significant hits
     if ylimit_was_auto_resolved:
@@ -534,6 +560,17 @@ def volcano_plot_generic(
         xlimit = df[(df[pvalue_col] < 0.05) & (df[l2fc_col].abs() > log2FoldChange_threshold)][l2fc_col].abs().quantile(0.99)
         if np.isnan(xlimit):
             xlimit = df[l2fc_col].abs().quantile(0.99)
+
+    if extended_rendering:
+        for name, value, automatic in (("xlimit", xlimit, xlimit_was_auto_resolved),
+                                        ("ylimit", ylimit, ylimit_was_auto_resolved)):
+            if automatic and (not np.isfinite(value) or value <= 0):
+                if name == "xlimit":
+                    xlimit = 1.
+                else:
+                    ylimit = 1.
+            elif not np.isfinite(value) or value <= 0:
+                raise ValueError(f"{name} must be finite and positive")
 
     if label_threshold_regions:
         minimum_xlimit = float(log2FoldChange_threshold) * 1.25
@@ -614,7 +651,30 @@ def volcano_plot_generic(
         )
         legend_loc = "upper left"
 
-    if hue_column is None:
+    if extended_rendering:
+        fig, p = plt.subplots(figsize=figsize)
+        p.set(xlim=(-xlimit, xlimit), ylim=(0, ylimit))
+        p.set_title(f'{title_text}\n{comparison_label}\n\n', fontsize=title_fontsize)
+        if pvalue_threshold is not None:
+            p.axhline(nlog10_pvalue_threshold, color='red', linestyle='--', label=f'pvalue<{pvalue_threshold}')
+        p.axvline(log2FoldChange_threshold, color='gray', linestyle='--', label=f'|log2fc|>={log2FoldChange_threshold}')
+        p.axvline(-log2FoldChange_threshold, color='gray', linestyle='--')
+        threshold_handles, threshold_labels = p.get_legend_handles_labels()
+        draw_rendering(p, df, rendering_data, hue=hue_value, styles=group_styles,
+                       overflow=overflow, legend=legend,
+                       palette=significance_custom_palette if hue_column is None else hue_palette_custom_palette,
+                       size=rel_size, xlimit=xlimit, ylimit=ylimit,
+                       legend_defaults=dict(bbox_to_anchor=resolved_legend_bbox_to_anchor,
+                                            loc=legend_loc, borderaxespad=.05, fontsize=legend_fontsize),
+                       extra_handles=threshold_handles + deg_legend_handles,
+                       extra_labels=threshold_labels + deg_legend_labels)
+        df[l2fc_col] = rendering_data.display_x.to_numpy()
+        df['-log10(pvalue)'] = rendering_data.display_y.to_numpy()
+        p.set_xlabel(set_xlabel, fontsize=axis_label_and_tick_fontsize)
+        p.set_ylabel(set_ylabel, fontsize=axis_label_and_tick_fontsize)
+        if axis_label_and_tick_fontsize is not None:
+            p.tick_params(axis="both", labelsize=axis_label_and_tick_fontsize)
+    elif hue_column is None:
         # Case 1: hue = Significance
         fig, ax = plt.subplots(figsize=figsize)
         p = sns.scatterplot(data=df, x=l2fc_col, y='-log10(pvalue)', hue=hue_value,
@@ -718,8 +778,28 @@ def volcano_plot_generic(
     # -------------------------
     # Optional: label top features
     # -------------------------
-    if label_top_features and label_layout == "ranked_columns":
-        label_df = df
+    if extended_rendering and label_options is not None:
+        selected = rendering_data.selected & rendering_data.rendered
+        label_df = df.iloc[np.flatnonzero(selected.to_numpy())].copy()
+        identity_col, explicit_display_col = object(), object()
+        label_df[identity_col] = rendering_data.feature_id[selected].to_numpy()
+        label_df[explicit_display_col] = rendering_data.display_label[selected].to_numpy()
+        if label_layout == "ranked_columns":
+            _add_ranked_volcano_labels(p, label_df, l2fc_col=l2fc_col,
+                pvalue_col=pvalue_col, feature_label_col=identity_col,
+                display_label_col=explicit_display_col, n_top_features=len(label_df),
+                label_top_features_fontsize=label_top_features_fontsize,
+                label_features_char_limit=label_features_char_limit)
+        else:
+            for _, row in label_df.iterrows():
+                text = row[explicit_display_col]
+                if label_features_char_limit is not None:
+                    limit = max(0, label_features_char_limit)
+                    text = text if len(text) <= limit else (text[:limit] if limit <= 3 else text[:limit-3] + "...")
+                p.text(row[l2fc_col], row['-log10(pvalue)'], text,
+                       fontsize=label_top_features_fontsize, ha="left", color="black")
+    elif label_top_features and label_layout == "ranked_columns":
+        label_df = df.loc[rendering_data.rendered.to_numpy()] if extended_rendering else df
         if ((hue_column is not None) and (only_label_hue_dots == True)):
             label_df = label_df[label_df[hue_column].notna()]
         _add_ranked_volcano_labels(
@@ -735,6 +815,9 @@ def volcano_plot_generic(
         )
 
     elif label_top_features:
+        if extended_rendering:
+            df = df.loc[rendering_data.rendered.to_numpy()]
+            n_top_features = min(n_top_features, len(df))
         def _truncate_label(value: object) -> str:
             label = "" if value is None else str(value)
             if label_features_char_limit is None:
@@ -754,6 +837,8 @@ def volcano_plot_generic(
         if ((hue_column is not None) and (only_label_hue_dots == True)):
             # Restrict labeling to rows with non-null hue values
             df = df[df[hue_column].notna()].sort_values(by=pvalue_col)
+        if extended_rendering:
+            n_top_features = min(n_top_features, len(df))
 
         # Label top genes by pvalue
         for line in range(0, n_top_features):
@@ -790,7 +875,7 @@ def volcano_plot_generic(
             deg_count_table.to_csv(csv_file_name, index=False)
             print(f"Saved DEG counts to {csv_file_name}")
 
-    return p
+    return (p, rendering_data) if return_rendering_data else p
 
 
 import numpy as np
