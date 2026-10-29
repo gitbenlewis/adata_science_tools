@@ -904,3 +904,22 @@ The return value is `(fig, axes, plot_df)`.
 
 5. When `show=False`, the figure is closed before returning, matching the
    package's test-backed plotting APIs.
+
+## Annotated multi-panel scores
+
+`panel_annotations={"defaults": {"fontsize": 10}, "feature_a": {"text": "Supplied summary\n95% CI [1, 2]"}}` displays caller-supplied text without statistical calculations. Explicit line breaks are preserved. Shared defaults and per-panel overrides accept text properties such as `fontsize`, `color`, and `bbox`; `placement` is `left`, `center` (default), or `right`. Annotations are independent of legends. A measured strip above the data rectangle and below the title protects observations, including paired-difference axes, without changing data limits. Use adequate figure size for unusually wide text; text is not reflowed.
+
+`ylabel` accepts a shared string or panel-keyed dictionary; missing entries retain the default. `ylims` accepts a shared pair or panel-keyed dictionary, including `(0, None)`. Automatic bounds include plotted data. Explicit bounds clip the display only, never source or returned values. Within shared-axis groups, supplied bounds apply to the group and conflicting bounds raise `ValueError`.
+
+`subplot_title_style={"color": "#183B4E", "fontweight": "bold", "panels": {"feature_a": {"color": "black"}}}` and `xtick_label_style={"rotation": 0, "ha": "center"}` provide shared styling and optional `panels` overrides. Styles override corresponding legacy title/tick options; unspecified styles retain defaults.
+
+Panel keys are exact returned axes identifiers, not display titles. Observation facets use facet identifiers for a single variable, or `"variable | facet"` with multiple variables. Unknown keys raise errors. `defaults` is reserved in annotation dictionaries; `panels` is reserved in style dictionaries. Variable order remains panel order and unused grid cells remain hidden.
+
+`sharey` accepts `False`, `True`, `"row"`, `"col"`, and Matplotlib aliases `"none"`/`"all"`. Difference-axis sharing respects row/column groups when `paired_difference_sharey=True`; legacy boolean-mode matching of difference scales remains unchanged.
+
+Run `python scripts/example_paired_score_panels.py OUTPUT_DIR` for a synthetic PNG/PDF/SVG example using only the public API, without post-render axis modifications. Its supplied summary strings are illustrative, not estimates from the random observations.
+
+Annotation positioning/alignment keywords are reserved: use placement rather than
+ha/va, xy/xytext or coordinate transforms. Explicit title y coordinates are honored;
+custom positioning can override automatic title clearance. Requested title padding
+is treated as a minimum when annotations require a taller strip.
